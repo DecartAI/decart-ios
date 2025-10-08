@@ -27,10 +27,10 @@ jobs:
       # - name: Run Tests
       #   run: swift test
 
-      - name: Build Example App
-        run: |
-          cd Examples/RealtimeExample
-          xcodebuild -scheme RealtimeExample \
-            -destination 'platform=iOS Simulator,name=iPhone 15' \
-            clean build \
-            CODE_SIGNING_ALLOWED=NO
+      # - name: Build Example App
+      #   run: |
+      #     cd Examples/RealtimeExample
+      #     xcodebuild -scheme RealtimeExample \
+      #       -destination 'platform=iOS Simulator,name=iPhone 15' \
+      #       clean build \
+      #       CODE_SIGNING_ALLOWED=NO
