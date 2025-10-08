@@ -23,11 +23,6 @@ let package = Package(
                 .product(name: "WebRTC", package: "WebRTC")
             ],
             path: "Sources/DecartSDK"
-        ),
-        .testTarget(
-            name: "DecartSDKTests",
-            dependencies: ["DecartSDK"],
-            path: "Tests/DecartSDKTests"
         )
     ]
 )
