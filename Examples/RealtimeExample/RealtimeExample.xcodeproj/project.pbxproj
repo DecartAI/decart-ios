@@ -358,6 +358,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		C8D5211F2E968B5B00D0BE85 /* DecartSDK */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../.." */;
 			productName = DecartSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
