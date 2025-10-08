@@ -75,18 +75,36 @@ actor WebRTCConnection {
         receiveMessage()
         
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            var isResolved = false
+            final class ResolvedState: @unchecked Sendable {
+                private let lock = NSLock()
+                private var _value = false
+                
+                var value: Bool {
+                    get {
+                        lock.lock()
+                        defer { lock.unlock() }
+                        return _value
+                    }
+                    set {
+                        lock.lock()
+                        defer { lock.unlock() }
+                        _value = newValue
+                    }
+                }
+            }
+            
+            let isResolved = ResolvedState()
             
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {
-                if !isResolved {
-                    isResolved = true
+                if !isResolved.value {
+                    isResolved.value = true
                     continuation.resume(throwing: DecartError.websocketError("WebSocket timeout"))
                 }
             }
             
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                if !isResolved {
-                    isResolved = true
+                if !isResolved.value {
+                    isResolved.value = true
                     continuation.resume()
                 }
             }
@@ -148,8 +166,9 @@ actor WebRTCConnection {
             onRemoteStream: onRemoteStream,
             onIceCandidate: { [weak self] candidate in
                 guard let sdpMid = candidate.sdpMid else { return }
+                guard let self = self else { return }
                 
-                Task {
+                Task { [weak self] in
                     await self?.send(.iceCandidate(IceCandidateMessage(
                         candidate: candidate.sdp,
                         sdpMLineIndex: candidate.sdpMLineIndex,
@@ -158,7 +177,9 @@ actor WebRTCConnection {
                 }
             },
             onConnectionStateChange: { [weak self] rtcState in
-                Task {
+                guard let self = self else { return }
+                
+                Task { [weak self] in
                     await self?.handleConnectionStateChange(rtcState)
                 }
             }
