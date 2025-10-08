@@ -1,0 +1,40 @@
+name: Release
+
+on:
+    push:
+        tags:
+            - "v*"
+
+jobs:
+    release:
+        name: Create Release
+        runs-on: macos-14
+
+        permissions:
+            contents: write
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Select Xcode
+              run: sudo xcode-select -s /Applications/Xcode_15.0.app
+
+            - name: Build Release
+              run: swift build -c release
+
+            - name: Extract Version
+              id: version
+              run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+            - name: Create Release
+              uses: actions/create-release@v1
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                  tag_name: ${{ github.ref }}
+                  release_name: Release ${{ github.ref }}
+                  body: |
+                      Decart iOS SDK ${{ steps.version.outputs.VERSION }}
+                  draft: false
+                  prerelease: false
