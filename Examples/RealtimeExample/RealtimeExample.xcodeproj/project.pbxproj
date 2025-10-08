@@ -101,7 +101,7 @@
 			mainGroup = C89943CC2E95C201005CCCA6;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../../../decart-ios" */,
+				C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../.." */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C89943D62E95C201005CCCA6 /* Products */;
@@ -349,9 +349,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../../../decart-ios" */ = {
+		C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../.." */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = "../../../decart-ios";
+			relativePath = "../..";
 		};
 /* End XCLocalSwiftPackageReference section */
 
