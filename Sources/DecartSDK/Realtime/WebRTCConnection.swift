@@ -12,6 +12,7 @@ actor WebRTCConnection {
     private var webSocket: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var peerConnectionDelegate: PeerConnectionDelegate?
+    private var factory: RTCPeerConnectionFactory?
     
     private(set) var state: ConnectionState = .disconnected
     
@@ -192,8 +193,8 @@ actor WebRTCConnection {
         
         let encoderFactory = RTCDefaultVideoEncoderFactory()
         let decoderFactory = RTCDefaultVideoDecoderFactory()
-        let factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory)
-        peerConnection = factory.peerConnection(
+        self.factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory)
+        peerConnection = self.factory?.peerConnection(
             with: config,
             constraints: constraints,
             delegate: delegate
@@ -205,6 +206,10 @@ actor WebRTCConnection {
         
         for track in localStream.videoTracks {
             peerConnection?.add(track, streamIds: [localStream.streamId])
+        }
+        
+        if let pc = peerConnection, let codec = preferredVideoCodec {
+            setCodecPreferences(for: pc, preferredCodec: codec)
         }
     }
     
@@ -232,12 +237,8 @@ actor WebRTCConnection {
                     optionalConstraints: ["OfferToReceiveVideo": "true"]
                 )
                 
-                guard var offer = try await pc.offer(for: constraints) else {
+                guard let offer = try await pc.offer(for: constraints) else {
                     throw DecartError.webRTCError(NSError(domain: "WebRTC", code: -1, userInfo: [NSLocalizedDescriptionKey: "Failed to create offer"]))
-                }
-                
-                if let codec = preferredVideoCodec {
-                    offer = forceCodec(in: offer, preferredCodec: codec)
                 }
                 
                 if let customizeOffer = customizeOffer {
@@ -323,146 +324,38 @@ actor WebRTCConnection {
         setState(.disconnected)
     }
     
-    private func forceCodec(in offer: RTCSessionDescription, preferredCodec: VideoCodec) -> RTCSessionDescription {
-        let sdp = offer.sdp
-                
-        let lines = sdp.components(separatedBy: "\r\n")
-        guard let videoMediaIndex = lines.firstIndex(where: { $0.hasPrefix("m=video") }) else {
-            print("[WebRTC] No video media line found in SDP")
-            return offer
+    private func setCodecPreferences(for peerConnection: RTCPeerConnection, preferredCodec: VideoCodec) {
+        guard let transceiver = peerConnection.transceivers.first(where: { $0.mediaType == .video }) else {
+            print("[WebRTC] No video transceiver found")
+            return
         }
         
-        let videoLine = lines[videoMediaIndex]
-        let videoLinePattern = "m=video \\d+ [\\w/]+(.+)"
-        guard let regex = try? NSRegularExpression(pattern: videoLinePattern),
-              let match = regex.firstMatch(in: videoLine, range: NSRange(videoLine.startIndex..., in: videoLine)),
-              let payloadRange = Range(match.range(at: 1), in: videoLine) else {
-            print("[WebRTC] Could not parse video media line")
-            return offer
+        guard let factory = self.factory else {
+            print("[WebRTC] Factory not available")
+            return
         }
         
-        let allPayloadTypes = String(videoLine[payloadRange]).trimmingCharacters(in: .whitespaces).components(separatedBy: " ")
+        let supportedCodecs = factory.rtpSenderCapabilities(forKind: "video").codecs
         
-        var codecPayloadTypes: [String: [String]] = ["VP8": [], "H264": [], "other": []]
-        var codecLines: [String: [String]] = [:]
+        var preferredCodecs: [RTCRtpCodecCapability] = []
+        var otherCodecs: [RTCRtpCodecCapability] = []
+        var utilityCodecs: [RTCRtpCodecCapability] = []
         
-        for i in (videoMediaIndex + 1)..<lines.count {
-            let line = lines[i]
-            
-            if line.hasPrefix("m=") { break }
-            
-            if line.hasPrefix("a=rtpmap:") {
-                let rtpmapPattern = "a=rtpmap:(\\d+) ([^/]+)"
-                guard let regex = try? NSRegularExpression(pattern: rtpmapPattern),
-                      let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                      let ptRange = Range(match.range(at: 1), in: line),
-                      let codecRange = Range(match.range(at: 2), in: line) else {
-                    continue
-                }
-                
-                let payloadType = String(line[ptRange])
-                let codecName = String(line[codecRange])
-                
-                if allPayloadTypes.contains(payloadType) {
-                    if codecLines[payloadType] == nil {
-                        codecLines[payloadType] = []
-                    }
-                    codecLines[payloadType]?.append(line)
-                    
-                    if codecName == "VP8" {
-                        codecPayloadTypes["VP8"]?.append(payloadType)
-                    } else if codecName == "H264" {
-                        codecPayloadTypes["H264"]?.append(payloadType)
-                    } else {
-                        codecPayloadTypes["other"]?.append(payloadType)
-                    }
-                }
-            } else if line.hasPrefix("a=fmtp:") || line.hasPrefix("a=rtcp-fb:") {
-                let pattern = "a=(?:fmtp|rtcp-fb):(\\d+)"
-                guard let regex = try? NSRegularExpression(pattern: pattern),
-                      let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                      let ptRange = Range(match.range(at: 1), in: line) else {
-                    continue
-                }
-                
-                let payloadType = String(line[ptRange])
-                if allPayloadTypes.contains(payloadType) {
-                    if codecLines[payloadType] == nil {
-                        codecLines[payloadType] = []
-                    }
-                    codecLines[payloadType]?.append(line)
-                }
-            }
-        }
+        let preferredCodecName = preferredCodec.rawValue.components(separatedBy: "/").last?.uppercased() ?? ""
         
-        var orderedPayloadTypes: [String]
-        if preferredCodec == .vp8 {
-            orderedPayloadTypes = (codecPayloadTypes["VP8"] ?? []) +
-                                  (codecPayloadTypes["other"] ?? []) +
-                                  (codecPayloadTypes["H264"] ?? [])
-        } else {
-            orderedPayloadTypes = (codecPayloadTypes["H264"] ?? []) +
-                                  (codecPayloadTypes["other"] ?? []) +
-                                  (codecPayloadTypes["VP8"] ?? [])
-        }
-        
-        orderedPayloadTypes = orderedPayloadTypes.filter { allPayloadTypes.contains($0) }
-        
-        let uncategorizedTypes = allPayloadTypes.filter { !orderedPayloadTypes.contains($0) }
-        orderedPayloadTypes.append(contentsOf: uncategorizedTypes)
-        
-        let newVideoLine = videoLine.replacingOccurrences(
-            of: "m=video \\d+ [\\w/]+ .+",
-            with: "m=video 9 UDP/TLS/RTP/SAVPF \(orderedPayloadTypes.joined(separator: " "))",
-            options: .regularExpression
-        )
-        
-        var newLines: [String] = []
-        
-        for i in 0...videoMediaIndex {
-            if i == videoMediaIndex {
-                newLines.append(newVideoLine)
+        for codec in supportedCodecs {
+            let codecNameUpper = codec.name.uppercased()
+            if codecNameUpper == preferredCodecName {
+                preferredCodecs.append(codec)
+            } else if codecNameUpper == "RTX" || codecNameUpper == "RED" || codecNameUpper == "ULPFEC" {
+                utilityCodecs.append(codec)
             } else {
-                newLines.append(lines[i])
+                otherCodecs.append(codec)
             }
         }
         
-        for payloadType in orderedPayloadTypes {
-            if let payloadLines = codecLines[payloadType] {
-                newLines.append(contentsOf: payloadLines)
-            }
-        }
-        
-        var inVideoSection = false
-        for i in (videoMediaIndex + 1)..<lines.count {
-            let line = lines[i]
-            
-            if line.hasPrefix("m=") {
-                inVideoSection = false
-            } else if i == videoMediaIndex + 1 {
-                inVideoSection = true
-            }
-            
-            if inVideoSection &&
-               (line.hasPrefix("a=rtpmap:") || line.hasPrefix("a=fmtp:") || line.hasPrefix("a=rtcp-fb:")) {
-                let pattern = "a=(?:rtpmap|fmtp|rtcp-fb):(\\d+)"
-                if let regex = try? NSRegularExpression(pattern: pattern),
-                   let match = regex.firstMatch(in: line, range: NSRange(line.startIndex..., in: line)),
-                   let ptRange = Range(match.range(at: 1), in: line) {
-                    let payloadType = String(line[ptRange])
-                    if allPayloadTypes.contains(payloadType) {
-                        continue
-                    }
-                }
-            }
-            
-            newLines.append(line)
-        }
-        
-        let modifiedSdp = newLines.joined(separator: "\r\n")
-        let modifiedOffer = RTCSessionDescription(type: offer.type, sdp: modifiedSdp)
-                
-        return modifiedOffer
+        let sortedCodecs = preferredCodecs + otherCodecs + utilityCodecs
+        transceiver.setCodecPreferences(sortedCodecs)
     }
 }
 
