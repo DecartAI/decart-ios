@@ -25,7 +25,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/decartai/decart-ios.git", from: "0.0.1")
+    .package(url: "https://github.com/decartai/decart-ios.git", from: "0.0.2")
 ]
 ```
 
