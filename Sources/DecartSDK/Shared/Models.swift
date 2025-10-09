@@ -1,5 +1,10 @@
 import Foundation
 
+public enum VideoCodec: String {
+    case vp8 = "video/VP8"
+    case h264 = "video/H264"
+}
+
 public enum RealtimeModel: String, CaseIterable {
     case mirage
     case lucy_v2v_720p_rt

@@ -14,7 +14,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/stasel/WebRTC.git", from: "120.0.0")
+        .package(url: "https://github.com/stasel/WebRTC.git", from: "140.0.0")
     ],
     targets: [
         .target(

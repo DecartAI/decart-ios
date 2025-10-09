@@ -11,6 +11,7 @@ struct WebRTCConfiguration {
     let onError: ((Error) -> Void)?
     let initialState: ModelState?
     let customizeOffer: ((RTCSessionDescription) async -> Void)?
+    let preferredVideoCodec: VideoCodec?
 }
 
 actor WebRTCManager {
@@ -29,7 +30,8 @@ actor WebRTCManager {
             onRemoteStream: configuration.onRemoteStream,
             onStateChange: configuration.onConnectionStateChange,
             onError: configuration.onError,
-            customizeOffer: configuration.customizeOffer
+            customizeOffer: configuration.customizeOffer,
+            preferredVideoCodec: configuration.preferredVideoCodec
         )
     }
     

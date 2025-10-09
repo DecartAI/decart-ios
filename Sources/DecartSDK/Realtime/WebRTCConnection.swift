@@ -12,6 +12,7 @@ actor WebRTCConnection {
     private var webSocket: URLSessionWebSocketTask?
     private var urlSession: URLSession?
     private var peerConnectionDelegate: PeerConnectionDelegate?
+    private var factory: RTCPeerConnectionFactory?
     
     private(set) var state: ConnectionState = .disconnected
     
@@ -19,6 +20,7 @@ actor WebRTCConnection {
     private let onStateChange: ((ConnectionState) -> Void)?
     private let onError: ((Error) -> Void)?
     private let customizeOffer: ((RTCSessionDescription) async -> Void)?
+    private let preferredVideoCodec: VideoCodec?
     
     private static let iceServers: [RTCIceServer] = [
         RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])
@@ -28,12 +30,14 @@ actor WebRTCConnection {
         onRemoteStream: ((RTCMediaStream) -> Void)? = nil,
         onStateChange: ((ConnectionState) -> Void)? = nil,
         onError: ((Error) -> Void)? = nil,
-        customizeOffer: ((RTCSessionDescription) async -> Void)? = nil
+        customizeOffer: ((RTCSessionDescription) async -> Void)? = nil,
+        preferredVideoCodec: VideoCodec? = nil
     ) {
         self.onRemoteStream = onRemoteStream
         self.onStateChange = onStateChange
         self.onError = onError
         self.customizeOffer = customizeOffer
+        self.preferredVideoCodec = preferredVideoCodec
     }
     
     func connect(url: URL, localStream: RTCMediaStream, timeout: TimeInterval = 30) async throws {
@@ -187,8 +191,10 @@ actor WebRTCConnection {
         
         self.peerConnectionDelegate = delegate
         
-        let factory = RTCPeerConnectionFactory()
-        peerConnection = factory.peerConnection(
+        let encoderFactory = RTCDefaultVideoEncoderFactory()
+        let decoderFactory = RTCDefaultVideoDecoderFactory()
+        self.factory = RTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory)
+        peerConnection = self.factory?.peerConnection(
             with: config,
             constraints: constraints,
             delegate: delegate
@@ -200,6 +206,10 @@ actor WebRTCConnection {
         
         for track in localStream.videoTracks {
             peerConnection?.add(track, streamIds: [localStream.streamId])
+        }
+        
+        if let pc = peerConnection, let codec = preferredVideoCodec {
+            setCodecPreferences(for: pc, preferredCodec: codec)
         }
     }
     
@@ -314,7 +324,39 @@ actor WebRTCConnection {
         setState(.disconnected)
     }
     
-
+    private func setCodecPreferences(for peerConnection: RTCPeerConnection, preferredCodec: VideoCodec) {
+        guard let transceiver = peerConnection.transceivers.first(where: { $0.mediaType == .video }) else {
+            print("[WebRTC] No video transceiver found")
+            return
+        }
+        
+        guard let factory = self.factory else {
+            print("[WebRTC] Factory not available")
+            return
+        }
+        
+        let supportedCodecs = factory.rtpSenderCapabilities(forKind: "video").codecs
+        
+        var preferredCodecs: [RTCRtpCodecCapability] = []
+        var otherCodecs: [RTCRtpCodecCapability] = []
+        var utilityCodecs: [RTCRtpCodecCapability] = []
+        
+        let preferredCodecName = preferredCodec.rawValue.components(separatedBy: "/").last?.uppercased() ?? ""
+        
+        for codec in supportedCodecs {
+            let codecNameUpper = codec.name.uppercased()
+            if codecNameUpper == preferredCodecName {
+                preferredCodecs.append(codec)
+            } else if codecNameUpper == "RTX" || codecNameUpper == "RED" || codecNameUpper == "ULPFEC" {
+                utilityCodecs.append(codec)
+            } else {
+                otherCodecs.append(codec)
+            }
+        }
+        
+        let sortedCodecs = preferredCodecs + otherCodecs + utilityCodecs
+        transceiver.setCodecPreferences(sortedCodecs)
+    }
 }
 
 class PeerConnectionDelegate: NSObject, RTCPeerConnectionDelegate {

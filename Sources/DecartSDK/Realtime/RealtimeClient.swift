@@ -143,7 +143,8 @@ public struct RealtimeClientFactory {
                 }
             },
             initialState: options.initialState,
-            customizeOffer: options.customizeOffer
+            customizeOffer: options.customizeOffer,
+            preferredVideoCodec: .vp8
         )
         
         let webrtcManager = WebRTCManager(configuration: config)
