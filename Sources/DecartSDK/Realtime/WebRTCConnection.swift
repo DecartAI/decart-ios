@@ -48,20 +48,20 @@ class WebRTCConnection {
         do {
             try await signalingManager?.connect(url: url, timeout: timeout)
         } catch {
-            print("[WebRTCConnection] ❌ Signaling manager connection failed: \(error.localizedDescription)")
+            print("[WebRTCConnection] Signaling connection failed: \(error.localizedDescription)")
             throw error
         }
-    
+
         // Setup peer connection
         do {
             try await setupPeerConnection(localStream: localStream)
             subscribeToSignalingMessages()
             try await sendOffer()
         } catch {
-            print("[WebRTCConnection] ❌ Peer connection setup failed: \(error.localizedDescription)")
+            print("[WebRTCConnection] Peer connection setup failed: \(error.localizedDescription)")
             throw error
         }
-        
+
         // Subscribe to signaling messages in background
         // Wait for connection
         while Date() < deadline {
@@ -70,8 +70,8 @@ class WebRTCConnection {
             }
             try await Task.sleep(nanoseconds: 100_000_000)
         }
-        
-        print("[WebRTCConnection] ❌ Connection timeout after \(timeout)s")
+
+        print("[WebRTCConnection] Connection timeout after \(timeout)s")
         throw DecartError.connectionTimeout
     }
     
@@ -146,7 +146,6 @@ class WebRTCConnection {
     }
     
     private func handleConnectionStateChange(_ rtcState: RTCPeerConnectionState) {
-        print("handle conenction change in webRTC")
         let newState: ConnectionState
         switch rtcState {
         case .connected:
@@ -161,59 +160,56 @@ class WebRTCConnection {
     
     private func sendOffer() async throws {
         guard let pc = peerConnection else {
-            print("[WebRTCConnection] ⚠️ No peer connection available for signaling message")
             return
         }
         let constraints = RTCMediaConstraints(
             mandatoryConstraints: nil,
             optionalConstraints: ["OfferToReceiveVideo": "true"]
         )
-        
+
         guard let offer = try await pc.offer(for: constraints) else {
-            print("[WebRTCConnection] ❌ Failed to create offer")
+            print("[WebRTCConnection] Failed to create offer")
             throw DecartError.webRTCError(
                 NSError(
                     domain: "WebRTC", code: -1,
                     userInfo: [NSLocalizedDescriptionKey: "Failed to create offer"]))
         }
-        
+
         try await pc.setLocalDescription(offer)
         await send(.offer(OfferMessage(sdp: offer.sdp)))
     }
     
     private func handleSignalingMessage(_ message: IncomingWebSocketMessage) async {
-        print("got message: \(message)")
         guard let pc = peerConnection else {
-            print("[WebRTCConnection] ⚠️ No peer connection available for signaling message")
             return
         }
-        
+
         do {
             switch message {
             case .offer(let msg):
                 let sdp = RTCSessionDescription(type: .offer, sdp: msg.sdp)
                 try await pc.setRemoteDescription(sdp)
-                
+
                 let constraints = RTCMediaConstraints(
                     mandatoryConstraints: nil,
                     optionalConstraints: nil
                 )
-                
+
                 guard let answer = try await pc.answer(for: constraints) else {
-                    print("[WebRTCConnection] ❌ Failed to create answer")
+                    print("[WebRTCConnection] Failed to create answer")
                     throw DecartError.webRTCError(
                         NSError(
                             domain: "WebRTC", code: -1,
                             userInfo: [NSLocalizedDescriptionKey: "Failed to create answer"]))
                 }
-                
+
                 try await pc.setLocalDescription(answer)
                 await send(.answer(AnswerMessage(type: "answer", sdp: answer.sdp)))
-                
+
             case .answer(let msg):
                 let sdp = RTCSessionDescription(type: .answer, sdp: msg.sdp)
                 try await pc.setRemoteDescription(sdp)
-                
+
             case .iceCandidate(let msg):
                 let candidate = RTCIceCandidate(
                     sdp: msg.candidate.candidate,
@@ -223,7 +219,7 @@ class WebRTCConnection {
                 try await pc.add(candidate)
             }
         } catch {
-            print("[WebRTCConnection] ❌ Signaling error: \(error.localizedDescription)")
+            print("[WebRTCConnection] Signaling error: \(error.localizedDescription)")
             onError?(error)
         }
     }
@@ -257,12 +253,10 @@ class WebRTCConnection {
     ) {
         guard let transceiver = peerConnection.transceivers.first(where: { $0.mediaType == .video })
         else {
-            print("[WebRTC] No video transceiver found")
             return
         }
-        
+
         guard let factory = self.factory else {
-            print("[WebRTC] Factory not available")
             return
         }
         

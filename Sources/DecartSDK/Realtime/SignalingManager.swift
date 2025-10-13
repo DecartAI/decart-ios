@@ -56,11 +56,9 @@ class SignalingManager {
         }
 
         guard let wsURL = urlComponents?.url else {
-            print("[SignalingManager] ❌ Failed to create WebSocket URL from: \(url.absoluteString)")
+            print("[SignalingManager] Failed to create WebSocket URL from: \(url.absoluteString)")
             throw DecartError.websocketError("Failed to create WebSocket URL")
         }
-
-        print("[SignalingManager] 🔌 Connecting to: \(wsURL.absoluteString)")
 
         // Create WebSocket
         urlSession = URLSession(configuration: .default)
@@ -71,7 +69,6 @@ class SignalingManager {
         receiveMessage()
 
         // Wait for first message to confirm connection (with timeout)
-        print("[SignalingManager] ⏳ Waiting for first message to confirm connection...")
         let deadline = Date().addingTimeInterval(timeout)
 
         while Date() < deadline {
@@ -86,12 +83,11 @@ class SignalingManager {
             // For now, just wait a bit and assume connection is established
             // The actual verification happens when first message arrives
             if webSocket?.state == .running {
-                print("[SignalingManager] ✅ WebSocket is running")
                 return
             }
         }
 
-        print("[SignalingManager] ❌ WebSocket connection timeout after \(timeout)s")
+        print("[SignalingManager] WebSocket connection timeout after \(timeout)s")
         throw DecartError.websocketError("WebSocket timeout")
     }
 
@@ -99,7 +95,6 @@ class SignalingManager {
     /// - Parameter message: The outgoing message to send
     func send(_ message: OutgoingWebSocketMessage) async {
         guard webSocket != nil else {
-            print("[SignalingManager] ⚠️ Cannot send message - WebSocket not connected")
             return
         }
 
@@ -107,14 +102,10 @@ class SignalingManager {
             let data = try encoder.encode(message)
 
             if let jsonString = String(data: data, encoding: .utf8) {
-                webSocket?.send(.string(jsonString)) { error in
-                    if let error = error {
-                        print("[SignalingManager] ❌ Send error: \(error.localizedDescription)")
-                    }
-                }
+                webSocket?.send(.string(jsonString)) { _ in }
             }
         } catch {
-            print("[SignalingManager] ❌ Encoding error: \(error.localizedDescription)")
+            // Ignore encoding errors
         }
     }
 
@@ -137,7 +128,6 @@ class SignalingManager {
         webSocket?.receive { [weak self] result in
             Task { [weak self] in
                 guard let self = self else { return }
-                print("[SignalingManager] 📩 Received WebSocket message")
                 switch result {
                 case .success(let message):
                     switch message {
@@ -148,7 +138,6 @@ class SignalingManager {
                     case .data(let data):
                         await self.parseAndRouteMessage(data)
                     @unknown default:
-                        print("[SignalingManager] ⚠️ Unknown message type received")
                         break
                     }
 
@@ -156,7 +145,7 @@ class SignalingManager {
                     self.receiveMessage()
 
                 case .failure(let error):
-                    print("[SignalingManager] ❌ WebSocket error: \(error.localizedDescription)")
+                    print("[SignalingManager] WebSocket error: \(error.localizedDescription)")
                     self.onError?(error)
                 }
             }
@@ -168,17 +157,10 @@ class SignalingManager {
     private func parseAndRouteMessage(_ data: Data) async {
         do {
             let message = try decoder.decode(IncomingWebSocketMessage.self, from: data)
-            print("[SignalingManager] ✅ Parsed message type: \(type(of: message))")
-
             // Yield message to stream
             messageContinuation?.yield(message)
         } catch {
             // Ignore unknown message types (e.g., ping/pong)
-            if let jsonString = String(data: data, encoding: .utf8) {
-                print("[SignalingManager] ⚠️ Failed to decode message (possibly ping/pong): \(jsonString.prefix(100))")
-            } else {
-                print("[SignalingManager] ⚠️ Failed to decode message: \(error.localizedDescription)")
-            }
         }
     }
 }
