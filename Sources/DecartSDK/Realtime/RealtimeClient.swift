@@ -46,7 +46,7 @@ public class RealtimeClient {
     public init(baseURL: URL, apiKey: String, options: RealtimeConnectOptions) throws {
         self.options = options
         guard !apiKey.isEmpty else {
-            print("[RealtimeClient] ❌ Error: API key is empty")
+            print("[RealtimeClient] Error: API key is empty")
             throw DecartError.invalidAPIKey
         }
 
@@ -62,7 +62,7 @@ public class RealtimeClient {
         "\(baseURLString)\(options.model.urlPath)?api_key=\(apiKey)&model=\(options.model.name)"
 
         guard let signalingServerURL = URL(string: urlString) else {
-            print("[RealtimeClient] ❌ Error: Invalid base URL - \(urlString)")
+            print("[RealtimeClient] Error: Invalid base URL - \(urlString)")
             throw DecartError.invalidBaseURL(urlString)
         }
 
@@ -100,7 +100,6 @@ public class RealtimeClient {
                 self?.sendConnectionState(state)
             },
             onError: { [weak self] error in
-                print("[RealtimeClient] ❌ WebRTC error received: \(error.localizedDescription)")
                 if let decartError = error as? DecartError {
                     self?.sendError(decartError)
                 } else {
@@ -129,15 +128,15 @@ public class RealtimeClient {
                 let errorMessage = error.localizedDescription.lowercased()
                 let isPermanentError = permanentErrors.contains { errorMessage.contains($0) }
 
-                print("[RealtimeClient] ⚠️ Connection attempt \(retries) failed: \(error.localizedDescription)")
+                print("[RealtimeClient] Connection attempt \(retries) failed: \(error.localizedDescription)")
 
                 if isPermanentError {
-                    print("[RealtimeClient] ❌ Permanent error detected, aborting retries")
+                    print("[RealtimeClient] Permanent error detected, aborting retries")
                     throw error
                 }
 
                 if retries >= maxRetries {
-                    print("[RealtimeClient] ❌ Max retries reached, giving up")
+                    print("[RealtimeClient] Max retries reached")
                     throw error
                 }
 
@@ -147,7 +146,7 @@ public class RealtimeClient {
             }
         }
 
-        print("[RealtimeClient] ❌ Connection failed: Max retries exceeded")
+        print("[RealtimeClient] Connection failed: Max retries exceeded")
         throw DecartError.webRTCError(
             NSError(domain: "WebRTC", code: -1,
                     userInfo: [NSLocalizedDescriptionKey: "Max retries exceeded"]))
@@ -161,11 +160,9 @@ public class RealtimeClient {
     
     public func setPrompt(_ prompt: String, enrich: Bool = true) async throws {
         guard let webrtcConnection = webrtcConnection else {
-            print("[RealtimeClient] ❌ Error: Cannot set prompt - client not initialized")
             throw DecartError.invalidOptions("Client not initialized")
         }
         guard !prompt.isEmpty else {
-            print("[RealtimeClient] ❌ Error: Cannot set prompt - prompt is empty")
             throw DecartError.invalidInput("Prompt must not be empty")
         }
 
