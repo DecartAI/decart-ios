@@ -12,7 +12,7 @@ struct RealtimeExampleApp: App {
 }
 
 struct ContentView: View {
-    @StateObject private var viewModel = RealtimeViewModel()
+    @State private var viewModel = RealtimeViewModel()
 
     var body: some View {
         ZStack {
@@ -143,17 +143,17 @@ private enum Config {
     static let defaultPrompt = "Turn the figure into a fantasy figure"
 }
 
-@MainActor
-class RealtimeViewModel: ObservableObject {
-    @Published var connectionState: String = "Disconnected" {
+@Observable
+@MainActor final class RealtimeViewModel {
+    var connectionState: String = "Disconnected" {
         didSet {
             Task {
                 isConnected = (connectionState == "Connected")
             }
         }
     }
-    @Published var promptText: String = Config.defaultPrompt
-    @Published var mirror: Bool = false {
+    var promptText: String = Config.defaultPrompt
+    var mirror: Bool = false {
         didSet {
             if mirror != oldValue {
                 Task {
@@ -162,24 +162,32 @@ class RealtimeViewModel: ObservableObject {
             }
         }
     }
-    @Published var lastError: String?
+    var lastError: String?
 
-    @Published var isConnected: Bool = false
+    var isConnected: Bool = false
 
+    @ObservationIgnored
     private var client: RealtimeClient?
+    @ObservationIgnored
     private var eventTask: Task<Void, Never>?
+    @ObservationIgnored
     private var localStream: RTCMediaStream?
+    @ObservationIgnored
     private var remoteVideoTrack: RTCVideoTrack?
+    @ObservationIgnored
     private var videoCapturer: RTCCameraVideoCapturer?
+    @ObservationIgnored
     private var peerConnectionFactory: RTCPeerConnectionFactory?
 
     // Video views for rendering
+    @ObservationIgnored
     let remoteVideoView: RTCMTLVideoView = {
         let view = RTCMTLVideoView()
         view.videoContentMode = .scaleAspectFill
         return view
     }()
-
+    
+    @ObservationIgnored
     let localVideoView: RTCMTLVideoView = {
         let view = RTCMTLVideoView()
         view.videoContentMode = .scaleAspectFill
@@ -216,12 +224,7 @@ class RealtimeViewModel: ObservableObject {
             print("🔵 Creating Decart client...")
             let decartClient = try createDecartClient(configuration: configuration)
 
-            let model = Models.realtime(.lucy_v2v_720p_rt)
-            print("🔵 Using model: \(model.name)")
-            print("🔵 Model config - FPS: \(model.fps), Size: \(model.width)x\(model.height)")
-            print(
-                "🔵 Expected WebRTC URL: wss://api3.decart.ai\(model.urlPath)?api_key=...&model=\(model.name)"
-            )
+            let model = Models.realtime(.lucy_edit_ani)
 
             print("🔵 Starting camera capture...")
             localStream = try await captureLocalStream(
@@ -247,9 +250,8 @@ class RealtimeViewModel: ObservableObject {
                 localVideoTrack.add(localVideoView)
             }
 
-            print("🔵 Connecting to WebRTC...")
-            let realtimeClient = try await decartClient.realtime.connect(
-                stream: stream,
+            print("🔵 Creating realtime client...")
+            let realtimeClient = try decartClient.createRealtimeClient(
                 options: RealtimeConnectOptions(
                     model: model,
                     initialState: ModelState(
@@ -258,12 +260,6 @@ class RealtimeViewModel: ObservableObject {
                     )
                 )
             )
-
-            print("✅ WebRTC connection established!")
-            self.client = realtimeClient
-            self.handleConnectionState(ConnectionState.connected)
-
-            // Listen to events from the SDK
             eventTask = Task { [weak self] in
                 for await event in realtimeClient.events {
                     await MainActor.run { [weak self] in
@@ -294,10 +290,20 @@ class RealtimeViewModel: ObservableObject {
                     }
                 }
             }
+            print("🔵 Connecting to WebRTC...")
+            try await realtimeClient.connect(localStream: stream)
+
+            print("✅ WebRTC connection established!")
+            self.client = realtimeClient
+            self.handleConnectionState(ConnectionState.connected)
+
+            // Listen to events from the SDK
+          
         } catch {
             print("❌ Connection failed with error: \(error.localizedDescription)")
             print("❌ Error details: \(error)")
             lastError = error.localizedDescription
+            await self.disconnect()
             connectionState = "Disconnected"
         }
     }
