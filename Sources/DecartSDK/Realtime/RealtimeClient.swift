@@ -89,7 +89,7 @@ public class RealtimeClient {
     }
     
     public func connect(
-        localStream: RTCMediaStream,
+        localStream: RTCMediaStream
     ) async throws {
         // Create WebRTCConnection with callbacks
         let webrtcConnection = WebRTCConnection(
