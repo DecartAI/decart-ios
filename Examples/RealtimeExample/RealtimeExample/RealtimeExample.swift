@@ -1,4 +1,3 @@
-import Combine
 import DecartSDK
 import SwiftUI
 import WebRTC
@@ -168,7 +167,7 @@ class RealtimeViewModel: ObservableObject {
     @Published var isConnected: Bool = false
 
     private var client: RealtimeClient?
-    private var cancellables = Set<AnyCancellable>()
+    private var eventTask: Task<Void, Never>?
     private var localStream: RTCMediaStream?
     private var remoteVideoTrack: RTCVideoTrack?
     private var videoCapturer: RTCCameraVideoCapturer?
@@ -253,22 +252,6 @@ class RealtimeViewModel: ObservableObject {
                 stream: stream,
                 options: RealtimeConnectOptions(
                     model: model,
-                    onRemoteStream: { [weak self] mediaStream in
-                        print("🟢 REMOTE STREAM RECEIVED!")
-                        print("🟢 Remote video tracks: \(mediaStream.videoTracks.count)")
-                        Task { @MainActor in
-                            guard let self = self,
-                                let videoTrack = mediaStream.videoTracks.first
-                            else {
-                                print("⚠️ No video track in remote stream")
-                                return
-                            }
-                            print("🟢 Attaching remote video to view...")
-                            self.remoteVideoTrack = videoTrack
-                            videoTrack.add(self.remoteVideoView)
-                            print("✅ Remote video attached!")
-                        }
-                    },
                     initialState: ModelState(
                         prompt: Prompt(text: promptText, enrich: true),
                         mirror: mirror
@@ -280,20 +263,37 @@ class RealtimeViewModel: ObservableObject {
             self.client = realtimeClient
             self.handleConnectionState(ConnectionState.connected)
 
-            realtimeClient.connectionStatePublisher
-                .receive(on: DispatchQueue.main)
-                .sink { [weak self] state in
-                    print("🟢 Connection state changed: \(state)")
-                    self?.handleConnectionState(state)
-                }
-                .store(in: &cancellables)
+            // Listen to events from the SDK
+            eventTask = Task { [weak self] in
+                for await event in realtimeClient.events {
+                    await MainActor.run { [weak self] in
+                        guard let self = self else { return }
 
-            realtimeClient.errorPublisher
-                .sink { [weak self] error in
-                    print("❌ Error received: \(error.localizedDescription)")
-                    self?.lastError = error.localizedDescription
+                        switch event {
+                        case .remoteStreamReceived(let mediaStream):
+                            print("🟢 REMOTE STREAM RECEIVED!")
+                            print("🟢 Remote video tracks: \(mediaStream.videoTracks.count)")
+
+                            guard let videoTrack = mediaStream.videoTracks.first else {
+                                print("⚠️ No video track in remote stream")
+                                return
+                            }
+                            print("🟢 Attaching remote video to view...")
+                            self.remoteVideoTrack = videoTrack
+                            videoTrack.add(self.remoteVideoView)
+                            print("✅ Remote video attached!")
+
+                        case .stateChanged(let state):
+                            print("🟢 Connection state changed: \(state)")
+                            self.handleConnectionState(state)
+
+                        case .error(let error):
+                            print("❌ Error received: \(error.localizedDescription)")
+                            self.lastError = error.localizedDescription
+                        }
+                    }
                 }
-                .store(in: &cancellables)
+            }
         } catch {
             print("❌ Connection failed with error: \(error.localizedDescription)")
             print("❌ Error details: \(error)")
@@ -303,6 +303,10 @@ class RealtimeViewModel: ObservableObject {
     }
 
     func disconnect() async {
+        // Cancel event listening task
+        eventTask?.cancel()
+        eventTask = nil
+
         // Stop camera
         if let capturer = videoCapturer {
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in

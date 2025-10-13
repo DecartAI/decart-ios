@@ -15,7 +15,7 @@ struct WebRTCConfiguration {
     let peerConnectionConfig: PeerConnectionConfig
 }
 
-actor WebRTCManager {
+class WebRTCManager {
     private var connection: WebRTCConnection
     private let configuration: WebRTCConfiguration
 
@@ -81,11 +81,11 @@ actor WebRTCManager {
         await connection.cleanup()
     }
 
-    func isConnected() async -> Bool {
-        return await connection.state == .connected
+    func isConnected() -> Bool {
+        return connection.state == .connected
     }
 
-    func getConnectionState() async -> ConnectionState {
-        return await connection.state
+    func getConnectionState() -> ConnectionState {
+        return connection.state
     }
 }

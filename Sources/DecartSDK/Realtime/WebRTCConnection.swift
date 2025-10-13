@@ -1,13 +1,13 @@
 import Foundation
 import WebRTC
 
-public enum ConnectionState {
+public enum ConnectionState: Sendable {
     case connecting
     case connected
     case disconnected
 }
 
-actor WebRTCConnection {
+class WebRTCConnection {
     private var peerConnection: RTCPeerConnection?
     private var webSocket: URLSessionWebSocketTask?
     private var urlSession: URLSession?
@@ -149,11 +149,11 @@ actor WebRTCConnection {
                         break
                     }
 
-                    await self.receiveMessage()
+                    self.receiveMessage()
 
                 case .failure(let error):
                     print("[WebRTC] WebSocket error: \(error)")
-                    await self.setState(.disconnected)
+                    self.setState(.disconnected)
                 }
             }
         }
@@ -188,10 +188,7 @@ actor WebRTCConnection {
             },
             onConnectionStateChange: { [weak self] rtcState in
                 guard let self = self else { return }
-
-                Task { [weak self] in
-                    await self?.handleConnectionStateChange(rtcState)
-                }
+                self.handleConnectionStateChange(rtcState)
             }
         )
 

@@ -1,49 +1,50 @@
-import Combine
 import Foundation
-import WebRTC
+@preconcurrency import WebRTC
+
+public enum DecartSdkEvent: Sendable {
+    case stateChanged(ConnectionState)
+    case remoteStreamReceived(RTCMediaStream)
+    case error(Error)
+}
 
 public struct RealtimeConnectOptions {
     public let model: ModelDefinition
-    public let onRemoteStream: (RTCMediaStream) -> Void
     public let initialState: ModelState?
     public let customizeOffer: ((RTCSessionDescription) async -> Void)?
     public let peerConnectionConfig: PeerConnectionConfig
     public init(
         model: ModelDefinition,
-        onRemoteStream: @escaping (RTCMediaStream) -> Void,
         initialState: ModelState? = nil,
         customizeOffer: ((RTCSessionDescription) async -> Void)? = nil,
         peerConnectionConfig: PeerConnectionConfig = PeerConnectionConfig()
     ) {
         self.model = model
-        self.onRemoteStream = onRemoteStream
         self.initialState = initialState
         self.customizeOffer = customizeOffer
         self.peerConnectionConfig = peerConnectionConfig
     }
 }
 
-public actor RealtimeClient {
+public class RealtimeClient {
     private var webrtcManager: WebRTCManager?
     private var methods: RealtimeMethods?
 
     public let sessionId: UUID
 
-    nonisolated private let _connectionStateSubject = PassthroughSubject<ConnectionState, Never>()
-    nonisolated private let _errorSubject = PassthroughSubject<DecartError, Never>()
-
-    public nonisolated var connectionStatePublisher: AnyPublisher<ConnectionState, Never> {
-        _connectionStateSubject.eraseToAnyPublisher()
-    }
-
-    public nonisolated var errorPublisher: AnyPublisher<DecartError, Never> {
-        _errorSubject.eraseToAnyPublisher()
-    }
+    private var eventContinuation: AsyncStream<DecartSdkEvent>.Continuation?
+    public let events: AsyncStream<DecartSdkEvent>
 
     init(
         webrtcManager: WebRTCManager?,
         sessionId: UUID
     ) {
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: DecartSdkEvent.self,
+            bufferingPolicy: .bufferingNewest(4)
+        )
+        self.events = stream
+        self.eventContinuation = continuation
+
         self.webrtcManager = webrtcManager
         self.sessionId = sessionId
         if let webrtcManager = webrtcManager {
@@ -56,12 +57,16 @@ public actor RealtimeClient {
         self.methods = RealtimeMethods(webrtcManager: manager)
     }
 
-    nonisolated func sendConnectionState(_ state: ConnectionState) {
-        _connectionStateSubject.send(state)
+    func sendConnectionState(_ state: ConnectionState) {
+        eventContinuation?.yield(.stateChanged(state))
     }
 
-    nonisolated func sendError(_ error: DecartError) {
-        _errorSubject.send(error)
+    func sendError(_ error: DecartError) {
+        eventContinuation?.yield(.error(error))
+    }
+
+    func sendRemoteStream(_ stream: RTCMediaStream) {
+        eventContinuation?.yield(.remoteStreamReceived(stream))
     }
 
     public func enrichPrompt(_ prompt: String) async throws -> String {
@@ -83,14 +88,14 @@ public actor RealtimeClient {
         await methods.setMirror(enabled)
     }
 
-    public func isConnected() async -> Bool {
+    public func isConnected() -> Bool {
         guard let webrtcManager = webrtcManager else { return false }
-        return await webrtcManager.isConnected()
+        return webrtcManager.isConnected()
     }
 
-    public func getConnectionState() async -> ConnectionState {
+    public func getConnectionState() -> ConnectionState {
         guard let webrtcManager = webrtcManager else { return .disconnected }
-        return await webrtcManager.getConnectionState()
+        return webrtcManager.getConnectionState()
     }
 
     public func disconnect() async {
@@ -138,7 +143,9 @@ public struct RealtimeClientFactory {
             apiKey: apiKey,
             sessionId: sessionId,
             fps: options.model.fps,
-            onRemoteStream: options.onRemoteStream,
+            onRemoteStream: { [weak client] stream in
+                client?.sendRemoteStream(stream)
+            },
             onConnectionStateChange: { [weak client] state in
                 client?.sendConnectionState(state)
             },
@@ -156,7 +163,7 @@ public struct RealtimeClientFactory {
         )
 
         let webrtcManager = WebRTCManager(configuration: config)
-        await client.setWebRTCManager(webrtcManager)
+        client.setWebRTCManager(webrtcManager)
 
         _ = try await webrtcManager.connect(localStream: stream)
 
