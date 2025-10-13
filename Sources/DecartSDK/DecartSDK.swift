@@ -22,17 +22,20 @@ public struct DecartConfiguration {
 }
 
 public struct DecartClient {
-    public let realtime: RealtimeClientFactory
-    
+    public let baseURL: URL
+    public let apiKey: String
+
     public init(configuration: DecartConfiguration) throws {
         guard !configuration.apiKey.isEmpty else {
             throw DecartError.invalidAPIKey
         }
-        
-        self.realtime = RealtimeClientFactory(
-            baseURL: configuration.baseURL,
-            apiKey: configuration.apiKey
-        )
+
+        self.baseURL = configuration.baseURL
+        self.apiKey = configuration.apiKey
+    }
+
+    public func createRealtimeClient(options: RealtimeConnectOptions) throws -> RealtimeClient {
+        try RealtimeClient(baseURL: baseURL, apiKey: apiKey, options: options)
     }
 }
 

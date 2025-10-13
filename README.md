@@ -12,7 +12,7 @@ Native Swift SDK for [Decart AI](https://decart.ai) - Real-time video processing
 
 - ✅ **Real-time video processing** with WebRTC
 - ✅ **Native Swift** with modern concurrency (async/await)
-- ✅ **Combine integration** for reactive state management
+- ✅ **AsyncStream events** for reactive state management
 - ✅ **Type-safe API** with compile-time guarantees
 - ✅ **iOS 15+** and **macOS 12+** support
 - ✅ **SwiftUI** ready
@@ -57,32 +57,41 @@ let stream = try await captureLocalStream(
     height: model.height
 )
 
-// 4. Connect
-let realtimeClient = try await client.realtime.connect(
-    stream: stream,
+// 4. Create realtime client
+let realtimeClient = try client.createRealtimeClient(
     options: RealtimeConnectOptions(
         model: model,
-        onRemoteStream: { mediaStream in
-            // Handle processed video
-        },
         initialState: ModelState(
             prompt: Prompt(text: "Lego World", enrich: true)
         )
     )
 )
 
-// 5. Subscribe to events
-realtimeClient.connectionStatePublisher
-    .sink { state in
-        print("Connection: \(state)")
-    }
-    .store(in: &cancellables)
+// 5. Connect
+try await realtimeClient.connect(stream: stream)
 
-// 6. Control session
+// 6. Handle events
+Task {
+    for await event in realtimeClient.events {
+        switch event {
+        case .stateChanged(let state):
+            print("Connection: \(state)")
+        case .remoteStreamReceived(let mediaStream):
+            // Handle processed video
+            if let videoTrack = mediaStream.videoTracks.first {
+                videoTrack.add(remoteVideoView)
+            }
+        case .error(let error):
+            print("Error: \(error)")
+        }
+    }
+}
+
+// 7. Control session
 try await realtimeClient.setPrompt("Anime World")
 await realtimeClient.setMirror(true)
 
-// 7. Disconnect
+// 8. Disconnect
 await realtimeClient.disconnect()
 ```
 
@@ -120,17 +129,23 @@ let model = Models.realtime(.lucy_v2v_720p_rt)
 **`RealtimeClient`**
 
 ```swift
-public actor RealtimeClient {
-    public let sessionId: UUID
+public class RealtimeClient {
+    public let events: AsyncStream<DecartSdkEvent>
 
-    public var connectionStatePublisher: AnyPublisher<ConnectionState, Never>
-    public var errorPublisher: AnyPublisher<DecartError, Never>
-
+    public func connect(stream: RTCMediaStream) async throws
     public func setPrompt(_ prompt: String, enrich: Bool = true) async throws
     public func setMirror(_ enabled: Bool) async
-    public func isConnected() async -> Bool
-    public func getConnectionState() async -> ConnectionState
     public func disconnect() async
+}
+```
+
+**`DecartSdkEvent`**
+
+```swift
+public enum DecartSdkEvent {
+    case stateChanged(ConnectionState)
+    case remoteStreamReceived(RTCMediaStream)
+    case error(Error)
 }
 ```
 
@@ -154,9 +169,9 @@ public enum ConnectionState {
 
 The SDK follows Swift best practices:
 
-- **Actors** for thread-safe mutable state
-- **Structs** for value types
-- **Combine** for reactive event streams
+- **Classes** with weak references for connection management
+- **Structs** for value types and configuration
+- **AsyncStream** for reactive event streams
 - **async/await** for asynchronous operations
 - **Error protocol** for proper Swift error handling
 
