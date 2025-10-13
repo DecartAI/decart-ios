@@ -156,6 +156,7 @@ public class RealtimeClient {
     public func disconnect() async {
         guard let webrtcConnection = webrtcConnection else { return }
         await webrtcConnection.cleanup()
+        self.webrtcConnection = nil
     }
     
     public func setPrompt(_ prompt: String, enrich: Bool = true) async throws {

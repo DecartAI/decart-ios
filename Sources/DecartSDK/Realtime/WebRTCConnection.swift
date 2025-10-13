@@ -51,10 +51,11 @@ class WebRTCConnection {
             print("[WebRTCConnection] ❌ Signaling manager connection failed: \(error.localizedDescription)")
             throw error
         }
-        subscribeToSignalingMessages()
+    
         // Setup peer connection
         do {
             try await setupPeerConnection(localStream: localStream)
+            subscribeToSignalingMessages()
             try await sendOffer()
         } catch {
             print("[WebRTCConnection] ❌ Peer connection setup failed: \(error.localizedDescription)")

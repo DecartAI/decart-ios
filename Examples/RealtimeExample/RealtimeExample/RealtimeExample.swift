@@ -325,7 +325,7 @@ private enum Config {
         localStream?.videoTracks.first?.remove(localVideoView)
 
         // Cleanup
-        await client?.disconnect()
+        client?.disconnect()
         client = nil
         connectionState = "Disconnected"
         videoCapturer = nil
