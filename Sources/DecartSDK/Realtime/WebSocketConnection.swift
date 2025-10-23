@@ -93,8 +93,7 @@ struct SwitchCameraMessage: Codable {
     }
 }
 
-enum IncomingWebRTCMessage: Codable {
-    case ready(ReadyMessage)
+enum IncomingWebSocketMessage: Codable {
     case offer(OfferMessage)
     case answer(AnswerMessage)
     case iceCandidate(IceCandidateMessage)
@@ -104,8 +103,6 @@ enum IncomingWebRTCMessage: Codable {
         let type = try container.decode(String.self, forKey: .type)
         
         switch type {
-        case "ready":
-            self = .ready(try ReadyMessage(from: decoder))
         case "offer":
             self = .offer(try OfferMessage(from: decoder))
         case "answer":
@@ -123,8 +120,6 @@ enum IncomingWebRTCMessage: Codable {
     
     func encode(to encoder: Encoder) throws {
         switch self {
-        case .ready(let msg):
-            try msg.encode(to: encoder)
         case .offer(let msg):
             try msg.encode(to: encoder)
         case .answer(let msg):
@@ -139,7 +134,7 @@ enum IncomingWebRTCMessage: Codable {
     }
 }
 
-enum OutgoingWebRTCMessage: Codable {
+enum OutgoingWebSocketMessage: Codable {
     case initializeSession(InitializeSessionMessage)
     case offer(OfferMessage)
     case answer(AnswerMessage)
