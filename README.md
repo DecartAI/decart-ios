@@ -123,6 +123,8 @@ let config = try DecartConfiguration(
 ```swift
 let model = Models.realtime(.mirage)
 // or
+let model = Models.realtime(.mirage_v2)
+// or
 let model = Models.realtime(.lucy_v2v_720p_rt)
 ```
 

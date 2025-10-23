@@ -7,6 +7,7 @@ public enum VideoCodec: String {
 
 public enum RealtimeModel: String, CaseIterable {
     case mirage
+    case mirage_v2
     case lucy_v2v_720p_rt
     case lucy_edit_ani
 }
@@ -43,6 +44,14 @@ public enum Models {
                 name: "mirage",
                 urlPath: "/v1/stream",
                 fps: 25,
+                width: 1280,
+                height: 704
+            )
+        case .mirage_v2:
+            return ModelDefinition(
+                name: "mirage_v2",
+                urlPath: "/v1/stream",
+                fps: 12,
                 width: 1280,
                 height: 704
             )
