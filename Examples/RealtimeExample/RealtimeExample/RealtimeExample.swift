@@ -129,7 +129,7 @@ struct VideoView: UIViewRepresentable {
 }
 
 private enum Config {
-    static let apiKey = "your-api-key"
+    static let apiKey = "testrpQWXnyFDQCiXcXAeBZgWwnfEiptgxSPOaPjhRcsxuKuguLLvgEpiqmOiJGjXxZY"
     static let baseURL = "https://api3.decart.ai"
     static let defaultPrompt = "Turn the figure into a fantasy figure"
 }
@@ -365,7 +365,7 @@ class RealtimeViewModel: ObservableObject {
             print("📹   Camera \(i): \(device.localizedName) - Position: \(device.position.rawValue)")
         }
         
-        guard let frontCamera = devices.first(where: { $0.position == .front }) else {
+        guard let frontCamera = devices.first(where: { $0.position == .back }) else {
             throw cameraError("No front camera found")
         }
         print("📹 Using front camera: \(frontCamera.localizedName)")
