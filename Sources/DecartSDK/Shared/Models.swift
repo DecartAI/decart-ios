@@ -51,7 +51,7 @@ public enum Models {
             return ModelDefinition(
                 name: "mirage_v2",
                 urlPath: "/v1/stream",
-                fps: 12,
+                fps: 18,
                 width: 1280,
                 height: 704
             )
