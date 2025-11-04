@@ -114,28 +114,28 @@ public struct RealtimeClient {
 
 public extension RealtimeClient {
 	func createVideoSource() -> RTCVideoSource {
-		return WebRTCClient.factory.videoSource()
+		return webRTCClient.factory.videoSource()
 	}
 
 	func createAudioSource(with: RTCMediaConstraints? = nil) -> RTCAudioSource {
-		return WebRTCClient.factory.audioSource(with: with)
+		return webRTCClient.factory.audioSource(with: with)
 	}
 
 	// Adding a video track or audio track implicitly creates a bidi Transceivers (per media type) and RTCMediastream is not needed.
 	func createLocalVideoTrack(with: RTCVideoSource, trackId: String, enabled: Bool = true) -> RTCVideoTrack {
 		if !enabled {
-			return WebRTCClient.factory.videoTrack(with: with, trackId: trackId)
+			return webRTCClient.factory.videoTrack(with: with, trackId: trackId)
 		}
-		let videoTrack = WebRTCClient.factory.videoTrack(with: with, trackId: trackId)
+		let videoTrack = webRTCClient.factory.videoTrack(with: with, trackId: trackId)
 		videoTrack.isEnabled = true
 		return videoTrack
 	}
 
 	func createLocalAudioTrack(with: RTCAudioSource, trackId: String, enabled: Bool = true) -> RTCAudioTrack {
 		if !enabled {
-			return WebRTCClient.factory.audioTrack(with: with, trackId: trackId)
+			return webRTCClient.factory.audioTrack(with: with, trackId: trackId)
 		}
-		let audioTrack = WebRTCClient.factory.audioTrack(with: with, trackId: trackId)
+		let audioTrack = webRTCClient.factory.audioTrack(with: with, trackId: trackId)
 		audioTrack.isEnabled = true
 		return audioTrack
 	}

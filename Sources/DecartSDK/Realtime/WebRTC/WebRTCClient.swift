@@ -2,12 +2,7 @@ import Foundation
 import WebRTC
 
 class WebRTCClient: NSObject {
-	static let factory: RTCPeerConnectionFactory = {
-		RTCInitializeSSL()
-		let videoEncoderFactory = RTCDefaultVideoEncoderFactory()
-		let videoDecoderFactory = RTCDefaultVideoDecoderFactory()
-		return RTCPeerConnectionFactory(encoderFactory: videoEncoderFactory, decoderFactory: videoDecoderFactory)
-	}()
+	let factory: RTCPeerConnectionFactory
 
 	@objc let peerConnection: RTCPeerConnection
 
@@ -33,6 +28,11 @@ class WebRTCClient: NSObject {
 		// #else
 //		RTCSetMinDebugLogLevel(.verbose)
 		// #endif
+		RTCInitializeSSL()
+		let videoEncoderFactory = RTCDefaultVideoEncoderFactory()
+		let videoDecoderFactory = RTCDefaultVideoDecoderFactory()
+		self.factory = RTCPeerConnectionFactory(encoderFactory: videoEncoderFactory, decoderFactory: videoDecoderFactory)
+
 		let config = RTCConfiguration()
 		config.iceServers = Self.iceServers
 		config.sdpSemantics = .unifiedPlan
@@ -46,7 +46,7 @@ class WebRTCClient: NSObject {
 			optionalConstraints: nil
 		)
 
-		self.peerConnection = WebRTCClient.factory.peerConnection(
+		self.peerConnection = factory.peerConnection(
 			with: config,
 			constraints: constraints,
 			delegate: nil
@@ -136,7 +136,7 @@ class WebRTCClient: NSObject {
 			return
 		}
 
-		let supportedCodecs = WebRTCClient.factory.rtpSenderCapabilities(forKind: "video").codecs
+		let supportedCodecs = factory.rtpSenderCapabilities(forKind: "video").codecs
 
 		var preferredCodecs: [RTCRtpCodecCapability] = []
 		var otherCodecs: [RTCRtpCodecCapability] = []
