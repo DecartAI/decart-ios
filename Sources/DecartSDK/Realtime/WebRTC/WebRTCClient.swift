@@ -1,14 +1,8 @@
 import Foundation
 import WebRTC
 
-public enum ConnectionState: Sendable {
-	case connecting
-	case connected
-	case disconnected
-}
-
 class WebRTCClient: NSObject {
-	private static let factory: RTCPeerConnectionFactory = {
+	static let factory: RTCPeerConnectionFactory = {
 		RTCInitializeSSL()
 		let videoEncoderFactory = RTCDefaultVideoEncoderFactory()
 		let videoDecoderFactory = RTCDefaultVideoDecoderFactory()
@@ -17,13 +11,12 @@ class WebRTCClient: NSObject {
 
 	@objc let peerConnection: RTCPeerConnection
 
-	private(set) var state: ConnectionState = .disconnected
+	private(set) var state: DecartRealtimeConnectionState = .disconnected
 	private var signalingManager: SignalingManager?
 	private let onRemoteStream: ((RTCMediaStream) -> Void)?
-	private let onStateChange: ((ConnectionState) -> Void)?
+	private let onStateChange: ((DecartRealtimeConnectionState) -> Void)?
 	private let onError: ((Error) -> Void)?
-	private let preferredVideoCodec: VideoCodec
-	private let peerConnectionConfig: PeerConnectionConfig
+	private let realtimeConfig: RealtimeConfig
 
 	private static let iceServers: [RTCIceServer] = [
 		RTCIceServer(urlStrings: ["stun:stun.l.google.com:19302"])
@@ -31,10 +24,9 @@ class WebRTCClient: NSObject {
 
 	init(
 		onRemoteStream: ((RTCMediaStream) -> Void)? = nil,
-		onStateChange: ((ConnectionState) -> Void)? = nil,
+		onStateChange: ((DecartRealtimeConnectionState) -> Void)? = nil,
 		onError: ((Error) -> Void)? = nil,
-		preferredVideoCodec: VideoCodec = VideoCodec.vp8,
-		peerConnectionConfig: PeerConnectionConfig
+		realtimeConfig: RealtimeConfig
 	) {
 		// #if IS_ALPHA
 //		RTCSetMinDebugLogLevel(.verbose)
@@ -62,23 +54,19 @@ class WebRTCClient: NSObject {
 		self.onRemoteStream = onRemoteStream
 		self.onStateChange = onStateChange
 		self.onError = onError
-		self.preferredVideoCodec = preferredVideoCodec
-		self.peerConnectionConfig = peerConnectionConfig
+		self.realtimeConfig = realtimeConfig
 		super.init()
 		peerConnection.delegate = self
 	}
 
-	func connect(url: URL, localStream: RTCMediaStream, timeout: TimeInterval = 30) async throws {
+	func connect(url: URL, localStream: RealtimeMediaStream, timeout: TimeInterval = 30) async throws {
 		setState(.connecting)
 		do {
-			configureSenderParameters()
-			for track in localStream.audioTracks {
-				peerConnection.add(track, streamIds: [localStream.streamId])
+			peerConnection.add(localStream.videoTrack, streamIds: [localStream.id])
+			if let audioTrack = localStream.audioTrack {
+				peerConnection.add(audioTrack, streamIds: [localStream.id])
 			}
-
-			for track in localStream.videoTracks {
-				peerConnection.add(track, streamIds: [localStream.streamId])
-			}
+			configureSenderParameters(preferredCodec: VideoCodec.vp8)
 
 			let newSignalingManager = SignalingManager(pc: peerConnection)
 			await newSignalingManager.connect(url: url)
@@ -108,7 +96,7 @@ class WebRTCClient: NSObject {
 	}
 
 	private func handleConnectionStateChange(_ rtcState: RTCPeerConnectionState) {
-		let newState: ConnectionState
+		let newState: DecartRealtimeConnectionState
 		switch rtcState {
 		case .connected:
 			newState = .connected
@@ -127,24 +115,21 @@ class WebRTCClient: NSObject {
 			optionalConstraints: ["OfferToReceiveVideo": "true"]
 		)
 		guard let offer = try? await peerConnection.offer(for: constraints) else {
-			throw DecartError.webRTCError(NSError(
-				domain: "WebRTC", code: -1,
-				userInfo: [NSLocalizedDescriptionKey: "Failed to create offer"]
-			))
+			throw DecartError.webRTCError("failed to create offer, aborting")
 		}
 
 		try await peerConnection.setLocalDescription(offer)
 		await signalingManager?.send(.offer(OfferMessage(sdp: offer.sdp)))
 	}
 
-	private func setState(_ newState: ConnectionState) {
+	private func setState(_ newState: DecartRealtimeConnectionState) {
 		guard state != newState else { return }
 		state = newState
 		onStateChange?(newState)
 	}
 
-	private func setCodecPreferences(
-		for peerConnection: RTCPeerConnection, preferredCodec: VideoCodec
+	private func configureSenderParameters(
+		preferredCodec: VideoCodec
 	) {
 		guard let transceiver = peerConnection.transceivers.first(where: { $0.mediaType == .video })
 		else {
@@ -176,25 +161,15 @@ class WebRTCClient: NSObject {
 		let sortedCodecs = preferredCodecs + otherCodecs + utilityCodecs
 //		var error: NSError?
 		transceiver.setCodecPreferences(sortedCodecs)
-	}
-
-	private func configureSenderParameters() {
-		guard let sender = peerConnection.senders.first(
-			where: {
-				$0.track?.kind == kRTCMediaStreamTrackKindVideo
-			}
-		),
-			!sender.parameters.encodings.isEmpty
-		else {
-			return
-		}
-
+		let sender = transceiver.sender
 		let parameters = sender.parameters
 		let encodingParam = parameters.encodings[0]
 
-		encodingParam.maxBitrateBps = NSNumber(value: peerConnectionConfig.maxBitrate)
-		encodingParam.minBitrateBps = NSNumber(value: peerConnectionConfig.minBitrate)
-		encodingParam.maxFramerate = NSNumber(value: peerConnectionConfig.maxFramerate)
+		encodingParam.maxBitrateBps = NSNumber(value: realtimeConfig.peerConnectionConfig.maxBitrate)
+		encodingParam.minBitrateBps = NSNumber(value: realtimeConfig.peerConnectionConfig.minBitrate)
+		encodingParam.maxFramerate = NSNumber(
+			value: realtimeConfig.peerConnectionConfig.maxFramerate
+		)
 		// encodingParam.scaleResolutionDownBy = NSNumber(value: scaleResolutionDownBy)
 
 		parameters.encodings[0] = encodingParam
@@ -244,70 +219,5 @@ extension WebRTCClient: RTCPeerConnectionDelegate {
 		_ peerConnection: RTCPeerConnection, didChange newState: RTCPeerConnectionState
 	) {
 		handleConnectionStateChange(newState)
-	}
-}
-
-extension RTCPeerConnection {
-	func offer(for constraints: RTCMediaConstraints) async throws -> RTCSessionDescription? {
-		try await withCheckedThrowingContinuation { continuation in
-			self.offer(for: constraints) { sdp, error in
-				if let error = error {
-					continuation.resume(throwing: error)
-				} else {
-					continuation.resume(returning: sdp)
-				}
-			}
-		}
-	}
-
-	func answer(for constraints: RTCMediaConstraints) async throws -> RTCSessionDescription? {
-		try await withCheckedThrowingContinuation { continuation in
-			self.answer(for: constraints) { sdp, error in
-				if let error = error {
-					continuation.resume(throwing: error)
-				} else {
-					continuation.resume(returning: sdp)
-				}
-			}
-		}
-	}
-
-	func setLocalDescription(_ sdp: RTCSessionDescription) async throws {
-		try await withCheckedThrowingContinuation {
-			(continuation: CheckedContinuation<Void, Error>) in
-			self.setLocalDescription(sdp) { error in
-				if let error = error {
-					continuation.resume(throwing: error)
-				} else {
-					continuation.resume()
-				}
-			}
-		}
-	}
-
-	func setRemoteDescription(_ sdp: RTCSessionDescription) async throws {
-		try await withCheckedThrowingContinuation {
-			(continuation: CheckedContinuation<Void, Error>) in
-			self.setRemoteDescription(sdp) { error in
-				if let error = error {
-					continuation.resume(throwing: error)
-				} else {
-					continuation.resume()
-				}
-			}
-		}
-	}
-
-	func add(_ candidate: RTCIceCandidate) async throws {
-		try await withCheckedThrowingContinuation {
-			(continuation: CheckedContinuation<Void, Error>) in
-			self.add(candidate) { error in
-				if let error = error {
-					continuation.resume(throwing: error)
-				} else {
-					continuation.resume()
-				}
-			}
-		}
 	}
 }

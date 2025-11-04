@@ -75,7 +75,10 @@ class WebSocketService {
 	}
 
 	func send<T: Codable>(_ message: T) async throws {
-		guard let stream = stream else { return }
+		guard let stream = stream else {
+			DecartLogger.log("tried to send ws message when its closed", level: .warning)
+			return
+		}
 
 		let data = try encoder.encode(message)
 		guard let jsonString = String(data: data, encoding: .utf8) else {

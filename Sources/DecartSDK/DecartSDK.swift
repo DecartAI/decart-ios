@@ -4,7 +4,22 @@ public struct DecartConfiguration {
 	public let baseURL: URL
 	public let apiKey: String
 
-	public init(baseURL: URL, apiKey: String) {
+	var headers: [String: String] { ["Authorization": "Bearer \(apiKey)"] }
+
+	var signalingServerUrl: String {
+		var baseURLString = baseURL.absoluteString
+		if baseURLString.hasPrefix("https://") {
+			baseURLString = baseURLString.replacingOccurrences(of: "https://", with: "wss://")
+		} else if baseURLString.hasPrefix("http://") {
+			baseURLString = baseURLString.replacingOccurrences(of: "http://", with: "ws://")
+		}
+		return baseURLString
+	}
+
+	public init(baseURL: URL, apiKey: String) throws {
+		guard !apiKey.isEmpty else {
+			throw DecartError.invalidAPIKey
+		}
 		self.baseURL = baseURL
 		self.apiKey = apiKey
 	}
@@ -22,23 +37,24 @@ public struct DecartConfiguration {
 }
 
 public struct DecartClient {
-	public let baseURL: URL
-	public let apiKey: String
+	let decartConfiguration: DecartConfiguration
 
-	public init(configuration: DecartConfiguration) throws {
-		guard !configuration.apiKey.isEmpty else {
-			throw DecartError.invalidAPIKey
+	public init(decartConfiguration: DecartConfiguration) {
+		self.decartConfiguration = decartConfiguration
+	}
+
+	public func createRealtimeClient(options: RealtimeConfig) throws -> RealtimeClient {
+		let urlString =
+			"\(decartConfiguration.signalingServerUrl)\(options.model.urlPath)?api_key=\(decartConfiguration.apiKey)&model=\(options.model.name)"
+
+		guard let signalingServerURL = URL(string: urlString) else {
+			DecartLogger.log("Unable to generate signaling server URL from: \(urlString)", level: .error)
+			throw DecartError.invalidBaseURL(urlString)
 		}
 
-		self.baseURL = configuration.baseURL
-		self.apiKey = configuration.apiKey
+		return try RealtimeClient(
+			signalingServerURL: signalingServerURL,
+			options: options
+		)
 	}
-
-	public func createRealtimeClient(options: RealtimeConnectOptions) throws -> RealtimeClient {
-		try RealtimeClient(baseURL: baseURL, apiKey: apiKey, options: options)
-	}
-}
-
-public func createDecartClient(configuration: DecartConfiguration) throws -> DecartClient {
-	try DecartClient(configuration: configuration)
 }

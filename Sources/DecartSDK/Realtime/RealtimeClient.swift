@@ -2,70 +2,24 @@ import Foundation
 @preconcurrency import WebRTC
 
 public enum DecartSdkEvent: Sendable {
-	case stateChanged(ConnectionState)
+	case stateChanged(DecartRealtimeConnectionState)
 	case remoteStreamReceived(RTCMediaStream)
 	case error(Error)
 }
 
-public struct PeerConnectionConfig {
-	public let maxBitrate: Int
-	public let minBitrate: Int
-	public let maxFramerate: Int
+// Technically you don't need MediaStreams anymore in unifiedPlan - which simplifies tracks control and disposal.
+// this Wrapper is only ment to conform to the SDK's interface
 
-	public init(maxBitrate: Int = 3_800_000, minBitrate: Int = 800_000, maxFramerate: Int = 30) {
-		self.maxBitrate = maxBitrate
-		self.minBitrate = minBitrate
-		self.maxFramerate = maxFramerate
-	}
-}
-
-public struct RealtimeConnectOptions {
-	public let model: ModelDefinition
-	public let initialState: ModelState?
-	public let peerConnectionConfig: PeerConnectionConfig
-	public init(
-		model: ModelDefinition,
-		initialState: ModelState? = nil,
-		peerConnectionConfig: PeerConnectionConfig = PeerConnectionConfig()
-	) {
-		self.model = model
-		self.initialState = initialState
-		self.peerConnectionConfig = peerConnectionConfig
-	}
-}
-
-public class RealtimeClient {
-	private var webrtcConnection: WebRTCClient?
+public struct RealtimeClient {
+	private let webRTCClient: WebRTCClient
 	private let signalingServerURL: URL
-	private let apiKey: String
-	private let options: RealtimeConnectOptions
+	public let options: RealtimeConfig
 
-	private var eventContinuation: AsyncStream<DecartSdkEvent>.Continuation?
+	private let eventContinuation: AsyncStream<DecartSdkEvent>.Continuation
 	public let events: AsyncStream<DecartSdkEvent>
 
-	public init(baseURL: URL, apiKey: String, options: RealtimeConnectOptions) throws {
+	public init(signalingServerURL: URL, options: RealtimeConfig) throws {
 		self.options = options
-		guard !apiKey.isEmpty else {
-			print("[RealtimeClient] Error: API key is empty")
-			throw DecartError.invalidAPIKey
-		}
-
-		self.apiKey = apiKey
-		var baseURLString = baseURL.absoluteString
-		if baseURLString.hasPrefix("https://") {
-			baseURLString = baseURLString.replacingOccurrences(of: "https://", with: "wss://")
-		} else if baseURLString.hasPrefix("http://") {
-			baseURLString = baseURLString.replacingOccurrences(of: "http://", with: "ws://")
-		}
-
-		let urlString =
-			"\(baseURLString)\(options.model.urlPath)?api_key=\(apiKey)&model=\(options.model.name)"
-
-		guard let signalingServerURL = URL(string: urlString) else {
-			print("[RealtimeClient] Error: Invalid base URL - \(urlString)")
-			throw DecartError.invalidBaseURL(urlString)
-		}
-
 		self.signalingServerURL = signalingServerURL
 
 		let (stream, continuation) = AsyncStream.makeStream(
@@ -74,44 +28,26 @@ public class RealtimeClient {
 		)
 		self.events = stream
 		self.eventContinuation = continuation
-	}
 
-	func sendConnectionState(_ state: ConnectionState) {
-		eventContinuation?.yield(.stateChanged(state))
-	}
+		let webRTCClient = WebRTCClient(
+			onRemoteStream: { stream in
+				continuation.yield(.remoteStreamReceived(stream))
+			},
+			onStateChange: { state in
+				continuation.yield(.stateChanged(state))
+			},
+			onError: { error in
+				continuation.yield(.error(error))
+			},
+			realtimeConfig: options
+		)
 
-	func sendError(_ error: DecartError) {
-		eventContinuation?.yield(.error(error))
-	}
-
-	func sendRemoteStream(_ stream: RTCMediaStream) {
-		eventContinuation?.yield(.remoteStreamReceived(stream))
+		self.webRTCClient = webRTCClient
 	}
 
 	public func connect(
-		localStream: RTCMediaStream
-	) async throws {
-		// Create WebRTCConnection with callbacks
-		let webrtcConnection = WebRTCClient(
-			onRemoteStream: { [weak self] stream in
-				self?.sendRemoteStream(stream)
-			},
-			onStateChange: { [weak self] state in
-				self?.sendConnectionState(state)
-			},
-			onError: { [weak self] error in
-				if let decartError = error as? DecartError {
-					self?.sendError(decartError)
-				} else {
-					self?.sendError(.webRTCError(error))
-				}
-			},
-			preferredVideoCodec: .vp8,
-			peerConnectionConfig: options.peerConnectionConfig
-		)
-
-		self.webrtcConnection = webrtcConnection
-
+		localStream: RealtimeMediaStream
+	) async throws -> RealtimeMediaStream {
 		// Implement retry logic
 		var retries = 0
 		let maxRetries = 3
@@ -120,8 +56,21 @@ public class RealtimeClient {
 
 		while retries < maxRetries {
 			do {
-				try await webrtcConnection.connect(url: signalingServerURL, localStream: localStream)
-				return
+				try await webRTCClient
+					.connect(url: signalingServerURL, localStream: localStream)
+				let remoteVideoTrack = getTransceivers().first { $0.mediaType == .video }?.receiver.track as? RTCVideoTrack
+				let remoteAudioTrack = getTransceivers().first {
+					$0.mediaType == .audio
+				}?.receiver.track as? RTCAudioTrack
+
+				guard let remoteVideoTrack else {
+					throw DecartError.webRTCError("please set local video track with RealtimeClient.setLocalVideoTrack before calling connect!")
+				}
+				return RealtimeMediaStream(
+					videoTrack: remoteVideoTrack,
+					audioTrack: remoteAudioTrack,
+					id: .remoteStream
+				)
 			} catch {
 				retries += 1
 
@@ -142,30 +91,62 @@ public class RealtimeClient {
 			}
 		}
 
-		print("[RealtimeClient] Connection failed: Max retries exceeded")
-		throw DecartError.webRTCError(
-			NSError(domain: "WebRTC", code: -1,
-			        userInfo: [NSLocalizedDescriptionKey: "Max retries exceeded"]))
+		DecartLogger.log("max retries exceeded, connection failed", level: .error)
+		throw DecartError.webRTCError("Max retries exceeded")
 	}
 
 	public func disconnect() async {
-		await webrtcConnection?.disconnect()
-		webrtcConnection = nil
+		eventContinuation.finish()
+		await webRTCClient.disconnect()
 	}
 
-	public func setPrompt(_ prompt: String, enrich: Bool = true) async throws {
-		guard let webrtcConnection = webrtcConnection else {
-			throw DecartError.invalidOptions("Client not initialized")
-		}
-
-		await webrtcConnection
-			.sendWebsocketMessage(.prompt(PromptMessage(prompt: prompt)))
+	// TODO: we totally ignore enrich, fix it to properly pass it on ws
+	public func setPrompt(_ prompt: Prompt) async throws {
+		await webRTCClient
+			.sendWebsocketMessage(.prompt(PromptMessage(prompt: prompt.text)))
 	}
 
 	public func setMirror(_ enabled: Bool) async {
-		guard let webrtcConnection = webrtcConnection else { return }
-
 		let rotateY = enabled ? 2 : 0
-		await webrtcConnection.sendWebsocketMessage(.switchCamera(SwitchCameraMessage(rotateY: rotateY)))
+		await webRTCClient.sendWebsocketMessage(.switchCamera(SwitchCameraMessage(rotateY: rotateY)))
+	}
+}
+
+public extension RealtimeClient {
+	func createVideoSource() -> RTCVideoSource {
+		return WebRTCClient.factory.videoSource()
+	}
+
+	func createAudioSource(with: RTCMediaConstraints? = nil) -> RTCAudioSource {
+		return WebRTCClient.factory.audioSource(with: with)
+	}
+
+	// Adding a video track or audio track implicitly creates a bidi Transceivers (per media type) and RTCMediastream is not needed.
+	func createLocalVideoTrack(with: RTCVideoSource, trackId: String, enabled: Bool = true) -> RTCVideoTrack {
+		if !enabled {
+			return WebRTCClient.factory.videoTrack(with: with, trackId: trackId)
+		}
+		let videoTrack = WebRTCClient.factory.videoTrack(with: with, trackId: trackId)
+		videoTrack.isEnabled = true
+		return videoTrack
+	}
+
+	func createLocalAudioTrack(with: RTCAudioSource, trackId: String, enabled: Bool = true) -> RTCAudioTrack {
+		if !enabled {
+			return WebRTCClient.factory.audioTrack(with: with, trackId: trackId)
+		}
+		let audioTrack = WebRTCClient.factory.audioTrack(with: with, trackId: trackId)
+		audioTrack.isEnabled = true
+		return audioTrack
+	}
+
+	func setTrackEnabled<T: RTCMediaStreamTrack>(_ type: T.Type, isEnabled: Bool) {
+		webRTCClient.peerConnection.transceivers
+			.compactMap { $0.sender.track as? T }
+			.forEach { $0.isEnabled = isEnabled }
+	}
+
+	func getTransceivers() -> [RTCRtpTransceiver] {
+		return webRTCClient.peerConnection.transceivers
 	}
 }

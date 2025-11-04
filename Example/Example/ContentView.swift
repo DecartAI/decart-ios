@@ -9,28 +9,72 @@ import DecartSDK
 import SwiftUI
 import WebRTC
 
+private enum Config {
+	static let apiKey = "realtime-test_cvXwtMYGLstCYcYALueGFfzMUmYXUaRTYUEoPvEVoFBqfeQvUZitXstIRdxNFzMM"
+	static let baseURL = "https://api3.decart.ai"
+	static let defaultPrompt = "Turn the figure into a fantasy figure"
+}
+
 struct ContentView: View {
+	private let decartClientManager: DecartClientManager?
+	init() {
+		do {
+			decartClientManager = try .init(
+				configuration: DecartConfiguration(
+					baseURL: Config.baseURL,
+					apiKey: Config.apiKey
+				)
+			)
+		} catch {
+			print("error initializing DecartClient \(error)")
+			fatalError("Failed to initialize DecartClient--- \(error)")
+		}
+	}
+
 	var body: some View {
-		NavigationView {
-			List {
-				NavigationLink(destination: RealtimeView()) {
-					Text("Realtime")
+		if let manager = decartClientManager {
+			NavigationView {
+				List {
+					NavigationLink(destination: RealtimeView(decartClientManager: manager)) {
+						Text("Realtime")
+					}
 				}
+				.navigationBarTitle("Example")
 			}
-			.navigationBarTitle("Example")
+		} else {
+			VStack {
+				Text("Failed to initialize DecartClient. Please check your API key and base URL.")
+			}
 		}
 	}
 }
 
 struct RealtimeView: View {
-	@State private var viewModel = RealtimeViewModel()
+	let decartClientManager: DecartClientManager
+	@State private var prompt: String = Config.defaultPrompt
+
+	@State private var viewModel: RealtimeManager
+
+	init(decartClientManager: DecartClientManager) {
+		self.decartClientManager = decartClientManager
+		_viewModel = State(
+			initialValue: RealtimeManager(
+				decartClientManager: decartClientManager,
+				currentPrompt: Prompt(text: Config.defaultPrompt, enrich: false)
+			)
+		)
+	}
 
 	var body: some View {
 		ZStack {
-			// Remote video background
-			VideoView(track: viewModel.remoteVideoTrack)
+			if viewModel.remoteMediaStreams != nil {
+				RTCMLVideoViewWrapper(
+					track: viewModel.remoteMediaStreams?.videoTrack
+				)
 				.background(Color.black)
 				.edgesIgnoringSafeArea(.all)
+			}
+			// Remote video background
 
 			// UI overlay
 			VStack(spacing: 16) {
@@ -40,9 +84,11 @@ struct RealtimeView: View {
 						Text("Decart Realtime")
 							.font(.headline)
 							.foregroundColor(.white)
-						Text(viewModel.connectionState)
+						Text(viewModel.connectionState.rawValue)
 							.font(.caption)
-							.foregroundColor(viewModel.isConnected ? .green : .white)
+							.foregroundColor(
+								viewModel.connectionState.isConnected ? .green : .white
+							)
 					}
 					Spacer()
 				}
@@ -52,23 +98,25 @@ struct RealtimeView: View {
 				Spacer()
 
 				// Local video preview
-				if viewModel.connectionState != "Disconnected" {
+				if viewModel.connectionState.isInSession, viewModel.localMediaStream != nil {
 					HStack {
 						Spacer()
-						VideoView(track: viewModel.localVideoTrack)
-							.frame(width: 120, height: 160)
-							.cornerRadius(12)
-							.overlay(
-								RoundedRectangle(cornerRadius: 12).stroke(Color.white, lineWidth: 2)
-							)
-							.padding()
+						RTCMLVideoViewWrapper(
+							track: viewModel.localMediaStream!.videoTrack
+						)
+						.frame(width: 120, height: 160)
+						.cornerRadius(12)
+						.overlay(
+							RoundedRectangle(cornerRadius: 12).stroke(Color.white, lineWidth: 2)
+						)
+						.padding()
 					}
 				}
 
 				// Controls
 				VStack(spacing: 12) {
-					if let error = viewModel.lastError {
-						Text(error)
+					if viewModel.connectionState == .error {
+						Text("Error while connecting to decart realtime servers, please try again later.")
 							.foregroundColor(.red)
 							.font(.caption)
 							.padding(8)
@@ -77,50 +125,54 @@ struct RealtimeView: View {
 					}
 
 					HStack(spacing: 12) {
-						TextField("Prompt", text: $viewModel.promptText)
+						TextField("Prompt", text: $prompt)
 							.textFieldStyle(RoundedBorderTextFieldStyle())
 						// .disabled(!viewModel.isConnected)
 
 						Button(action: {
 							Task {
-								await viewModel.setPrompt()
+								viewModel.currentPrompt = Prompt(text: prompt, enrich: false)
 							}
 						}) {
 							Image(systemName: "paperplane.fill")
 								.foregroundColor(.white)
 								.padding(12)
-								.background(viewModel.isConnected ? Color.blue : Color.gray)
+								.background(
+									viewModel.connectionState.isConnected ? Color.blue : Color.gray
+								)
 								.cornerRadius(8)
 						}
 						// .disabled(!viewModel.isConnected)
 					}
 
 					HStack(spacing: 12) {
-						Toggle("Mirror", isOn: $viewModel.mirror)
+						Toggle("Mirror", isOn: $viewModel.isMirroringEnabled)
 							.toggleStyle(SwitchToggleStyle(tint: .blue))
 						// .disabled(!viewModel.isConnected)
 
 						Spacer()
 
 						Button(action: {
-							if viewModel.isConnected {
+							if viewModel.connectionState.isInSession {
 								Task {
-									await viewModel.disconnect()
+									await viewModel.cleanup()
 								}
 							} else {
 								Task {
-									await viewModel.connect()
+									try? await viewModel.connect()
 								}
 							}
 						}) {
 							Text(
-								viewModel.connectionState == "Connected" ? "Disconnect" : "Connect"
+								viewModel.connectionState.rawValue
 							)
 							.fontWeight(.semibold)
 							.foregroundColor(.white)
 							.frame(maxWidth: .infinity)
 							.padding()
-							.background(viewModel.isConnected ? Color.red : Color.green)
+							.background(
+								viewModel.connectionState.isConnected ? Color.red : Color.green
+							)
 							.cornerRadius(12)
 						}
 					}
@@ -129,333 +181,8 @@ struct RealtimeView: View {
 				.background(Color.black.opacity(0.8))
 				.cornerRadius(16)
 				.padding()
-				.onDisappear { Task { await viewModel.disconnect() } }
+				.onDisappear { Task { await viewModel.cleanup() } }
 			}
 		}
-	}
-}
-
-// SwiftUI wrapper for RTCMTLVideoView
-struct VideoView: UIViewRepresentable {
-	weak var track: RTCVideoTrack?
-
-	func makeCoordinator() -> Coordinator { Coordinator() }
-
-	func makeUIView(context: Context) -> RTCMTLVideoView {
-		let view = RTCMTLVideoView()
-		view.videoContentMode = .scaleAspectFill
-		context.coordinator.view = view
-
-		if let track { track.add(view); context.coordinator.lastTrack = track }
-		return view
-	}
-
-	func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {
-		// If the track changed, rewire attachment.
-		if context.coordinator.lastTrack !== track {
-			context.coordinator.lastTrack?.remove(uiView)
-			if let track { track.add(uiView) }
-			context.coordinator.lastTrack = track
-		}
-	}
-
-	static func dismantleUIView(_ uiView: RTCMTLVideoView, coordinator: Coordinator) {
-		coordinator.lastTrack?.remove(uiView)
-		coordinator.view = nil
-		coordinator.lastTrack = nil
-	}
-
-	final class Coordinator {
-		weak var view: RTCMTLVideoView?
-		weak var lastTrack: RTCVideoTrack?
-	}
-}
-
-private enum Config {
-	static let apiKey = "realtime-test_cvXwtMYGLstCYcYALueGFfzMUmYXUaRTYUEoPvEVoFBqfeQvUZitXstIRdxNFzMM"
-	static let baseURL = "https://api3.decart.ai"
-	static let defaultPrompt = "Turn the figure into a fantasy figure"
-}
-
-@Observable
-@MainActor final class RealtimeViewModel {
-	var connectionState: String = "Disconnected" {
-		didSet {
-			isConnected = (connectionState == "Connected")
-		}
-	}
-
-	var promptText: String = Config.defaultPrompt
-	var mirror: Bool = false {
-		didSet {
-			if mirror != oldValue {
-				Task {
-					await setMirror(mirror)
-				}
-			}
-		}
-	}
-
-	var lastError: String?
-
-	var isConnected: Bool = false
-
-	@ObservationIgnored
-	private var client: RealtimeClient?
-	@ObservationIgnored
-	private var eventTask: Task<Void, Never>?
-	@ObservationIgnored
-	private var localStream: RTCMediaStream?
-	@ObservationIgnored
-	private var videoCapturer: RTCCameraVideoCapturer?
-	@ObservationIgnored
-	private var peerConnectionFactory: RTCPeerConnectionFactory?
-
-	@ObservationIgnored
-	var localVideoTrack: RTCVideoTrack? { localStream?.videoTracks.first }
-	@ObservationIgnored
-	var remoteVideoTrack: RTCVideoTrack?
-
-	func connect() async {
-		print("🔵 Connect button tapped")
-		if isConnected {
-			print("🔵 Already connected, disconnecting first...")
-			await disconnect()
-			return
-		}
-
-		connectionState = "Connecting"
-		lastError = nil
-
-		do {
-			print("🔵 Creating configuration...")
-			print("🔵 Base URL: \(Config.baseURL)")
-			print("🔵 API Key: \(String(Config.apiKey.prefix(20)))...")
-
-			if Config.apiKey == "your-api-key" {
-				print("❌ API key is not set, please set it in Config.apiKey")
-				lastError = "API key is not set, please set it in Config.apiKey"
-				return
-			}
-
-			let configuration = try DecartConfiguration(
-				baseURL: Config.baseURL,
-				apiKey: Config.apiKey
-			)
-
-			print("🔵 Creating Decart client...")
-			let decartClient = try createDecartClient(configuration: configuration)
-
-			let model = Models.realtime(.lucy_v2v_720p_rt)
-
-			print("🔵 Starting camera capture...")
-			localStream = try await captureLocalStream(
-				fps: model.fps,
-				width: model.width,
-				height: model.height
-			)
-
-			guard let stream = localStream else {
-				print("❌ Failed to get local stream")
-				lastError = "Failed to get local stream"
-				return
-			}
-
-			print("✅ Camera captured successfully")
-			print(
-				"🔵 Video tracks: \(stream.videoTracks.count), Audio tracks: \(stream.audioTracks.count)"
-			)
-
-			print("🔵 Creating realtime client...")
-			let realtimeClient = try decartClient.createRealtimeClient(
-				options: RealtimeConnectOptions(
-					model: model,
-					initialState: ModelState(
-						prompt: Prompt(text: promptText, enrich: true),
-						mirror: mirror
-					)
-				)
-			)
-			eventTask = Task { [weak self] in
-				for await event in realtimeClient.events {
-					await MainActor.run { [weak self] in
-						guard let self = self else { return }
-
-						switch event {
-						case .remoteStreamReceived(let mediaStream):
-							print("🟢 REMOTE STREAM RECEIVED!")
-							print("🟢 Remote video tracks: \(mediaStream.videoTracks.count)")
-
-							guard let videoTrack = mediaStream.videoTracks.first else {
-								print("⚠️ No video track in remote stream")
-								return
-							}
-							print("🟢 Attaching remote video to view...")
-							self.remoteVideoTrack = videoTrack
-							print("✅ Remote video attached!")
-
-						case .stateChanged(let state):
-							print("🟢 Connection state changed: \(state)")
-							self.handleConnectionState(state)
-
-						case .error(let error):
-							print("❌ Error received: \(error.localizedDescription)")
-							self.lastError = error.localizedDescription
-						}
-					}
-				}
-			}
-			print("🔵 Connecting to WebRTC...")
-			try await realtimeClient.connect(localStream: stream)
-			client = realtimeClient
-
-		} catch {
-			print("❌ Connection failed with error: \(error.localizedDescription)")
-			print("❌ Error details: \(error)")
-			lastError = error.localizedDescription
-			await disconnect()
-			connectionState = "Disconnected"
-		}
-	}
-
-	func disconnect() async {
-		eventTask?.cancel()
-		eventTask = nil
-
-		if let capturer = videoCapturer {
-			await withCheckedContinuation { (k: CheckedContinuation<Void, Never>) in
-				capturer.stopCapture { k.resume() }
-			}
-		}
-
-		await client?.disconnect()
-		client = nil
-		connectionState = "Disconnected"
-
-		videoCapturer = nil
-		remoteVideoTrack = nil
-		localStream = nil
-		peerConnectionFactory = nil
-
-		RTCCleanupSSL()
-	}
-
-	func setPrompt() async {
-		guard let client = client else { return }
-
-		do {
-			try await client.setPrompt(promptText, enrich: true)
-		} catch {
-			lastError = error.localizedDescription
-		}
-	}
-
-	func setMirror(_ enabled: Bool) async {
-		guard let client = client else { return }
-		await client.setMirror(enabled)
-	}
-
-	private func handleConnectionState(_ state: ConnectionState) {
-		print("🔄 Handling connection state: \(state)")
-		switch state {
-		case .connecting:
-			connectionState = "Connecting"
-			print("📡 Status updated to: Connecting")
-		case .connected:
-			connectionState = "Connected"
-			print("✅ Status updated to: Connected")
-		case .disconnected:
-			connectionState = "Disconnected"
-			print("⚠️ Status updated to: Disconnected")
-		}
-	}
-
-	private func captureLocalStream(fps: Int, width: Int, height: Int) async throws
-		-> RTCMediaStream
-	{
-		print("📹 Initializing WebRTC SSL...")
-		RTCInitializeSSL()
-		//        RTCSetMinDebugLogLevel(.verbose)
-		print("📹 Creating peer connection factory...")
-		let factory = RTCPeerConnectionFactory()
-		peerConnectionFactory = factory
-
-		let videoSource = factory.videoSource()
-
-		func cameraError(_ message: String) -> DecartError {
-			print("❌ Camera error: \(message)")
-			return DecartError.webRTCError(
-				NSError(domain: "Camera", code: -1, userInfo: [NSLocalizedDescriptionKey: message]))
-		}
-
-		#if targetEnvironment(simulator)
-			print("❌ Running in simulator!")
-			throw cameraError("Simulator not supported - use real device")
-		#else
-			print("📹 Creating camera capturer...")
-			let capturer = RTCCameraVideoCapturer(delegate: videoSource)
-			videoCapturer = capturer
-
-			let devices = RTCCameraVideoCapturer.captureDevices()
-			print("📹 Available cameras: \(devices.count)")
-			for (i, device) in devices.enumerated() {
-				print(
-					"📹   Camera \(i): \(device.localizedName) - Position: \(device.position.rawValue)"
-				)
-			}
-
-			guard let frontCamera = devices.first(where: { $0.position == .front }) else {
-				throw cameraError("No front camera found")
-			}
-			print("📹 Using front camera: \(frontCamera.localizedName)")
-
-			let formats = RTCCameraVideoCapturer.supportedFormats(for: frontCamera)
-			print("📹 Available formats: \(formats.count)")
-
-			guard
-				let format = formats.first(where: { format in
-					let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-					return dimensions.width >= width && dimensions.height >= height
-				}) ?? formats.first
-			else {
-				throw cameraError("No suitable camera format")
-			}
-
-			let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-			print("📹 Selected format: \(dimensions.width)x\(dimensions.height)")
-
-			guard
-				let fpsRange = format.videoSupportedFrameRateRanges.first(where: { range in
-					range.maxFrameRate >= Double(fps)
-				}) ?? format.videoSupportedFrameRateRanges.first
-			else {
-				throw cameraError("No suitable FPS range")
-			}
-
-			let targetFps = Int(fpsRange.maxFrameRate)
-			print("📹 Target FPS: \(targetFps) (requested: \(fps))")
-
-			print("📹 Starting camera capture...")
-			try await withCheckedThrowingContinuation {
-				(continuation: CheckedContinuation<Void, Error>) in
-				capturer.startCapture(with: frontCamera, format: format, fps: targetFps) { error in
-					if let error = error {
-						print("❌ Camera capture failed: \(error.localizedDescription)")
-						continuation.resume(throwing: error)
-					} else {
-						print("✅ Camera capture started successfully")
-						continuation.resume()
-					}
-				}
-			}
-		#endif
-
-		let videoTrack = factory.videoTrack(with: videoSource, trackId: "video0")
-		videoTrack.isEnabled = true
-
-		let stream = factory.mediaStream(withStreamId: "stream0")
-		stream.addVideoTrack(videoTrack)
-
-		return stream
 	}
 }

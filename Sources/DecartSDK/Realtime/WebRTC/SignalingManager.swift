@@ -30,11 +30,7 @@ actor SignalingManager: WebSocketMessageHandler {
 
 				guard let answer = try? await peerConnection.answer(for: constraints) else {
 					print("[WebRTCConnection] Failed to create answer")
-					throw DecartError.webRTCError(
-						NSError(
-							domain: "WebRTC", code: -1,
-							userInfo: [NSLocalizedDescriptionKey: "Failed to create answer"]
-						))
+					throw DecartError.webRTCError("failed to create answer, check logs")
 				}
 
 				try await peerConnection.setLocalDescription(answer)
