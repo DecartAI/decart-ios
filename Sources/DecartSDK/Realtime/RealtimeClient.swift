@@ -2,177 +2,170 @@ import Foundation
 @preconcurrency import WebRTC
 
 public enum DecartSdkEvent: Sendable {
-    case stateChanged(ConnectionState)
-    case remoteStreamReceived(RTCMediaStream)
-    case error(Error)
+	case stateChanged(ConnectionState)
+	case remoteStreamReceived(RTCMediaStream)
+	case error(Error)
 }
 
 public struct PeerConnectionConfig {
-    public let maxBitrate: Int
-    public let minBitrate: Int
-    public let maxFramerate: Int
-    
-    public init(maxBitrate: Int = 3800_000, minBitrate: Int = 800_000, maxFramerate: Int = 30) {
-        self.maxBitrate = maxBitrate
-        self.minBitrate = minBitrate
-        self.maxFramerate = maxFramerate
-    }
+	public let maxBitrate: Int
+	public let minBitrate: Int
+	public let maxFramerate: Int
+
+	public init(maxBitrate: Int = 3_800_000, minBitrate: Int = 800_000, maxFramerate: Int = 30) {
+		self.maxBitrate = maxBitrate
+		self.minBitrate = minBitrate
+		self.maxFramerate = maxFramerate
+	}
 }
 
 public struct RealtimeConnectOptions {
-    public let model: ModelDefinition
-    public let initialState: ModelState?
-    public let peerConnectionConfig: PeerConnectionConfig
-    public init(
-        model: ModelDefinition,
-        initialState: ModelState? = nil,
-        peerConnectionConfig: PeerConnectionConfig = PeerConnectionConfig()
-    ) {
-        self.model = model
-        self.initialState = initialState
-        self.peerConnectionConfig = peerConnectionConfig
-    }
+	public let model: ModelDefinition
+	public let initialState: ModelState?
+	public let peerConnectionConfig: PeerConnectionConfig
+	public init(
+		model: ModelDefinition,
+		initialState: ModelState? = nil,
+		peerConnectionConfig: PeerConnectionConfig = PeerConnectionConfig()
+	) {
+		self.model = model
+		self.initialState = initialState
+		self.peerConnectionConfig = peerConnectionConfig
+	}
 }
 
 public class RealtimeClient {
-    private var webrtcConnection: WebRTCConnection?
-    private let signalingServerURL: URL
-    private let apiKey: String
-    private let options: RealtimeConnectOptions
-    
-    private var eventContinuation: AsyncStream<DecartSdkEvent>.Continuation?
-    public let events: AsyncStream<DecartSdkEvent>
-    
-    public init(baseURL: URL, apiKey: String, options: RealtimeConnectOptions) throws {
-        self.options = options
-        guard !apiKey.isEmpty else {
-            print("[RealtimeClient] Error: API key is empty")
-            throw DecartError.invalidAPIKey
-        }
+	private var webrtcConnection: WebRTCClient?
+	private let signalingServerURL: URL
+	private let apiKey: String
+	private let options: RealtimeConnectOptions
 
-        self.apiKey = apiKey
-        var baseURLString = baseURL.absoluteString
-        if baseURLString.hasPrefix("https://") {
-            baseURLString = baseURLString.replacingOccurrences(of: "https://", with: "wss://")
-        } else if baseURLString.hasPrefix("http://") {
-            baseURLString = baseURLString.replacingOccurrences(of: "http://", with: "ws://")
-        }
+	private var eventContinuation: AsyncStream<DecartSdkEvent>.Continuation?
+	public let events: AsyncStream<DecartSdkEvent>
 
-        let urlString =
-        "\(baseURLString)\(options.model.urlPath)?api_key=\(apiKey)&model=\(options.model.name)"
+	public init(baseURL: URL, apiKey: String, options: RealtimeConnectOptions) throws {
+		self.options = options
+		guard !apiKey.isEmpty else {
+			print("[RealtimeClient] Error: API key is empty")
+			throw DecartError.invalidAPIKey
+		}
 
-        guard let signalingServerURL = URL(string: urlString) else {
-            print("[RealtimeClient] Error: Invalid base URL - \(urlString)")
-            throw DecartError.invalidBaseURL(urlString)
-        }
+		self.apiKey = apiKey
+		var baseURLString = baseURL.absoluteString
+		if baseURLString.hasPrefix("https://") {
+			baseURLString = baseURLString.replacingOccurrences(of: "https://", with: "wss://")
+		} else if baseURLString.hasPrefix("http://") {
+			baseURLString = baseURLString.replacingOccurrences(of: "http://", with: "ws://")
+		}
 
-        self.signalingServerURL = signalingServerURL
+		let urlString =
+			"\(baseURLString)\(options.model.urlPath)?api_key=\(apiKey)&model=\(options.model.name)"
 
-        let (stream, continuation) = AsyncStream.makeStream(
-            of: DecartSdkEvent.self,
-            bufferingPolicy: .bufferingNewest(4)
-        )
-        self.events = stream
-        self.eventContinuation = continuation
-    }
-    
-    func sendConnectionState(_ state: ConnectionState) {
-        eventContinuation?.yield(.stateChanged(state))
-    }
-    
-    func sendError(_ error: DecartError) {
-        eventContinuation?.yield(.error(error))
-    }
-    
-    func sendRemoteStream(_ stream: RTCMediaStream) {
-        eventContinuation?.yield(.remoteStreamReceived(stream))
-    }
-    
-    public func connect(
-        localStream: RTCMediaStream
-    ) async throws {
-        // Create WebRTCConnection with callbacks
-        let webrtcConnection = WebRTCConnection(
-            onRemoteStream: { [weak self] stream in
-                self?.sendRemoteStream(stream)
-            },
-            onStateChange: { [weak self] state in
-                self?.sendConnectionState(state)
-            },
-            onError: { [weak self] error in
-                if let decartError = error as? DecartError {
-                    self?.sendError(decartError)
-                } else {
-                    self?.sendError(.webRTCError(error))
-                }
-            },
-            preferredVideoCodec: .vp8,
-            peerConnectionConfig: options.peerConnectionConfig
-        )
-        
-        self.webrtcConnection = webrtcConnection
-        
-        // Implement retry logic
-        var retries = 0
-        let maxRetries = 3
-        var delay: TimeInterval = 1.0
-        let permanentErrors = ["permission denied", "not allowed", "invalid session"]
+		guard let signalingServerURL = URL(string: urlString) else {
+			print("[RealtimeClient] Error: Invalid base URL - \(urlString)")
+			throw DecartError.invalidBaseURL(urlString)
+		}
 
-        while retries < maxRetries {
-            do {
-                try await webrtcConnection.connect(url: signalingServerURL, localStream: localStream)
-                return
-            } catch {
-                retries += 1
+		self.signalingServerURL = signalingServerURL
 
-                let errorMessage = error.localizedDescription.lowercased()
-                let isPermanentError = permanentErrors.contains { errorMessage.contains($0) }
+		let (stream, continuation) = AsyncStream.makeStream(
+			of: DecartSdkEvent.self,
+			bufferingPolicy: .bufferingNewest(4)
+		)
+		self.events = stream
+		self.eventContinuation = continuation
+	}
 
-                print("[RealtimeClient] Connection attempt \(retries) failed: \(error.localizedDescription)")
+	func sendConnectionState(_ state: ConnectionState) {
+		eventContinuation?.yield(.stateChanged(state))
+	}
 
-                if isPermanentError {
-                    print("[RealtimeClient] Permanent error detected, aborting retries")
-                    throw error
-                }
+	func sendError(_ error: DecartError) {
+		eventContinuation?.yield(.error(error))
+	}
 
-                if retries >= maxRetries {
-                    print("[RealtimeClient] Max retries reached")
-                    throw error
-                }
+	func sendRemoteStream(_ stream: RTCMediaStream) {
+		eventContinuation?.yield(.remoteStreamReceived(stream))
+	}
 
-                await webrtcConnection.cleanup()
-                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-                delay = min(delay * 2, 10.0)
-            }
-        }
+	public func connect(
+		localStream: RTCMediaStream
+	) async throws {
+		// Create WebRTCConnection with callbacks
+		let webrtcConnection = WebRTCClient(
+			onRemoteStream: { [weak self] stream in
+				self?.sendRemoteStream(stream)
+			},
+			onStateChange: { [weak self] state in
+				self?.sendConnectionState(state)
+			},
+			onError: { [weak self] error in
+				if let decartError = error as? DecartError {
+					self?.sendError(decartError)
+				} else {
+					self?.sendError(.webRTCError(error))
+				}
+			},
+			preferredVideoCodec: .vp8,
+			peerConnectionConfig: options.peerConnectionConfig
+		)
 
-        print("[RealtimeClient] Connection failed: Max retries exceeded")
-        throw DecartError.webRTCError(
-            NSError(domain: "WebRTC", code: -1,
-                    userInfo: [NSLocalizedDescriptionKey: "Max retries exceeded"]))
-    }
-    
-    public func disconnect() async {
-        guard let webrtcConnection = webrtcConnection else { return }
-        await webrtcConnection.cleanup()
-        self.webrtcConnection = nil
-    }
-    
-    public func setPrompt(_ prompt: String, enrich: Bool = true) async throws {
-        guard let webrtcConnection = webrtcConnection else {
-            throw DecartError.invalidOptions("Client not initialized")
-        }
-        guard !prompt.isEmpty else {
-            throw DecartError.invalidInput("Prompt must not be empty")
-        }
+		self.webrtcConnection = webrtcConnection
 
-        await webrtcConnection.send(.prompt(PromptMessage(prompt: prompt)))
-    }
-    
-    public func setMirror(_ enabled: Bool) async {
-        guard let webrtcConnection = webrtcConnection else { return }
+		// Implement retry logic
+		var retries = 0
+		let maxRetries = 3
+		var delay: TimeInterval = 1.0
+		let permanentErrors = ["permission denied", "not allowed", "invalid session"]
 
-        let rotateY = enabled ? 2 : 0
-        await webrtcConnection.send(.switchCamera(SwitchCameraMessage(rotateY: rotateY)))
-    }
+		while retries < maxRetries {
+			do {
+				try await webrtcConnection.connect(url: signalingServerURL, localStream: localStream)
+				return
+			} catch {
+				retries += 1
+
+				let errorMessage = error.localizedDescription.lowercased()
+				let isPermanentError = permanentErrors.contains { errorMessage.contains($0) }
+
+				if isPermanentError {
+					DecartLogger.log("[RealtimeClient] Permanent error detected, aborting retries", level: .error)
+					throw error
+				}
+
+				if retries >= maxRetries {
+					DecartLogger.log("[RealtimeClient] Max retries reached", level: .error)
+					throw error
+				}
+				try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+				delay = min(delay * 2, 10.0)
+			}
+		}
+
+		print("[RealtimeClient] Connection failed: Max retries exceeded")
+		throw DecartError.webRTCError(
+			NSError(domain: "WebRTC", code: -1,
+			        userInfo: [NSLocalizedDescriptionKey: "Max retries exceeded"]))
+	}
+
+	public func disconnect() async {
+		await webrtcConnection?.disconnect()
+		webrtcConnection = nil
+	}
+
+	public func setPrompt(_ prompt: String, enrich: Bool = true) async throws {
+		guard let webrtcConnection = webrtcConnection else {
+			throw DecartError.invalidOptions("Client not initialized")
+		}
+
+		await webrtcConnection
+			.sendWebsocketMessage(.prompt(PromptMessage(prompt: prompt)))
+	}
+
+	public func setMirror(_ enabled: Bool) async {
+		guard let webrtcConnection = webrtcConnection else { return }
+
+		let rotateY = enabled ? 2 : 0
+		await webrtcConnection.sendWebsocketMessage(.switchCamera(SwitchCameraMessage(rotateY: rotateY)))
+	}
 }

@@ -7,45 +7,45 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		C8D521202E968B5B00D0BE85 /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C8D5211F2E968B5B00D0BE85 /* DecartSDK */; };
+		16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 16E67C3B2EB8CC9F00AF5515 /* DecartSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		C89943D52E95C201005CCCA6 /* RealtimeExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RealtimeExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		16D70B962EB8CA0C00455077 /* Example.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Example.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		C89943D72E95C201005CCCA6 /* RealtimeExample */ = {
+		16D70B982EB8CA0C00455077 /* Example */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = RealtimeExample;
+			path = Example;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		C89943D22E95C201005CCCA6 /* Frameworks */ = {
+		16D70B932EB8CA0C00455077 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C8D521202E968B5B00D0BE85 /* DecartSDK in Frameworks */,
+				16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		C89943CC2E95C201005CCCA6 = {
+		16D70B8D2EB8CA0C00455077 = {
 			isa = PBXGroup;
 			children = (
-				C89943D72E95C201005CCCA6 /* RealtimeExample */,
-				C89943D62E95C201005CCCA6 /* Products */,
+				16D70B982EB8CA0C00455077 /* Example */,
+				16D70B972EB8CA0C00455077 /* Products */,
 			);
 			sourceTree = "<group>";
 		};
-		C89943D62E95C201005CCCA6 /* Products */ = {
+		16D70B972EB8CA0C00455077 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				C89943D52E95C201005CCCA6 /* RealtimeExample.app */,
+				16D70B962EB8CA0C00455077 /* Example.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -53,68 +53,69 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		C89943D42E95C201005CCCA6 /* RealtimeExample */ = {
+		16D70B952EB8CA0C00455077 /* Example */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = C89943E02E95C203005CCCA6 /* Build configuration list for PBXNativeTarget "RealtimeExample" */;
+			buildConfigurationList = 16D70BA12EB8CA0D00455077 /* Build configuration list for PBXNativeTarget "Example" */;
 			buildPhases = (
-				C89943D12E95C201005CCCA6 /* Sources */,
-				C89943D22E95C201005CCCA6 /* Frameworks */,
-				C89943D32E95C201005CCCA6 /* Resources */,
+				16D70B922EB8CA0C00455077 /* Sources */,
+				16D70B932EB8CA0C00455077 /* Frameworks */,
+				16D70B942EB8CA0C00455077 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				16E67C3E2EB8D01600AF5515 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				C89943D72E95C201005CCCA6 /* RealtimeExample */,
+				16D70B982EB8CA0C00455077 /* Example */,
 			);
-			name = RealtimeExample;
+			name = Example;
 			packageProductDependencies = (
-				C8D5211F2E968B5B00D0BE85 /* DecartSDK */,
+				16E67C3B2EB8CC9F00AF5515 /* DecartSDK */,
 			);
-			productName = RealtimeExample;
-			productReference = C89943D52E95C201005CCCA6 /* RealtimeExample.app */;
+			productName = Example;
+			productReference = 16D70B962EB8CA0C00455077 /* Example.app */;
 			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		C89943CD2E95C201005CCCA6 /* Project object */ = {
+		16D70B8E2EB8CA0C00455077 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 2600;
 				LastUpgradeCheck = 2600;
 				TargetAttributes = {
-					C89943D42E95C201005CCCA6 = {
+					16D70B952EB8CA0C00455077 = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
 			};
-			buildConfigurationList = C89943D02E95C201005CCCA6 /* Build configuration list for PBXProject "RealtimeExample" */;
+			buildConfigurationList = 16D70B912EB8CA0C00455077 /* Build configuration list for PBXProject "Example" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
 			);
-			mainGroup = C89943CC2E95C201005CCCA6;
+			mainGroup = 16D70B8D2EB8CA0C00455077;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../.." */,
+				16E67C3A2EB8CC9F00AF5515 /* XCLocalSwiftPackageReference "../decart-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
-			productRefGroup = C89943D62E95C201005CCCA6 /* Products */;
+			productRefGroup = 16D70B972EB8CA0C00455077 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				C89943D42E95C201005CCCA6 /* RealtimeExample */,
+				16D70B952EB8CA0C00455077 /* Example */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		C89943D32E95C201005CCCA6 /* Resources */ = {
+		16D70B942EB8CA0C00455077 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -124,7 +125,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		C89943D12E95C201005CCCA6 /* Sources */ = {
+		16D70B922EB8CA0C00455077 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -133,8 +134,15 @@
 		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		16E67C3E2EB8D01600AF5515 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			productRef = 16E67C3D2EB8D01600AF5515 /* DecartSDK */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
-		C89943DE2E95C203005CCCA6 /* Debug */ = {
+		16D70B9F2EB8CA0D00455077 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -198,7 +206,7 @@
 			};
 			name = Debug;
 		};
-		C89943DF2E95C203005CCCA6 /* Release */ = {
+		16D70BA02EB8CA0D00455077 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -255,7 +263,7 @@
 			};
 			name = Release;
 		};
-		C89943E12E95C203005CCCA6 /* Debug */ = {
+		16D70BA22EB8CA0D00455077 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -265,8 +273,7 @@
 				DEVELOPMENT_TEAM = BQ3Q4NZWWC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access for video transformation";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access for audio";
+				INFOPLIST_KEY_NSCameraUsageDescription = "for the realtime demonstration we want to stream your camera's feed";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -278,7 +285,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.decart.RealtimeExample;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.decart.Example;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -290,7 +297,7 @@
 			};
 			name = Debug;
 		};
-		C89943E22E95C203005CCCA6 /* Release */ = {
+		16D70BA32EB8CA0D00455077 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
@@ -300,8 +307,7 @@
 				DEVELOPMENT_TEAM = BQ3Q4NZWWC;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "This app needs camera access for video transformation";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This app needs microphone access for audio";
+				INFOPLIST_KEY_NSCameraUsageDescription = "for the realtime demonstration we want to stream your camera's feed";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -313,7 +319,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.decart.RealtimeExample;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.decart.Example;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -328,20 +334,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		C89943D02E95C201005CCCA6 /* Build configuration list for PBXProject "RealtimeExample" */ = {
+		16D70B912EB8CA0C00455077 /* Build configuration list for PBXProject "Example" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				C89943DE2E95C203005CCCA6 /* Debug */,
-				C89943DF2E95C203005CCCA6 /* Release */,
+				16D70B9F2EB8CA0D00455077 /* Debug */,
+				16D70BA02EB8CA0D00455077 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		C89943E02E95C203005CCCA6 /* Build configuration list for PBXNativeTarget "RealtimeExample" */ = {
+		16D70BA12EB8CA0D00455077 /* Build configuration list for PBXNativeTarget "Example" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				C89943E12E95C203005CCCA6 /* Debug */,
-				C89943E22E95C203005CCCA6 /* Release */,
+				16D70BA22EB8CA0D00455077 /* Debug */,
+				16D70BA32EB8CA0D00455077 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
@@ -349,19 +355,23 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../.." */ = {
+		16E67C3A2EB8CC9F00AF5515 /* XCLocalSwiftPackageReference "../decart-ios" */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = ../..;
+			relativePath = "../decart-ios";
 		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		C8D5211F2E968B5B00D0BE85 /* DecartSDK */ = {
+		16E67C3B2EB8CC9F00AF5515 /* DecartSDK */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = C8D5211E2E968B5B00D0BE85 /* XCLocalSwiftPackageReference "../.." */;
+			productName = DecartSDK;
+		};
+		16E67C3D2EB8D01600AF5515 /* DecartSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 16E67C3A2EB8CC9F00AF5515 /* XCLocalSwiftPackageReference "../decart-ios" */;
 			productName = DecartSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
-	rootObject = C89943CD2E95C201005CCCA6 /* Project object */;
+	rootObject = 16D70B8E2EB8CA0C00455077 /* Project object */;
 }
