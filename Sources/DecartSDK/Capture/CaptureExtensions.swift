@@ -40,9 +40,9 @@ public extension AVCaptureDevice {
 		throw CameraError.noSuitableFPSRange
 	}
 
-	static func frontCamera() throws -> AVCaptureDevice {
+	static func pickCamera(position: AVCaptureDevice.Position) throws -> AVCaptureDevice {
 		let devices = RTCCameraVideoCapturer.captureDevices()
-		guard let front = devices.first(where: { $0.position == .front }) else {
+		guard let front = devices.first(where: { $0.position == position }) else {
 			throw CameraError.noFrontCameraDetected
 		}
 		return front

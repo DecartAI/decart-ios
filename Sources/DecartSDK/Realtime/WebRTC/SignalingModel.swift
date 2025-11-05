@@ -8,6 +8,15 @@
 import Foundation
 import WebRTC
 
+struct InitializeConnectionMessage: Codable {
+	let type: String
+	let apiKey: String
+	let model: String
+
+	let initialPrompt: String?
+	
+}
+
 struct OfferMessage: Codable {
 	let type: String
 	let sdp: String

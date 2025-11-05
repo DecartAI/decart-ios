@@ -8,6 +8,7 @@
 enum CameraError: Error {
 	case simulatorUnsupported
 	case noFrontCameraDetected
+	case noBackCameraDetected
 	case noSupportedFormatFound
 	case noSuitableFPSRange
 	case captureFailed(Error)
@@ -18,6 +19,7 @@ enum CameraError: Error {
 		case .noFrontCameraDetected: return "No front camera detected."
 		case .noSupportedFormatFound: return "No supported camera format found for the requested resolution."
 		case .noSuitableFPSRange: return "No suitable FPS range available for the requested FPS."
+		case .noBackCameraDetected: return "No back camera detected."
 		case .captureFailed(let err): return "Camera capture failed: \(err.localizedDescription)"
 		}
 	}

@@ -4,7 +4,7 @@
 //
 //  Created by Alon Bar-el on 03/11/2025.
 //
-import WebRTC
+@preconcurrency import WebRTC
 
 public struct RealtimeMediaStream: Sendable {
 	public enum StreamId {

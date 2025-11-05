@@ -10,17 +10,17 @@ import SwiftUI
 import WebRTC
 
 private enum Config {
-	static let apiKey = "realtime-test_cvXwtMYGLstCYcYALueGFfzMUmYXUaRTYUEoPvEVoFBqfeQvUZitXstIRdxNFzMM"
+	static let apiKey = "real_SneqRkuhyIRnMpXDLLrrNpCvkLZvlNiqpxtTJBxRnrerWQIOMtKkysNbOUKTuofs"
 	static let baseURL = "https://api3.decart.ai"
 	static let defaultPrompt = "Turn the figure into a fantasy figure"
 }
 
 struct ContentView: View {
-	private let decartClientManager: DecartClientManager?
+	private let decartClient: DecartClient?
 	init() {
 		do {
-			decartClientManager = try .init(
-				configuration: DecartConfiguration(
+			decartClient = try DecartClient(
+				decartConfiguration: DecartConfiguration(
 					baseURL: Config.baseURL,
 					apiKey: Config.apiKey
 				)
@@ -32,10 +32,10 @@ struct ContentView: View {
 	}
 
 	var body: some View {
-		if let manager = decartClientManager {
+		if let manager = decartClient {
 			NavigationView {
 				List {
-					NavigationLink(destination: RealtimeView(decartClientManager: manager)) {
+					NavigationLink(destination: RealtimeView(decartClient: manager)) {
 						Text("Realtime")
 					}
 				}
@@ -50,16 +50,16 @@ struct ContentView: View {
 }
 
 struct RealtimeView: View {
-	let decartClientManager: DecartClientManager
+	private let decartClient: DecartClient?
 	@State private var prompt: String = Config.defaultPrompt
 
 	@State private var viewModel: RealtimeManager
 
-	init(decartClientManager: DecartClientManager) {
-		self.decartClientManager = decartClientManager
+	init(decartClient: DecartClient) {
+		self.decartClient = decartClient
 		_viewModel = State(
-			initialValue: RealtimeManager(
-				decartClientManager: decartClientManager,
+			initialValue: DecartRealtimeManager(
+				decartClient: decartClient,
 				currentPrompt: Prompt(text: Config.defaultPrompt, enrich: false)
 			)
 		)
@@ -74,8 +74,6 @@ struct RealtimeView: View {
 				.background(Color.black)
 				.edgesIgnoringSafeArea(.all)
 			}
-			// Remote video background
-
 			// UI overlay
 			VStack(spacing: 16) {
 				// Top bar
@@ -102,7 +100,8 @@ struct RealtimeView: View {
 					HStack {
 						Spacer()
 						RTCMLVideoViewWrapper(
-							track: viewModel.localMediaStream!.videoTrack
+							track: viewModel.localMediaStream!.videoTrack,
+							mirror: viewModel.shouldMirror
 						)
 						.frame(width: 120, height: 160)
 						.cornerRadius(12)
@@ -146,10 +145,16 @@ struct RealtimeView: View {
 					}
 
 					HStack(spacing: 12) {
-						Toggle("Mirror", isOn: $viewModel.isMirroringEnabled)
+						Toggle("Mirror", isOn: $viewModel.shouldMirror)
 							.toggleStyle(SwitchToggleStyle(tint: .blue))
 						// .disabled(!viewModel.isConnected)
-
+						Button(action: {
+							Task {
+								await viewModel.switchCamera()
+							}
+						}) {
+							Image(systemName: "arrow.trianglehead.2.counterclockwise.rotate.90")
+						}
 						Spacer()
 
 						Button(action: {

@@ -8,7 +8,6 @@ class WebRTCClient: NSObject {
 
 	private(set) var state: DecartRealtimeConnectionState = .disconnected
 	private var signalingManager: SignalingManager?
-	private let onRemoteStream: ((RTCMediaStream) -> Void)?
 	private let onStateChange: ((DecartRealtimeConnectionState) -> Void)?
 	private let onError: ((Error) -> Void)?
 	private let realtimeConfig: RealtimeConfig
@@ -18,12 +17,11 @@ class WebRTCClient: NSObject {
 	]
 
 	init(
-		onRemoteStream: ((RTCMediaStream) -> Void)? = nil,
 		onStateChange: ((DecartRealtimeConnectionState) -> Void)? = nil,
 		onError: ((Error) -> Void)? = nil,
 		realtimeConfig: RealtimeConfig
 	) {
-		// #if IS_ALPHA
+		// #if IS_DEVELOPMENT
 //		RTCSetMinDebugLogLevel(.verbose)
 		// #else
 //		RTCSetMinDebugLogLevel(.verbose)
@@ -51,7 +49,6 @@ class WebRTCClient: NSObject {
 			constraints: constraints,
 			delegate: nil
 		)!
-		self.onRemoteStream = onRemoteStream
 		self.onStateChange = onStateChange
 		self.onError = onError
 		self.realtimeConfig = realtimeConfig
@@ -184,9 +181,7 @@ extension WebRTCClient: RTCPeerConnectionDelegate {
 		_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState
 	) {}
 
-	func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {
-		onRemoteStream?(stream)
-	}
+	func peerConnection(_ peerConnection: RTCPeerConnection, didAdd stream: RTCMediaStream) {}
 
 	func peerConnection(_ peerConnection: RTCPeerConnection, didRemove stream: RTCMediaStream) {}
 

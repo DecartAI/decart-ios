@@ -1,9 +1,8 @@
 import Foundation
-@preconcurrency import WebRTC
+import WebRTC
 
 public enum DecartSdkEvent: Sendable {
 	case stateChanged(DecartRealtimeConnectionState)
-	case remoteStreamReceived(RTCMediaStream)
 	case error(Error)
 }
 
@@ -30,9 +29,6 @@ public struct RealtimeClient {
 		self.eventContinuation = continuation
 
 		let webRTCClient = WebRTCClient(
-			onRemoteStream: { stream in
-				continuation.yield(.remoteStreamReceived(stream))
-			},
 			onStateChange: { state in
 				continuation.yield(.stateChanged(state))
 			},
@@ -96,19 +92,14 @@ public struct RealtimeClient {
 	}
 
 	public func disconnect() async {
+		eventContinuation.yield(.stateChanged(.disconnected))
 		eventContinuation.finish()
 		await webRTCClient.disconnect()
 	}
 
-	// TODO: we totally ignore enrich, fix it to properly pass it on ws
 	public func setPrompt(_ prompt: Prompt) async throws {
 		await webRTCClient
 			.sendWebsocketMessage(.prompt(PromptMessage(prompt: prompt.text)))
-	}
-
-	public func setMirror(_ enabled: Bool) async {
-		let rotateY = enabled ? 2 : 0
-		await webRTCClient.sendWebsocketMessage(.switchCamera(SwitchCameraMessage(rotateY: rotateY)))
 	}
 }
 
@@ -121,7 +112,7 @@ public extension RealtimeClient {
 		return webRTCClient.factory.audioSource(with: with)
 	}
 
-	// Adding a video track or audio track implicitly creates a bidi Transceivers (per media type) and RTCMediastream is not needed.
+	/// Adding a video track or audio track implicitly creates a bidi Transceivers (per media type), RTCMediastream is not needed.
 	func createLocalVideoTrack(with: RTCVideoSource, trackId: String, enabled: Bool = true) -> RTCVideoTrack {
 		if !enabled {
 			return webRTCClient.factory.videoTrack(with: with, trackId: trackId)

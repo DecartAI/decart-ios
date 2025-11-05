@@ -8,15 +8,16 @@
 import Foundation
 import Observation
 
-protocol WebSocketMessageHandler: AnyObject {
-	func handle(_ message: IncomingWebSocketMessage) async
+protocol WebSocketMessageHandler<Message>: AnyObject where Message: Decodable {
+	associatedtype Message
+	func handle(_ message: Message) async
 }
 
 class WebSocketService {
 	var isConnected: Bool = false
 	var socketError: DecartError?
 
-	weak var messageHandler: WebSocketMessageHandler?
+	weak var messageHandler: WebSocketMessageHandler<IncomingWebSocketMessage>?
 
 	private var stream: SocketStream?
 	private var listeningTask: Task<Void, Never>?

@@ -28,7 +28,7 @@ enum DecartLogger {
 	}()
 
 	static func log(_ string: String, level: Level, logBreadcrumbEnabled: Bool = true) {
-		let logString = "[\(dateFormatter.string(from: Date.now)) \(level.rawValue)] - \(string)"
+		let logString = "[DecartSDK -\(dateFormatter.string(from: Date.now)) \(level.rawValue)] - \(string)"
 
 		if DecartLogger.printImportantOnly {
 			if level == .important {
