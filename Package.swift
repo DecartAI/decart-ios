@@ -1,11 +1,11 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
 	name: "DecartSDK",
 	platforms: [
 		.iOS(.v17),
-		.macOS(.v12)
+		.macOS(.v12),
 	],
 	products: [
 		.library(

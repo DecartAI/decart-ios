@@ -1,7 +1,7 @@
 import Foundation
-import WebRTC
+@preconcurrency import WebRTC
 
-class WebRTCClient: NSObject {
+final class WebRTCClient: NSObject {
 	let factory: RTCPeerConnectionFactory
 
 	@objc let peerConnection: RTCPeerConnection
@@ -175,7 +175,7 @@ class WebRTCClient: NSObject {
 	deinit { DecartLogger.log("WebRTCConnection deinit", level: .info) }
 }
 
-extension WebRTCClient: RTCPeerConnectionDelegate {
+extension WebRTCClient: RTCPeerConnectionDelegate, @unchecked Sendable {
 	func peerConnection(
 		_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState
 	) {}
@@ -195,10 +195,9 @@ extension WebRTCClient: RTCPeerConnectionDelegate {
 	) {}
 
 	func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
-		Task { [weak self] in
-			guard let self else { return }
-			await self.signalingManager?.send(OutgoingWebSocketMessage.iceCandidate(
-				IceCandidateMessage(candidate: candidate)
+		Task {
+			await signalingManager?.send(OutgoingWebSocketMessage.iceCandidate(
+				.init(candidate: candidate)
 			))
 		}
 	}

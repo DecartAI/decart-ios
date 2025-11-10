@@ -4,7 +4,9 @@
 //
 //  Created by Alon Bar-el on 04/11/2025.
 //
-import WebRTC
+@preconcurrency import WebRTC
+
+extension RTCSessionDescription: @unchecked @retroactive Sendable {}
 
 extension RTCPeerConnection {
 	func offer(for constraints: RTCMediaConstraints) async throws -> RTCSessionDescription? {
