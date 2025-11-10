@@ -1,19 +1,36 @@
 import Foundation
-import WebRTC
+@preconcurrency import WebRTC
 
 /// Manages WebSocket signaling connection with AsyncStream-based message delivery
-actor SignalingManager: WebSocketMessageHandler {
-	private let webSocket = WebSocketService()
-	private var isConnected: Bool = false
+actor SignalingManager {
+	private let webSocket: WebSocketService
 	private let peerConnection: RTCPeerConnection
+	private var wsListenerTask: Task<Void, Never>?
 
 	init(pc: RTCPeerConnection) {
 		peerConnection = pc
-		webSocket.messageHandler = self
+		webSocket = WebSocketService()
 	}
 
-	func connect(url: URL, timeout: TimeInterval = 30) {
-		webSocket.connect(url: url)
+	func connect(url: URL, timeout: TimeInterval = 30) async {
+		await webSocket.connect(url: url)
+		let task = Task {
+			let eventStream = self.webSocket.websocketEventStream
+			do {
+				for try await event in eventStream {
+					if Task.isCancelled { return }
+					await self.handle(event)
+				}
+			} catch {
+				print("error in signaling loop: \(error)")
+			}
+		}
+		if wsListenerTask != nil {
+			wsListenerTask?.cancel()
+			wsListenerTask = nil
+		}
+
+		wsListenerTask = task
 	}
 
 	func handle(_ message: IncomingWebSocketMessage) async {
@@ -30,11 +47,7 @@ actor SignalingManager: WebSocketMessageHandler {
 
 				guard let answer = try? await peerConnection.answer(for: constraints) else {
 					print("[WebRTCConnection] Failed to create answer")
-					throw DecartError.webRTCError(
-						NSError(
-							domain: "WebRTC", code: -1,
-							userInfo: [NSLocalizedDescriptionKey: "Failed to create answer"]
-						))
+					throw DecartError.webRTCError("failed to create answer, check logs")
 				}
 
 				try await peerConnection.setLocalDescription(answer)
@@ -67,7 +80,7 @@ actor SignalingManager: WebSocketMessageHandler {
 
 	func disconnect() async {
 		await webSocket.disconnect()
+		wsListenerTask?.cancel()
+		wsListenerTask = nil
 	}
-
-	deinit { DecartLogger.log("SignalingManager deinit", level: .info) }
 }
