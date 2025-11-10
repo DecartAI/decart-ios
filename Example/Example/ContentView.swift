@@ -34,9 +34,14 @@ struct ContentView: View {
 	var body: some View {
 		if let manager = decartClient {
 			NavigationView {
-				List {
-					NavigationLink(destination: RealtimeView(decartClient: manager)) {
-						Text("Realtime")
+				List(RealtimeModel.allCases, id: \.self) { model in
+					NavigationLink(
+						destination: RealtimeView(
+							decartClient: manager,
+							realtimeModel: model
+						)
+					) {
+						Text("Realtime - \(model.rawValue.capitalized)")
 					}
 				}
 				.navigationBarTitle("Example")
@@ -51,12 +56,14 @@ struct ContentView: View {
 
 struct RealtimeView: View {
 	private let decartClient: DecartClient?
+	private let realtimeModel: RealtimeModel
 	@State private var prompt: String = Config.defaultPrompt
 
 	@State private var viewModel: RealtimeManager
 
-	init(decartClient: DecartClient) {
+	init(decartClient: DecartClient, realtimeModel: RealtimeModel) {
 		self.decartClient = decartClient
+		self.realtimeModel = realtimeModel
 		_viewModel = State(
 			initialValue: DecartRealtimeManager(
 				decartClient: decartClient,
@@ -75,13 +82,10 @@ struct RealtimeView: View {
 				.edgesIgnoringSafeArea(.all)
 			}
 			// UI overlay
-			VStack(spacing: 16) {
+			VStack(spacing: 5) {
 				// Top bar
 				HStack {
-					VStack(alignment: .leading, spacing: 4) {
-						Text("Decart Realtime")
-							.font(.headline)
-							.foregroundColor(.white)
+					VStack(alignment: .center, spacing: 1) {
 						Text(viewModel.connectionState.rawValue)
 							.font(.caption)
 							.foregroundColor(
@@ -90,26 +94,17 @@ struct RealtimeView: View {
 					}
 					Spacer()
 				}
-				.padding()
+				.padding(.bottom, 10)
 				.background(Color.black.opacity(0.6))
 
 				Spacer()
 
 				// Local video preview
 				if viewModel.connectionState.isInSession, viewModel.localMediaStream != nil {
-					HStack {
-						Spacer()
-						RTCMLVideoViewWrapper(
-							track: viewModel.localMediaStream!.videoTrack,
-							mirror: viewModel.shouldMirror
-						)
-						.frame(width: 120, height: 160)
-						.cornerRadius(12)
-						.overlay(
-							RoundedRectangle(cornerRadius: 12).stroke(Color.white, lineWidth: 2)
-						)
-						.padding()
-					}
+					DraggableRTCVideoView(
+						track: viewModel.localMediaStream!.videoTrack,
+						mirror: viewModel.shouldMirror
+					)
 				}
 
 				// Controls
@@ -164,7 +159,8 @@ struct RealtimeView: View {
 								}
 							} else {
 								Task {
-									try? await viewModel.connect()
+									await viewModel
+										.connect(model: self.realtimeModel)
 								}
 							}
 						}) {
@@ -185,7 +181,7 @@ struct RealtimeView: View {
 				.padding()
 				.background(Color.black.opacity(0.8))
 				.cornerRadius(16)
-				.padding()
+				.padding(.all, 5)
 				.onDisappear { Task { await viewModel.cleanup() } }
 			}
 		}

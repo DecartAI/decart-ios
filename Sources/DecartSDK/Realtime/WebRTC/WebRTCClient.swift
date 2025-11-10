@@ -156,8 +156,7 @@ class WebRTCClient: NSObject {
 		}
 
 		let sortedCodecs = preferredCodecs + otherCodecs + utilityCodecs
-//		var error: NSError?
-		transceiver.setCodecPreferences(sortedCodecs)
+		try? transceiver.setCodecPreferences(sortedCodecs, error: ())
 		let sender = transceiver.sender
 		let parameters = sender.parameters
 		let encodingParam = parameters.encodings[0]

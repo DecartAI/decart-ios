@@ -68,11 +68,11 @@ final class DecartRealtimeManager: RealtimeManager {
 		}
 	}
 
-	func connect() async {
+	func connect(model: RealtimeModel) async {
 		do {
 			realtimeClient = try decartClient
 				.createRealtimeClient(options: RealtimeConfig(
-					model: Models.realtime(.mirage),
+					model: Models.realtime(model),
 					initialState: ModelState(
 						prompt: currentPrompt,
 						mirror: shouldMirror

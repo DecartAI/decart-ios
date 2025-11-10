@@ -7,6 +7,7 @@
 import SwiftUI
 import WebRTC
 
+#if os(iOS)
 /// A SwiftUI View that renders a WebRTC video track.
 public struct RTCMLVideoViewWrapper: UIViewRepresentable {
 	public weak var track: RTCVideoTrack?
@@ -67,3 +68,4 @@ public struct RTCMLVideoViewWrapper: UIViewRepresentable {
 		coordinator.lastTrack = nil
 	}
 }
+#endif
