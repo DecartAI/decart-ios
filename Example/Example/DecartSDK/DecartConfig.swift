@@ -6,6 +6,7 @@
 //
 
 import DecartSDK
+import Factory
 import WebRTC
 
 protocol RealtimeManager {
@@ -20,4 +21,16 @@ protocol RealtimeManager {
 	func connect(model: RealtimeModel) async
 	func switchCamera() async
 	func cleanup() async
+}
+
+extension Container {
+	var decartClient: Factory<DecartClient> {
+		self {
+			DecartClient(
+				decartConfiguration: DecartConfiguration(
+					apiKey: DecartConfig.apiKey
+				)
+			)
+		}.singleton
+	}
 }

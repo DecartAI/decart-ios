@@ -16,20 +16,14 @@ public struct DecartConfiguration {
 		return baseURLString
 	}
 
-	public init(baseURL: URL, apiKey: String) throws {
-		guard !apiKey.isEmpty else {
-			throw DecartError.invalidAPIKey
-		}
-		self.baseURL = baseURL
-		self.apiKey = apiKey
-	}
-
-	public init(baseURL: String = "https://api3.decart.ai", apiKey: String) throws {
+	public init(baseURL: String = "https://api3.decart.ai", apiKey: String) {
 		guard let url = URL(string: baseURL) else {
-			throw DecartError.invalidBaseURL(baseURL)
+			DecartLogger.log("Unable to create URL from: \(baseURL)", level: .error)
+			fatalError("Unable to create URL from: \(baseURL)")
 		}
 		guard !apiKey.isEmpty else {
-			throw DecartError.invalidAPIKey
+			DecartLogger.log("API key is empty", level: .error)
+			fatalError("Api key is empty")
 		}
 		self.baseURL = url
 		self.apiKey = apiKey
@@ -43,7 +37,7 @@ public struct DecartClient {
 		self.decartConfiguration = decartConfiguration
 	}
 
-	public func createRealtimeClient(options: RealtimeConfig) throws -> RealtimeEngine {
+	public func createRealtimeClient(options: RealtimeConfiguration) throws -> RealtimeClient {
 		let urlString =
 			"\(decartConfiguration.signalingServerUrl)\(options.model.urlPath)?api_key=\(decartConfiguration.apiKey)&model=\(options.model.name)"
 
@@ -52,7 +46,7 @@ public struct DecartClient {
 			throw DecartError.invalidBaseURL(urlString)
 		}
 
-		return try RealtimeEngine(
+		return try RealtimeClient(
 			signalingServerURL: signalingServerURL,
 			options: options
 		)

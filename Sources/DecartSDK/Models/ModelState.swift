@@ -11,11 +11,9 @@ public struct Prompt: Sendable {
 }
 
 public struct ModelState: Sendable {
-	public let prompt: Prompt?
-	public let mirror: Bool
+	public let prompt: Prompt
 
-	public init(prompt: Prompt? = nil, mirror: Bool = false) {
+	public init(prompt: Prompt) {
 		self.prompt = prompt
-		self.mirror = mirror
 	}
 }

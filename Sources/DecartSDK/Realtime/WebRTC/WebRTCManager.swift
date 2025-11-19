@@ -1,16 +1,17 @@
 import Foundation
 @preconcurrency import WebRTC
 
-final class WebRTCService: NSObject {
+final class WebRTCManager: NSObject {
 	let factory: RTCPeerConnectionFactory
 
 	@objc let peerConnection: RTCPeerConnection
 
 	let signalingManager: SignalingManager
-	private let realtimeConfig: RealtimeConfig
+	private let realtimeConfig: RealtimeConfiguration
+	var onWebrtcConnectedCallback: (() -> Void)?
 
 	init(
-		realtimeConfig: RealtimeConfig
+		realtimeConfig: RealtimeConfiguration
 	) {
 		#if IS_DEVELOPMENT
 			RTCSetMinDebugLogLevel(.verbose)
@@ -27,8 +28,7 @@ final class WebRTCService: NSObject {
 		self.peerConnection = factory.peerConnection(
 			with: config,
 			constraints: constraints,
-			delegate: nil
-		)!
+			delegate: nil)!
 		self.signalingManager = SignalingManager(pc: peerConnection)
 		self.realtimeConfig = realtimeConfig
 		super.init()
@@ -69,8 +69,6 @@ final class WebRTCService: NSObject {
 
 	private func cleanup() async {
 		peerConnection.close()
-		// Keeping delegate for now to handle closure events if any, or we can set to nil.
-		// Setting to nil is safer to stop receiving events.
 		peerConnection.delegate = nil
 		await signalingManager.disconnect()
 	}
@@ -92,10 +90,12 @@ final class WebRTCService: NSObject {
 		signalingManager.send(.offer(OfferMessage(sdp: offer.sdp)))
 	}
 
-	deinit { DecartLogger.log("WebRTCService deinit", level: .info) }
+	deinit {
+		DecartLogger.log("WebRTCManager deinit", level: .info)
+	}
 }
 
-extension WebRTCService: RTCPeerConnectionDelegate, @unchecked Sendable {
+extension WebRTCManager: RTCPeerConnectionDelegate, @unchecked Sendable {
 	func peerConnection(
 		_ peerConnection: RTCPeerConnection, didChange stateChanged: RTCSignalingState
 	) {}
@@ -114,8 +114,7 @@ extension WebRTCService: RTCPeerConnectionDelegate, @unchecked Sendable {
 		_ peerConnection: RTCPeerConnection, didChange newState: RTCIceGatheringState
 	) {}
 
-	func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate)
-	{
+	func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
 		signalingManager.send(
 			OutgoingWebSocketMessage.iceCandidate(
 				.init(candidate: candidate)))
@@ -130,6 +129,10 @@ extension WebRTCService: RTCPeerConnectionDelegate, @unchecked Sendable {
 	func peerConnection(
 		_ peerConnection: RTCPeerConnection, didChange newState: RTCPeerConnectionState
 	) {
+		if newState == .connected {
+			onWebrtcConnectedCallback?()
+		}
+
 		handleConnectionStateChange(newState)
 	}
 }

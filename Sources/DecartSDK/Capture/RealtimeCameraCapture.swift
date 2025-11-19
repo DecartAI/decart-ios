@@ -8,7 +8,7 @@ import AVFoundation
 import WebRTC
 
 public enum RealtimeCameraCapture {
-	public static func captureLocalCameraStream(realtimeClient: RealtimeEngine, cameraFacing: AVCaptureDevice.Position) async throws -> (
+	public static func captureLocalCameraStream(realtimeClient: RealtimeClient, cameraFacing: AVCaptureDevice.Position) async throws -> (
 		RealtimeMediaStream,
 		RTCCameraVideoCapturer
 	) {
@@ -29,10 +29,9 @@ public enum RealtimeCameraCapture {
 
 		// 3) Start capture
 		try await startCameraCapture(capturer: capturer, device: device, format: format, fps: targetFPS)
-		let localVideoTrack = realtimeClient.createLocalVideoTrack(
-			with: videoSource,
-			trackId: "video0",
-			enabled: true
+		let localVideoTrack = realtimeClient.createVideoTrack(
+			source: videoSource,
+			trackId: "video0"
 		)
 		// 4) Create track & stream
 		return (
@@ -58,7 +57,7 @@ public enum RealtimeCameraCapture {
 	@discardableResult
 	public static func switchCamera(
 		capturer: RTCCameraVideoCapturer,
-		realtimeClient: RealtimeEngine,
+		realtimeClient: RealtimeClient,
 		currentPosition: AVCaptureDevice.Position
 	) async throws -> AVCaptureDevice.Position {
 		let currentRealtimeModel = realtimeClient.options.model

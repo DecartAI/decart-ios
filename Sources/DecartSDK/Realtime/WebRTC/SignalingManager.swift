@@ -3,7 +3,7 @@ import Foundation
 
 /// Manages WebSocket signaling connection with AsyncStream-based message delivery
 actor SignalingManager {
-	private let webSocket: WebSocketService
+	private let webSocket: WebSocketClient
 	private let peerConnection: RTCPeerConnection
 	private var wsListenerTask: Task<Void, Never>?
 
@@ -15,11 +15,11 @@ actor SignalingManager {
 	}
 
 	private let stateContinuation: AsyncStream<DecartRealtimeConnectionState>.Continuation
-	let events: AsyncStream<DecartRealtimeConnectionState>
+	nonisolated let events: AsyncStream<DecartRealtimeConnectionState>
 
 	init(pc: RTCPeerConnection) {
 		peerConnection = pc
-		webSocket = WebSocketService()
+		webSocket = WebSocketClient()
 		let (stream, continuation) = AsyncStream.makeStream(
 			of: DecartRealtimeConnectionState.self,
 			bufferingPolicy: .bufferingNewest(1)
@@ -65,7 +65,7 @@ actor SignalingManager {
 		case .disconnected:
 			state = .disconnected
 		case .new:
-			break // Initial state, usually
+			break  // Initial state, usually
 		@unknown default:
 			break
 		}

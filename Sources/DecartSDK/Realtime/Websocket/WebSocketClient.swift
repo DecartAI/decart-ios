@@ -1,5 +1,5 @@
 //
-//  WebSocketService.swift
+//  WebSocketClient.swift
 //  DecartSDK
 //
 //  Created by Alon Bar-el on 03/11/2025.
@@ -8,7 +8,7 @@
 import Foundation
 import Observation
 
-actor WebSocketService {
+actor WebSocketClient {
 	var isConnected: Bool = false
 	var socketError: DecartError?
 
@@ -30,7 +30,6 @@ actor WebSocketService {
 		if stream != nil { return }
 		let socketConnection = URLSession.shared.webSocketTask(with: url)
 		stream = SocketStream(task: socketConnection)
-		DecartLogger.log("running on thread \(Thread.current) which is \(Thread.isMainThread ? "main" : "not main")", level: .info)
 		listeningTask = Task { [weak self] in
 			guard let self = self, let stream = await self.stream else {
 				return
@@ -69,8 +68,6 @@ actor WebSocketService {
 	}
 
 	func send<T: Codable>(_ message: T) throws {
-		DecartLogger.log("running on thread \(Thread.current) which is \(Thread.isMainThread ? "main" : "not main")", level: .info)
-
 		guard let stream = stream else {
 			DecartLogger.log("tried to send ws message when its closed", level: .warning)
 			return
@@ -96,5 +93,5 @@ actor WebSocketService {
 		isConnected = false
 	}
 
-	deinit { DecartLogger.log("Websocket Service deinit", level: .info) }
+	deinit { DecartLogger.log("Websocket Client deinit", level: .info) }
 }

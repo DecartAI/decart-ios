@@ -8,15 +8,15 @@
 import Foundation
 @preconcurrency import WebRTC
 
-public struct RealtimeConfig: Sendable {
+public struct RealtimeConfiguration: Sendable {
 	public let model: ModelDefinition
-	public let initialState: ModelState?
+	public let initialState: ModelState
 	public let connection: ConnectionConfig
 	public let media: MediaConfig
 
 	public init(
 		model: ModelDefinition,
-		initialState: ModelState? = nil,
+		initialState: ModelState,
 		connection: ConnectionConfig = .init(),
 		media: MediaConfig = .init()
 	) {

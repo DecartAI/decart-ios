@@ -6,13 +6,16 @@
 //
 import Combine
 import DecartSDK
+import Factory
 import SwiftUI
 import WebRTC
 
 @MainActor
 @Observable
 final class DecartRealtimeManager: RealtimeManager {
-	let decartClient: DecartClient
+	@ObservationIgnored
+	private let decartClient = Container.shared.decartClient()
+
 	var currentPrompt: Prompt {
 		didSet {
 			Task { [weak self] in
@@ -20,7 +23,9 @@ final class DecartRealtimeManager: RealtimeManager {
 				do {
 					try await client.setPrompt(currentPrompt)
 				} catch {
-					DecartLogger.log("failed to update prompt: \(error.localizedDescription)", level: .error)
+					DecartLogger.log(
+						"failed to update prompt: \(error.localizedDescription)", level: .error
+					)
 				}
 			}
 		}
@@ -36,18 +41,16 @@ final class DecartRealtimeManager: RealtimeManager {
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
 
 	@ObservationIgnored
-	private var realtimeClient: RealtimeEngine?
+	private var realtimeClient: RealtimeClient?
 	@ObservationIgnored
 	private var videoCapturer: RTCCameraVideoCapturer?
 	@ObservationIgnored
 	private var eventTask: Task<Void, Never>?
 
 	init(
-		decartClient: DecartClient,
 		currentPrompt: Prompt,
 		isMirroringEnabled: Bool = false
 	) {
-		self.decartClient = decartClient
 		self.currentPrompt = currentPrompt
 		self.shouldMirror = isMirroringEnabled
 	}
@@ -69,49 +72,67 @@ final class DecartRealtimeManager: RealtimeManager {
 	}
 
 	func connect(model: RealtimeModel) async {
+		if connectionState.isInSession || realtimeClient != nil {
+			await cleanup()
+		}
+
+		connectionState = .connecting
+
 		do {
-			realtimeClient = try decartClient
-				.createRealtimeClient(options: RealtimeConfig(
-					model: Models.realtime(model),
-					initialState: ModelState(
-						prompt: currentPrompt,
-						mirror: shouldMirror
-					)
-				))
+			realtimeClient =
+				try decartClient
+					.createRealtimeClient(
+						options: RealtimeConfiguration(
+							model: Models.realtime(model),
+							initialState: ModelState(
+								prompt: currentPrompt
+							)
+						))
 			guard let realtimeClient else {
 				preconditionFailure("🚨 realtimeClient is nil after creating it")
 			}
 
-			(localMediaStream, videoCapturer) = try await RealtimeCameraCapture
-				.captureLocalCameraStream(
-					realtimeClient: realtimeClient,
-					cameraFacing: .front
-				)
+			monitorEvents()
 
-			eventTask = Task { [weak self] in
-				guard let stream = self?.realtimeClient?.events else { return }
-				for await event in stream {
-					if Task.isCancelled { return }
-					guard let self else { return }
+			(localMediaStream, videoCapturer) =
+				try await RealtimeCameraCapture
+					.captureLocalCameraStream(
+						realtimeClient: realtimeClient,
+						cameraFacing: .front
+					)
 
-					switch event {
-					case .stateChanged(let state):
-						DecartLogger.log("Connection state changed: \(state)", level: .info)
-						self.connectionState = state
-
-					case .error(let error):
-						self.connectionState = .disconnected
-						DecartLogger.log("Error received: \(error.localizedDescription)", level: .error)
-					}
-				}
-			}
 			DecartLogger.log("Connecting to WebRTC...", level: .info)
-			remoteMediaStreams = try await realtimeClient
-				.connect(localStream: localMediaStream!)
+			remoteMediaStreams =
+				try await realtimeClient
+					.connect(localStream: localMediaStream!)
 		} catch {
-			DecartLogger.log("Connection failed with error: \(error.localizedDescription)", level: .error)
+			DecartLogger.log(
+				"Connection failed with error: \(error.localizedDescription)", level: .error
+			)
 			DecartLogger.log("Error details: \(error)", level: .error)
 			await cleanup()
+		}
+	}
+
+	private func monitorEvents() {
+		eventTask?.cancel()
+
+		eventTask = Task { [weak self] in
+			guard let self, let stream = self.realtimeClient?.events else { return }
+
+			for await state in stream {
+				if Task.isCancelled { return }
+
+				DecartLogger.log("Connection state changed: \(state)", level: .info)
+				self.connectionState = state
+
+				if state == .error {
+					DecartLogger.log("Error state received", level: .error)
+					// Should we disconnect on error? The connection might already be broken.
+					// Cleanup handles it if needed, or we can just stay in error state.
+					// For now, just updating state is enough as UI reacts to it.
+				}
+			}
 		}
 	}
 

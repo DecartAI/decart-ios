@@ -9,7 +9,6 @@
 /* Begin PBXBuildFile section */
 		165B2B9B2ECE09E9004D848C /* Factory in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9A2ECE09E9004D848C /* Factory */; };
 		165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9C2ECE09E9004D848C /* FactoryKit */; };
-		165B2B9F2ECE09E9004D848C /* FactoryTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9E2ECE09E9004D848C /* FactoryTesting */; };
 		16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 16E67C3B2EB8CC9F00AF5515 /* DecartSDK */; };
 /* End PBXBuildFile section */
 
@@ -30,7 +29,6 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				165B2B9F2ECE09E9004D848C /* FactoryTesting in Frameworks */,
 				165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */,
 				16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */,
 				165B2B9B2ECE09E9004D848C /* Factory in Frameworks */,
@@ -88,7 +86,6 @@
 				16E67C3B2EB8CC9F00AF5515 /* DecartSDK */,
 				165B2B9A2ECE09E9004D848C /* Factory */,
 				165B2B9C2ECE09E9004D848C /* FactoryKit */,
-				165B2B9E2ECE09E9004D848C /* FactoryTesting */,
 			);
 			productName = Example;
 			productReference = 16D70B962EB8CA0C00455077 /* Example.app */;
@@ -297,7 +294,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -331,7 +328,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -400,11 +397,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
 			productName = FactoryKit;
-		};
-		165B2B9E2ECE09E9004D848C /* FactoryTesting */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
-			productName = FactoryTesting;
 		};
 		16E67C3B2EB8CC9F00AF5515 /* DecartSDK */ = {
 			isa = XCSwiftPackageProductDependency;
