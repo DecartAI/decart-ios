@@ -36,7 +36,7 @@ final class DecartRealtimeManager: RealtimeManager {
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
 
 	@ObservationIgnored
-	private var realtimeClient: RealtimeClient?
+	private var realtimeClient: RealtimeEngine?
 	@ObservationIgnored
 	private var videoCapturer: RTCCameraVideoCapturer?
 	@ObservationIgnored
@@ -127,15 +127,9 @@ final class DecartRealtimeManager: RealtimeManager {
 		}
 		videoCapturer = nil
 		await realtimeClient?.disconnect()
-
 		realtimeClient = nil
-
-		// 4. Clear the remote stream reference
 		remoteMediaStreams = nil
-
 		localMediaStream = nil
-		// 5. Reset the connection state.
-		// We are on the MainActor, so this is safe.
 		connectionState = .idle
 
 		DecartLogger.log("Cleanup complete.", level: .success)

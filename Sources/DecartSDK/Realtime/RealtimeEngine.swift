@@ -9,7 +9,7 @@ public enum DecartSdkEvent: Sendable {
 // Technically you don't need MediaStreams anymore in unifiedPlan - which simplifies tracks control and disposal.
 // this Wrapper is only ment to conform to the SDK's interface
 
-public struct RealtimeClient {
+public struct RealtimeEngine {
 	private let webRTCClient: WebRTCClient
 	private let signalingServerURL: URL
 	public let options: RealtimeConfig
@@ -103,7 +103,7 @@ public struct RealtimeClient {
 	}
 }
 
-public extension RealtimeClient {
+public extension RealtimeEngine {
 	func createVideoSource() -> RTCVideoSource {
 		return webRTCClient.factory.videoSource()
 	}
