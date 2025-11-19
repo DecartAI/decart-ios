@@ -6,10 +6,7 @@ final class WebRTCClient: NSObject {
 
 	@objc let peerConnection: RTCPeerConnection
 
-	private(set) var state: DecartRealtimeConnectionState = .disconnected
-	private var signalingManager: SignalingManager?
-	private let onStateChange: ((DecartRealtimeConnectionState) -> Void)?
-	private let onError: ((Error) -> Void)?
+	let signalingManager: SignalingManager
 	private let realtimeConfig: RealtimeConfig
 
 	private static let iceServers: [RTCIceServer] = [
@@ -17,8 +14,6 @@ final class WebRTCClient: NSObject {
 	]
 
 	init(
-		onStateChange: ((DecartRealtimeConnectionState) -> Void)? = nil,
-		onError: ((Error) -> Void)? = nil,
 		realtimeConfig: RealtimeConfig
 	) {
 		// #if IS_DEVELOPMENT
@@ -49,15 +44,13 @@ final class WebRTCClient: NSObject {
 			constraints: constraints,
 			delegate: nil
 		)!
-		self.onStateChange = onStateChange
-		self.onError = onError
+		self.signalingManager = SignalingManager(pc: peerConnection)
 		self.realtimeConfig = realtimeConfig
 		super.init()
 		peerConnection.delegate = self
 	}
 
 	func connect(url: URL, localStream: RealtimeMediaStream, timeout: TimeInterval = 30) async throws {
-		setState(.connecting)
 		do {
 			peerConnection.add(localStream.videoTrack, streamIds: [localStream.id])
 			if let audioTrack = localStream.audioTrack {
@@ -65,9 +58,7 @@ final class WebRTCClient: NSObject {
 			}
 			configureSenderParameters(preferredCodec: VideoCodec.vp8)
 
-			let newSignalingManager = SignalingManager(pc: peerConnection)
-			await newSignalingManager.connect(url: url)
-			signalingManager = newSignalingManager
+			await signalingManager.connect(url: url)
 			try await sendOffer()
 		} catch {
 			DecartLogger.log("failed to create webrtc connection", level: .error)
@@ -80,30 +71,23 @@ final class WebRTCClient: NSObject {
 		await cleanup()
 	}
 
-	func sendWebsocketMessage(_ message: OutgoingWebSocketMessage) async {
-		await signalingManager?.send(message)
+	func sendWebsocketMessage(_ message: OutgoingWebSocketMessage) {
+		signalingManager.send(message)
 	}
 
 	private func cleanup() async {
 		peerConnection.close()
+		// Keeping delegate for now to handle closure events if any, or we can set to nil.
+		// Setting to nil is safer to stop receiving events.
 		peerConnection.delegate = nil
-		await signalingManager?.disconnect()
-		signalingManager = nil
-		setState(.disconnected)
+		await signalingManager.disconnect()
 	}
 
 	private func handleConnectionStateChange(_ rtcState: RTCPeerConnectionState) {
-		let newState: DecartRealtimeConnectionState
-		switch rtcState {
-		case .connected:
-			newState = .connected
-		case .connecting, .new:
-			newState = .connecting
-		default:
-			newState = .disconnected
+		DecartLogger.log("got new state: \(rtcState)", level: .info)
+		Task {
+			await signalingManager.updatePeerConnectionState(rtcState)
 		}
-		print("got new state: \(newState)")
-		setState(newState)
 	}
 
 	private func sendOffer() async throws {
@@ -116,13 +100,7 @@ final class WebRTCClient: NSObject {
 		}
 
 		try await peerConnection.setLocalDescription(offer)
-		await signalingManager?.send(.offer(OfferMessage(sdp: offer.sdp)))
-	}
-
-	private func setState(_ newState: DecartRealtimeConnectionState) {
-		guard state != newState else { return }
-		state = newState
-		onStateChange?(newState)
+		signalingManager.send(.offer(OfferMessage(sdp: offer.sdp)))
 	}
 
 	private func configureSenderParameters(
@@ -195,11 +173,8 @@ extension WebRTCClient: RTCPeerConnectionDelegate, @unchecked Sendable {
 	) {}
 
 	func peerConnection(_ peerConnection: RTCPeerConnection, didGenerate candidate: RTCIceCandidate) {
-		Task {
-			await signalingManager?.send(OutgoingWebSocketMessage.iceCandidate(
-				.init(candidate: candidate)
-			))
-		}
+		signalingManager.send(OutgoingWebSocketMessage.iceCandidate(
+			.init(candidate: candidate)))
 	}
 
 	func peerConnection(

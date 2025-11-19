@@ -8,16 +8,15 @@
 import Foundation
 import WebRTC
 
-struct InitializeConnectionMessage: Codable {
+struct InitializeConnectionMessage: Codable, Sendable {
 	let type: String
 	let apiKey: String
 	let model: String
 
 	let initialPrompt: String?
-	
 }
 
-struct OfferMessage: Codable {
+struct OfferMessage: Codable, Sendable {
 	let type: String
 	let sdp: String
 
@@ -27,18 +26,18 @@ struct OfferMessage: Codable {
 	}
 }
 
-struct AnswerMessage: Codable {
+struct AnswerMessage: Codable, Sendable {
 	let type: String
 	let sdp: String
 }
 
-struct IceCandidatePayload: Codable {
+struct IceCandidatePayload: Codable, Sendable {
 	let candidate: String
 	let sdpMLineIndex: Int32
 	let sdpMid: String
 }
 
-struct IceCandidateMessage: Codable {
+struct IceCandidateMessage: Codable, Sendable {
 	let type: String
 	let candidate: IceCandidatePayload
 
@@ -59,7 +58,7 @@ struct IceCandidateMessage: Codable {
 	}
 }
 
-struct PromptMessage: Codable {
+struct PromptMessage: Codable, Sendable {
 	let type: String
 	let prompt: String
 
@@ -69,7 +68,7 @@ struct PromptMessage: Codable {
 	}
 }
 
-struct SwitchCameraMessage: Codable {
+struct SwitchCameraMessage: Codable, Sendable {
 	let type: String
 	let rotateY: Int
 
@@ -79,7 +78,7 @@ struct SwitchCameraMessage: Codable {
 	}
 }
 
-enum IncomingWebSocketMessage: Codable {
+enum IncomingWebSocketMessage: Codable, Sendable {
 	case offer(OfferMessage)
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
@@ -121,7 +120,7 @@ enum IncomingWebSocketMessage: Codable {
 	}
 }
 
-enum OutgoingWebSocketMessage: Codable {
+enum OutgoingWebSocketMessage: Codable, Sendable {
 	case offer(OfferMessage)
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
@@ -143,3 +142,4 @@ enum OutgoingWebSocketMessage: Codable {
 		}
 	}
 }
+

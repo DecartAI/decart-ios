@@ -6,10 +6,10 @@
 //
 import Foundation
 
-enum DecartLogger {
-	static let printImportantOnly: Bool = ProcessInfo.processInfo.environment["printImportantOnly"] == "YES"
+public enum DecartLogger: Sendable {
+	public static let printImportantOnly: Bool = ProcessInfo.processInfo.environment["printImportantOnly"] == "YES"
 
-	enum Level: String {
+	public enum Level: String, Sendable {
 		case info = "ℹ️"
 		case warning = "⚠️"
 		case error = "❌"
@@ -27,7 +27,7 @@ enum DecartLogger {
 		return dateFormatter
 	}()
 
-	static func log(_ string: String, level: Level, logBreadcrumbEnabled: Bool = true) {
+	public static func log(_ string: String, level: Level, logBreadcrumbEnabled: Bool = true) {
 		let logString = "[DecartSDK -\(dateFormatter.string(from: Date.now)) \(level.rawValue)] - \(string)"
 
 		if DecartLogger.printImportantOnly {

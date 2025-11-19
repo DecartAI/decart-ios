@@ -20,7 +20,7 @@ final class DecartRealtimeManager: RealtimeManager {
 				do {
 					try await client.setPrompt(currentPrompt)
 				} catch {
-					print("failed to update prompt: \(error.localizedDescription)")
+					DecartLogger.log("failed to update prompt: \(error.localizedDescription)", level: .error)
 				}
 			}
 		}
@@ -64,7 +64,7 @@ final class DecartRealtimeManager: RealtimeManager {
 			)
 			shouldMirror.toggle()
 		} catch {
-			print("error while switching camera!")
+			DecartLogger.log("error while switching camera!", level: .error)
 		}
 	}
 
@@ -89,42 +89,34 @@ final class DecartRealtimeManager: RealtimeManager {
 				)
 
 			eventTask = Task { [weak self] in
-				for await event in realtimeClient.events {
+				guard let stream = self?.realtimeClient?.events else { return }
+				for await event in stream {
 					if Task.isCancelled { return }
-					await MainActor.run { [weak self] in
-						guard let self = self else { return }
+					guard let self else { return }
 
-						switch event {
-						case .stateChanged(let state):
-							if state == .connected {
-								Task.detached {
-									try? await self.realtimeClient?
-										.setPrompt(self.currentPrompt)
-								}
-							}
-							print("🟢 Connection state changed: \(state)")
-							self.connectionState = state
+					switch event {
+					case .stateChanged(let state):
+						DecartLogger.log("Connection state changed: \(state)", level: .info)
+						self.connectionState = state
 
-						case .error(let error):
-							self.connectionState = .disconnected
-							print("❌ Error received: \(error.localizedDescription)")
-//							self.lastError = error.localizedDescription
-						}
+					case .error(let error):
+						self.connectionState = .disconnected
+						DecartLogger.log("Error received: \(error.localizedDescription)", level: .error)
 					}
 				}
 			}
-			print("🔵 Connecting to WebRTC...")
+			DecartLogger.log("Connecting to WebRTC...", level: .info)
 			remoteMediaStreams = try await realtimeClient
 				.connect(localStream: localMediaStream!)
 		} catch {
-			print("❌ Connection failed with error: \(error.localizedDescription)")
-			print("❌ Error details: \(error)")
+			DecartLogger.log("Connection failed with error: \(error.localizedDescription)", level: .error)
+			DecartLogger.log("Error details: \(error)", level: .error)
 			await cleanup()
 		}
 	}
 
 	func cleanup() async {
-		print("🧼 Starting cleanup...")
+		DecartLogger.log("Starting cleanup...", level: .info)
 		eventTask?.cancel()
 		eventTask = nil
 
@@ -146,6 +138,6 @@ final class DecartRealtimeManager: RealtimeManager {
 		// We are on the MainActor, so this is safe.
 		connectionState = .idle
 
-		print("✅ Cleanup complete.")
+		DecartLogger.log("Cleanup complete.", level: .success)
 	}
 }

@@ -29,16 +29,16 @@ public struct RealtimeClient {
 		self.eventContinuation = continuation
 
 		let webRTCClient = WebRTCClient(
-			onStateChange: { state in
-				continuation.yield(.stateChanged(state))
-			},
-			onError: { error in
-				continuation.yield(.error(error))
-			},
 			realtimeConfig: options
 		)
 
 		self.webRTCClient = webRTCClient
+
+		Task {
+			for await state in await webRTCClient.signalingManager.events {
+				continuation.yield(.stateChanged(state))
+			}
+		}
 	}
 
 	public func connect(
@@ -97,8 +97,8 @@ public struct RealtimeClient {
 		await webRTCClient.disconnect()
 	}
 
-	public func setPrompt(_ prompt: Prompt) async throws {
-		await webRTCClient
+	public func setPrompt(_ prompt: Prompt) {
+		webRTCClient
 			.sendWebsocketMessage(.prompt(PromptMessage(prompt: prompt.text)))
 	}
 }

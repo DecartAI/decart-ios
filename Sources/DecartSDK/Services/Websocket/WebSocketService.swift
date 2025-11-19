@@ -30,7 +30,7 @@ actor WebSocketService {
 		if stream != nil { return }
 		let socketConnection = URLSession.shared.webSocketTask(with: url)
 		stream = SocketStream(task: socketConnection)
-
+		DecartLogger.log("running on thread \(Thread.current) which is \(Thread.isMainThread ? "main" : "not main")", level: .info)
 		listeningTask = Task { [weak self] in
 			guard let self = self, let stream = await self.stream else {
 				return
@@ -57,6 +57,7 @@ actor WebSocketService {
 
 	private func handleIncomingMessage(_ text: String) async {
 		guard let data = text.data(using: .utf8) else { return }
+
 		do {
 			let message = try decoder.decode(IncomingWebSocketMessage.self, from: data)
 			eventStreamContinuation.yield(message)
@@ -68,6 +69,8 @@ actor WebSocketService {
 	}
 
 	func send<T: Codable>(_ message: T) throws {
+		DecartLogger.log("running on thread \(Thread.current) which is \(Thread.isMainThread ? "main" : "not main")", level: .info)
+
 		guard let stream = stream else {
 			DecartLogger.log("tried to send ws message when its closed", level: .warning)
 			return
