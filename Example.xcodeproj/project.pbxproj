@@ -7,6 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		165B2B9B2ECE09E9004D848C /* Factory in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9A2ECE09E9004D848C /* Factory */; };
+		165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9C2ECE09E9004D848C /* FactoryKit */; };
+		165B2B9F2ECE09E9004D848C /* FactoryTesting in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9E2ECE09E9004D848C /* FactoryTesting */; };
 		16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 16E67C3B2EB8CC9F00AF5515 /* DecartSDK */; };
 /* End PBXBuildFile section */
 
@@ -27,7 +30,10 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				165B2B9F2ECE09E9004D848C /* FactoryTesting in Frameworks */,
+				165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */,
 				16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */,
+				165B2B9B2ECE09E9004D848C /* Factory in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -80,6 +86,9 @@
 			name = Example;
 			packageProductDependencies = (
 				16E67C3B2EB8CC9F00AF5515 /* DecartSDK */,
+				165B2B9A2ECE09E9004D848C /* Factory */,
+				165B2B9C2ECE09E9004D848C /* FactoryKit */,
+				165B2B9E2ECE09E9004D848C /* FactoryTesting */,
 			);
 			productName = Example;
 			productReference = 16D70B962EB8CA0C00455077 /* Example.app */;
@@ -111,6 +120,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				16E67C3A2EB8CC9F00AF5515 /* XCLocalSwiftPackageReference "../decart-ios" */,
+				165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 16D70B972EB8CA0C00455077 /* Products */;
@@ -369,7 +379,33 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/hmlongco/Factory.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.3;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		165B2B9A2ECE09E9004D848C /* Factory */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
+			productName = Factory;
+		};
+		165B2B9C2ECE09E9004D848C /* FactoryKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
+			productName = FactoryKit;
+		};
+		165B2B9E2ECE09E9004D848C /* FactoryTesting */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
+			productName = FactoryTesting;
+		};
 		16E67C3B2EB8CC9F00AF5515 /* DecartSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DecartSDK;

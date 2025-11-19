@@ -2,142 +2,108 @@ import Foundation
 import WebRTC
 
 public enum DecartSdkEvent: Sendable {
-	case stateChanged(DecartRealtimeConnectionState)
-	case error(Error)
+    case stateChanged(DecartRealtimeConnectionState)
+    case error(Error)
 }
-
-// Technically you don't need MediaStreams anymore in unifiedPlan - which simplifies tracks control and disposal.
-// this Wrapper is only ment to conform to the SDK's interface
 
 public struct RealtimeEngine {
-	private let webRTCClient: WebRTCClient
-	private let signalingServerURL: URL
-	public let options: RealtimeConfig
+    internal let webRTCService: WebRTCService
+    private let signalingServerURL: URL
+    public let options: RealtimeConfig
 
-	private let eventContinuation: AsyncStream<DecartSdkEvent>.Continuation
-	public let events: AsyncStream<DecartSdkEvent>
+    private let eventContinuation: AsyncStream<DecartSdkEvent>.Continuation
+    public let events: AsyncStream<DecartSdkEvent>
 
-	public init(signalingServerURL: URL, options: RealtimeConfig) throws {
-		self.options = options
-		self.signalingServerURL = signalingServerURL
+    public init(signalingServerURL: URL, options: RealtimeConfig) throws {
+        self.options = options
+        self.signalingServerURL = signalingServerURL
 
-		let (stream, continuation) = AsyncStream.makeStream(
-			of: DecartSdkEvent.self,
-			bufferingPolicy: .bufferingNewest(4)
-		)
-		self.events = stream
-		self.eventContinuation = continuation
+        let (stream, continuation) = AsyncStream.makeStream(
+            of: DecartSdkEvent.self,
+            bufferingPolicy: .bufferingNewest(4)
+        )
+        self.events = stream
+        self.eventContinuation = continuation
 
-		let webRTCClient = WebRTCClient(
-			realtimeConfig: options
-		)
+        self.webRTCService = WebRTCService(
+            realtimeConfig: options
+        )
 
-		self.webRTCClient = webRTCClient
+        Task {
+            for await state in await webRTCService.signalingManager.events {
+                continuation.yield(.stateChanged(state))
+            }
+        }
+    }
 
-		Task {
-			for await state in await webRTCClient.signalingManager.events {
-				continuation.yield(.stateChanged(state))
-			}
-		}
-	}
+    public func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream {
+        return try await connectWithRetry(
+            localStream: localStream,
+            maxRetries: 3,
+            permanentErrors: ["permission denied", "not allowed", "invalid session"]
+        )
+    }
 
-	public func connect(
-		localStream: RealtimeMediaStream
-	) async throws -> RealtimeMediaStream {
-		// Implement retry logic
-		var retries = 0
-		let maxRetries = 3
-		var delay: TimeInterval = 1.0
-		let permanentErrors = ["permission denied", "not allowed", "invalid session"]
+    public func disconnect() async {
+        eventContinuation.yield(.stateChanged(.disconnected))
+        eventContinuation.finish()
+        await webRTCService.disconnect()
+    }
 
-		while retries < maxRetries {
-			do {
-				try await webRTCClient
-					.connect(url: signalingServerURL, localStream: localStream)
-				let remoteVideoTrack = getTransceivers().first { $0.mediaType == .video }?.receiver.track as? RTCVideoTrack
-				let remoteAudioTrack = getTransceivers().first {
-					$0.mediaType == .audio
-				}?.receiver.track as? RTCAudioTrack
+    public func setPrompt(_ prompt: Prompt) {
+        webRTCService.sendWebsocketMessage(.prompt(PromptMessage(prompt: prompt.text)))
+    }
 
-				guard let remoteVideoTrack else {
-					throw DecartError.webRTCError("please set local video track with RealtimeClient.setLocalVideoTrack before calling connect!")
-				}
-				return RealtimeMediaStream(
-					videoTrack: remoteVideoTrack,
-					audioTrack: remoteAudioTrack,
-					id: .remoteStream
-				)
-			} catch {
-				retries += 1
+    // MARK: - Private Helpers
 
-				let errorMessage = error.localizedDescription.lowercased()
-				let isPermanentError = permanentErrors.contains { errorMessage.contains($0) }
+    private func connectWithRetry(
+        localStream: RealtimeMediaStream,
+        maxRetries: Int,
+        permanentErrors: [String]
+    ) async throws -> RealtimeMediaStream {
+        var retries = 0
+        var delay: TimeInterval = 1.0
 
-				if isPermanentError {
-					DecartLogger.log("[RealtimeClient] Permanent error detected, aborting retries", level: .error)
-					throw error
-				}
+        while retries < maxRetries {
+            do {
+                try await webRTCService.connect(url: signalingServerURL, localStream: localStream)
 
-				if retries >= maxRetries {
-					DecartLogger.log("[RealtimeClient] Max retries reached", level: .error)
-					throw error
-				}
-				try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
-				delay = min(delay * 2, 10.0)
-			}
-		}
+                guard
+                    let remoteVideoTrack = getTransceivers().first(where: { $0.mediaType == .video }
+                    )?.receiver.track as? RTCVideoTrack
+                else {
+                    throw DecartError.webRTCError("Remote video track not found after connection.")
+                }
 
-		DecartLogger.log("max retries exceeded, connection failed", level: .error)
-		throw DecartError.webRTCError("Max retries exceeded")
-	}
+                let remoteAudioTrack =
+                    getTransceivers().first(where: { $0.mediaType == .audio })?.receiver.track
+                    as? RTCAudioTrack
 
-	public func disconnect() async {
-		eventContinuation.yield(.stateChanged(.disconnected))
-		eventContinuation.finish()
-		await webRTCClient.disconnect()
-	}
+                return RealtimeMediaStream(
+                    videoTrack: remoteVideoTrack,
+                    audioTrack: remoteAudioTrack,
+                    id: .remoteStream
+                )
+            } catch {
+                let errorMessage = error.localizedDescription.lowercased()
+                if permanentErrors.contains(where: { errorMessage.contains($0) }) {
+                    DecartLogger.log(
+                        "[RealtimeEngine] Permanent error detected, aborting retries.",
+                        level: .error)
+                    throw error
+                }
 
-	public func setPrompt(_ prompt: Prompt) {
-		webRTCClient
-			.sendWebsocketMessage(.prompt(PromptMessage(prompt: prompt.text)))
-	}
-}
+                retries += 1
+                if retries >= maxRetries {
+                    DecartLogger.log("[RealtimeEngine] Max retries reached.", level: .error)
+                    throw error
+                }
 
-public extension RealtimeEngine {
-	func createVideoSource() -> RTCVideoSource {
-		return webRTCClient.factory.videoSource()
-	}
+                try await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+                delay = min(delay * 2, 10.0)
+            }
+        }
 
-	func createAudioSource(with: RTCMediaConstraints? = nil) -> RTCAudioSource {
-		return webRTCClient.factory.audioSource(with: with)
-	}
-
-	/// Adding a video track or audio track implicitly creates a bidi Transceivers (per media type), RTCMediastream is not needed.
-	func createLocalVideoTrack(with: RTCVideoSource, trackId: String, enabled: Bool = true) -> RTCVideoTrack {
-		if !enabled {
-			return webRTCClient.factory.videoTrack(with: with, trackId: trackId)
-		}
-		let videoTrack = webRTCClient.factory.videoTrack(with: with, trackId: trackId)
-		videoTrack.isEnabled = true
-		return videoTrack
-	}
-
-	func createLocalAudioTrack(with: RTCAudioSource, trackId: String, enabled: Bool = true) -> RTCAudioTrack {
-		if !enabled {
-			return webRTCClient.factory.audioTrack(with: with, trackId: trackId)
-		}
-		let audioTrack = webRTCClient.factory.audioTrack(with: with, trackId: trackId)
-		audioTrack.isEnabled = true
-		return audioTrack
-	}
-
-	func setTrackEnabled<T: RTCMediaStreamTrack>(_ type: T.Type, isEnabled: Bool) {
-		webRTCClient.peerConnection.transceivers
-			.compactMap { $0.sender.track as? T }
-			.forEach { $0.isEnabled = isEnabled }
-	}
-
-	func getTransceivers() -> [RTCRtpTransceiver] {
-		return webRTCClient.peerConnection.transceivers
-	}
+        throw DecartError.webRTCError("Connection failed after max retries.")
+    }
 }
