@@ -10,6 +10,7 @@ public enum DecartError: Error {
 	case modelNotFound(String)
 	case connectionTimeout
 	case websocketError(String)
+	case networkError(Error)
 
 	public var errorDescription: String? {
 		switch self {
@@ -34,6 +35,8 @@ public enum DecartError: Error {
 			return "Connection timeout"
 		case .websocketError(let message):
 			return "WebSocket error: \(message)"
+		case .networkError(let error):
+			return "Network error: \(error.localizedDescription)"
 		}
 	}
 
@@ -57,6 +60,8 @@ public enum DecartError: Error {
 			return "CONNECTION_TIMEOUT"
 		case .websocketError:
 			return "WEBSOCKET_ERROR"
+		case .networkError:
+			return "NETWORK_ERROR"
 		}
 	}
 }

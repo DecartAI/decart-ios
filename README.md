@@ -6,11 +6,21 @@
   <a href="https://github.com/decartai/decart-ios/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
 </p>
 
-Native Swift SDK for [Decart AI](https://decart.ai) - Real-time video processing for iOS & macOS.
+Native Swift SDK for [Decart AI](https://decart.ai) - Real-time video processing and AI generation for iOS & macOS.
+
+## Overview
+
+Decart iOS SDK provides two primary APIs:
+
+- **RealtimeClient** - Real-time video processing with WebRTC streaming
+- **ProcessClient** - Batch image and video generation
+
+Both APIs leverage modern Swift concurrency (async/await) with type-safe interfaces and comprehensive error handling.
 
 ## Features
 
 - ✅ **Real-time video processing** with WebRTC
+- ✅ **Batch image and video generation**
 - ✅ **Native Swift** with modern concurrency (async/await)
 - ✅ **AsyncStream events** for reactive state management
 - ✅ **Type-safe API** with compile-time guarantees
@@ -30,135 +40,221 @@ dependencies: [
 ```
 
 Or in Xcode:
-
 1. File → Add Package Dependencies
 2. Enter: `https://github.com/decartai/decart-ios`
 3. Select version and add to target
 
-## Quick Start
+## Usage Examples
+
+### 1. Real-time Video Processing
+
+Stream video with real-time AI processing using WebRTC:
 
 ```swift
 import DecartSDK
+import WebRTC
 
-// 1. Configure
-let config = try DecartConfiguration(
-    apiKey: "your-api-key"
-)
+// Configure SDK
+let config = DecartConfiguration(apiKey: "your-api-key")
+let client = DecartClient(decartConfiguration: config)
 
-let client = try createDecartClient(configuration: config)
-
-// 2. Select model
-let model = Models.realtime(.lucy_v2v_720p_rt)
-
-// 3. Capture camera
-let stream = try await captureLocalStream(
-    fps: model.fps,
-    width: model.width,
-    height: model.height
-)
-
-// 4. Create realtime client
+// Create realtime client
+let model = Models.realtime(.mirage)
 let realtimeClient = try client.createRealtimeClient(
-    options: RealtimeConnectOptions(
+    options: RealtimeConfiguration(
         model: model,
-        initialState: ModelState(
-            prompt: Prompt(text: "Lego World", enrich: true)
-        )
+        initialState: ModelState(prompt: Prompt(text: "Lego World"))
     )
 )
 
-// 5. Connect
-try await realtimeClient.connect(stream: stream)
+// Capture local camera stream
+let (localStream, cameraCapturer) = try await RealtimeCameraCapture.captureLocalCameraStream(
+    realtimeClient: realtimeClient,
+    cameraFacing: .front
+)
 
-// 6. Handle events
+// Connect and receive remote stream
+let remoteStream = try await realtimeClient.connect(localStream: localStream)
+remoteStream.videoTrack.add(videoRenderer)
+
+// Listen to connection events
 Task {
-    for await event in realtimeClient.events {
-        switch event {
-        case .stateChanged(let state):
-            print("Connection: \(state)")
-        case .remoteStreamReceived(let mediaStream):
-            // Handle processed video
-            if let videoTrack = mediaStream.videoTracks.first {
-                videoTrack.add(remoteVideoView)
-            }
-        case .error(let error):
-            print("Error: \(error)")
+    for await state in realtimeClient.events {
+        switch state {
+        case .connected:
+            print("Connected")
+        case .disconnected:
+            print("Disconnected")
+        case .error:
+            print("Connection error")
+        default:
+            break
         }
     }
 }
 
-// 7. Control session
-try await realtimeClient.setPrompt("Anime World")
-await realtimeClient.setMirror(true)
+// Update prompt in real-time
+realtimeClient.setPrompt(Prompt(text: "Anime World"))
 
-// 8. Disconnect
-await realtimeClient.disconnect()
+// Cleanup
+defer {
+    cameraCapturer.stopCapture(completionHandler: {})
+    Task { await realtimeClient.disconnect() }
+}
 ```
 
-## Examples
+### 2. Text-to-Image Generation
 
-See [`Examples/RealtimeExample`](Examples/RealtimeExample) for a complete SwiftUI app demonstrating:
+Generate images from text prompts:
 
-- Camera capture and video rendering
-- Real-time prompt updates
-- Mirror toggle
-- Connection state management
-- Error handling
+```swift
+import DecartSDK
+
+// Configure SDK
+let config = DecartConfiguration(apiKey: "your-api-key")
+let client = DecartClient(decartConfiguration: config)
+
+// Create input
+let input = TextToImageInput(prompt: "Retro robot in neon city")
+
+// Create process client
+let processClient = try client.createProcessClient(
+    model: .lucy_pro_t2i,
+    input: input
+)
+
+// Generate image
+let imageData = try await processClient.process()
+let image = UIImage(data: imageData)
+```
+
+### 3. Image-to-Video Generation
+
+Generate videos from reference images:
+
+```swift
+import DecartSDK
+import UniformTypeIdentifiers
+
+// Configure SDK
+let config = DecartConfiguration(apiKey: "your-api-key")
+let client = DecartClient(decartConfiguration: config)
+
+// Load reference image
+let imageData = try Data(contentsOf: referenceImageURL)
+let fileInput = try FileInput.from(data: imageData, uniformType: .jpeg)
+
+// Create input
+let input = ImageToVideoInput(prompt: "Make it dance", data: fileInput)
+
+// Create process client
+let processClient = try client.createProcessClient(
+    model: .lucy_pro_i2v,
+    input: input
+)
+
+// Generate video
+let videoData = try await processClient.process()
+try videoData.write(to: outputURL)
+```
 
 ## API Reference
 
-### Core Types
+### Core Configuration
 
-**`DecartConfiguration`**
+#### DecartConfiguration
+
+Initialize the SDK with your API credentials:
 
 ```swift
-let config = try DecartConfiguration(
-    baseURL: "https://api3.decart.ai",
+let config = DecartConfiguration(
+    baseURL: "https://api3.decart.ai", // Optional, defaults to api3.decart.ai
     apiKey: "your-api-key"
 )
 ```
 
-**`Models`**
+#### DecartClient
+
+Main entry point for creating realtime and process clients:
 
 ```swift
-let model = Models.realtime(.mirage)
-// or
-let model = Models.realtime(.mirage_v2)
-// or
-let model = Models.realtime(.lucy_v2v_720p_rt)
+let client = DecartClient(decartConfiguration: config)
 ```
 
-**`RealtimeClient`**
+### RealtimeClient
+
+Real-time video streaming with WebRTC.
+
+#### Methods
 
 ```swift
-public class RealtimeClient {
-    public let events: AsyncStream<DecartSdkEvent>
-
-    public func connect(stream: RTCMediaStream) async throws
-    public func setPrompt(_ prompt: String, enrich: Bool = true) async throws
-    public func setMirror(_ enabled: Bool) async
-    public func disconnect() async
-}
+func createRealtimeClient(options: RealtimeConfiguration) throws -> RealtimeClient
+func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream
+func disconnect() async
+func setPrompt(_ prompt: Prompt)
 ```
 
-**`DecartSdkEvent`**
+#### Events
 
 ```swift
-public enum DecartSdkEvent {
-    case stateChanged(ConnectionState)
-    case remoteStreamReceived(RTCMediaStream)
-    case error(Error)
-}
+let events: AsyncStream<DecartRealtimeConnectionState>
+
+// States: .idle, .connecting, .connected, .disconnected, .error
 ```
 
-**`ConnectionState`**
+#### Available Models
 
 ```swift
-public enum ConnectionState {
-    case connecting
-    case connected
-    case disconnected
-}
+Models.realtime(.mirage)
+Models.realtime(.mirage_v2)
+Models.realtime(.lucy_v2v_720p_rt)
+```
+
+### ProcessClient
+
+Batch image and video generation.
+
+#### Methods
+
+```swift
+func createProcessClient(model: ImageModel, input: TextToImageInput) throws -> ProcessClient
+func createProcessClient(model: ImageModel, input: ImageToImageInput) throws -> ProcessClient
+func createProcessClient(model: VideoModel, input: TextToVideoInput) throws -> ProcessClient
+func createProcessClient(model: VideoModel, input: ImageToVideoInput) throws -> ProcessClient
+func createProcessClient(model: VideoModel, input: VideoToVideoInput) throws -> ProcessClient
+
+func process() async throws -> Data
+```
+
+#### Available Models
+
+**Image Models:**
+- `.lucy_pro_t2i` - Text to image
+- `.lucy_pro_i2i` - Image to image
+
+**Video Models:**
+- `.lucy_pro_t2v` - Text to video
+- `.lucy_pro_i2v` - Image to video
+- `.lucy_pro_v2v` - Video to video
+- `.lucy_dev_i2v` - Image to video (dev)
+- `.lucy_dev_v2v` - Video to video (dev)
+
+### Input Types
+
+```swift
+// Text-based inputs
+TextToImageInput(prompt: String, seed: Int? = nil, resolution: ProResolution? = .res720p)
+TextToVideoInput(prompt: String, seed: Int? = nil, resolution: ProResolution? = .res720p)
+
+// File-based inputs
+ImageToImageInput(prompt: String, data: FileInput, seed: Int? = nil)
+ImageToVideoInput(prompt: String, data: FileInput, seed: Int? = nil)
+VideoToVideoInput(prompt: String, data: FileInput, seed: Int? = nil)
+
+// File input helpers
+FileInput.image(data: Data, filename: String = "image.jpg")
+FileInput.video(data: Data, filename: String = "video.mp4")
+FileInput.from(data: Data, uniformType: UTType?)
 ```
 
 ## Requirements
@@ -171,11 +267,12 @@ public enum ConnectionState {
 
 The SDK follows Swift best practices:
 
-- **Classes** with weak references for connection management
-- **Structs** for value types and configuration
+- **Value types** (structs) for configuration and data models
+- **Reference types** (classes) for connection management
 - **AsyncStream** for reactive event streams
 - **async/await** for asynchronous operations
-- **Error protocol** for proper Swift error handling
+- **Structured concurrency** with Task-based cancellation
+- **Type-safe protocols** for proper Swift error handling
 
 ## Dependencies
 
@@ -190,3 +287,4 @@ MIT License - see [LICENSE](LICENSE) for details.
 - [Decart Website](https://decart.ai)
 - [Platform](https://platform.decart.ai)
 - [Documentation](https://docs.platform.decart.ai)
+- [GitHub Issues](https://github.com/decartai/decart-ios/issues)
