@@ -27,7 +27,7 @@ extension URLSessionWebSocketTask {
 	}
 }
 
-class SocketStream: AsyncSequence {
+final class SocketStream: AsyncSequence, @unchecked Sendable {
 	typealias AsyncIterator = WebSocketStream.Iterator
 	typealias Element = URLSessionWebSocketTask.Message
 

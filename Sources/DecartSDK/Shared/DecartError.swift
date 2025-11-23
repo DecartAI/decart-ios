@@ -3,7 +3,7 @@ import Foundation
 public enum DecartError: Error {
 	case invalidAPIKey
 	case invalidBaseURL(String?)
-	case webRTCError(Error)
+	case webRTCError(String)
 	case processingError(String)
 	case invalidInput(String)
 	case invalidOptions(String)
@@ -21,7 +21,7 @@ public enum DecartError: Error {
 			}
 			return "Invalid base URL"
 		case .webRTCError(let error):
-			return "WebRTC error: \(error.localizedDescription)"
+			return "WebRTC error: \(error)"
 		case .processingError(let message):
 			return "Processing error: \(message)"
 		case .invalidInput(let message):
