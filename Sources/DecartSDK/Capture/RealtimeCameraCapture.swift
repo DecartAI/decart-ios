@@ -58,10 +58,10 @@ public enum RealtimeCameraCapture {
 	public static func switchCamera(
 		capturer: RTCCameraVideoCapturer,
 		realtimeClient: RealtimeClient,
-		currentPosition: AVCaptureDevice.Position
+		newPosition: AVCaptureDevice.Position
 	) async throws -> AVCaptureDevice.Position {
 		let currentRealtimeModel = realtimeClient.options.model
-		let newPosition: AVCaptureDevice.Position = currentPosition == .front ? .back : .front
+		let newPosition: AVCaptureDevice.Position = newPosition
 
 		let newDevice = try AVCaptureDevice.pickCamera(position: newPosition)
 		let format = try newDevice.pickFormat(

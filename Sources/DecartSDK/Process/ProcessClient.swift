@@ -28,8 +28,7 @@ public struct ProcessClient {
 				"orientation": input.orientation,
 			],
 			file: nil,
-			session: session
-		)
+			session: session)
 	}
 
 	/// Initializer for Text to Image models (e.g. lucy-pro-t2i)
@@ -54,8 +53,7 @@ public struct ProcessClient {
 				"orientation": input.orientation,
 			],
 			file: nil,
-			session: session
-		)
+			session: session)
 	}
 
 	/// Initializer for Image to Video models (e.g. lucy-pro-i2v)
@@ -79,8 +77,7 @@ public struct ProcessClient {
 				"resolution": input.resolution?.rawValue,
 			],
 			file: input.data,
-			session: session
-		)
+			session: session)
 	}
 
 	/// Initializer for Image to Image models (e.g. lucy-pro-i2i)
@@ -105,8 +102,7 @@ public struct ProcessClient {
 				"enhance_prompt": input.enhancePrompt,
 			],
 			file: input.data,
-			session: session
-		)
+			session: session)
 	}
 
 	/// Initializer for Video to Video models (e.g. lucy-pro-v2v)
@@ -132,8 +128,7 @@ public struct ProcessClient {
 				"num_inference_steps": input.numInferenceSteps,
 			],
 			file: input.data,
-			session: session
-		)
+			session: session)
 	}
 
 	// MARK: - Private Common Init
@@ -200,8 +195,9 @@ public struct ProcessClient {
 			throw DecartError.networkError(URLError(.badServerResponse))
 		}
 
-		guard (200...299).contains(httpResponse.statusCode) else {
+		guard (200 ... 299).contains(httpResponse.statusCode) else {
 			let errorText = String(data: data, encoding: .utf8) ?? "Unknown error"
+			DecartLogger.log("error processing request: \(errorText), for route: \(request.url?.absoluteString ?? "unknown"), and body: \(String(decoding: request.httpBody ?? Data(), as: UTF8.self))", level: .error)
 			throw DecartError.processingError(
 				"Processing failed: \(httpResponse.statusCode) - \(errorText)")
 		}

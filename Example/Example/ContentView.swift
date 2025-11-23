@@ -14,12 +14,8 @@ struct ContentView: View {
 			List {
 				Section(header: Text("Realtime")) {
 					ForEach(RealtimeModel.allCases, id: \.self) { model in
-						NavigationLink(
-							destination: RealtimeView(
-								realtimeModel: model
-							)
-						) {
-							Text("Realtime - \(model.rawValue.capitalized)")
+						NavigationLink("Realtime - \(model.rawValue.capitalized)") {
+							RealtimeView(realtimeModel: model)
 						}
 					}
 				}

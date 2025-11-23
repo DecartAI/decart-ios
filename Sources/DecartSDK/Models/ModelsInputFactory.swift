@@ -132,9 +132,9 @@ public struct TextToImageInput: Codable, Sendable {
 
 public struct ImageToVideoInput: Codable, Sendable {
 	public let prompt: String
-	public let data: FileInput  // We need to handle how this is serialized (e.g. multipart or base64)
+	public let data: FileInput // We need to handle how this is serialized (e.g. multipart or base64)
 	public let seed: Int?
-	public let resolution: ProResolution?  // Or separate structs for dev/pro if needed, but factory can handle types
+	public let resolution: ProResolution? // Or separate structs for dev/pro if needed, but factory can handle types
 
 	public init(
 		prompt: String,
@@ -175,7 +175,7 @@ public struct VideoToVideoInput: Codable, Sendable {
 	public let prompt: String
 	public let data: FileInput
 	public let seed: Int?
-	public let resolution: ProResolution?  // pro supports 480p/720p, dev supports 720p.
+	public let resolution: ProResolution? // pro supports 480p/720p, dev supports 720p.
 	public let enhancePrompt: Bool?
 	public let numInferenceSteps: Int?
 
@@ -196,7 +196,7 @@ public struct VideoToVideoInput: Codable, Sendable {
 	}
 }
 
-public enum ModelInputType {
+public enum ModelInputType: Sendable {
 	case textToVideo
 	case textToImage
 	case imageToVideo
@@ -204,7 +204,7 @@ public enum ModelInputType {
 	case videoToVideo
 }
 
-public enum ModelsInputFactory {
+public enum ModelsInputFactory: Sendable {
 	public static func videoInputType(for model: VideoModel) -> ModelInputType {
 		switch model {
 		case .lucy_pro_t2v:

@@ -56,14 +56,15 @@ final class DecartRealtimeManager: RealtimeManager {
 	}
 
 	func switchCamera() async {
-		guard let videoCapturer else {
+		print("switching camera to \(shouldMirror ? "back" : "front") camera")
+		guard let videoCapturer, let realtimeClient else {
 			preconditionFailure("🚨 videoCapturer is nil when switching camera")
 		}
 		do {
 			try await RealtimeCameraCapture.switchCamera(
 				capturer: videoCapturer,
-				realtimeClient: realtimeClient!,
-				currentPosition: shouldMirror ? .back : .front
+				realtimeClient: realtimeClient,
+				newPosition: shouldMirror ? .back : .front
 			)
 			shouldMirror.toggle()
 		} catch {
