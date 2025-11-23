@@ -63,6 +63,7 @@ public struct RTCMLVideoViewWrapper: UIViewRepresentable {
 	}
 
 	public static func dismantleUIView(_ uiView: RTCMTLVideoView, coordinator: Coordinator) {
+		print("dismissing video view and nilling track!")
 		coordinator.lastTrack?.remove(uiView)
 		coordinator.view = nil
 		coordinator.lastTrack = nil

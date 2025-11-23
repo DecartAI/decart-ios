@@ -1,0 +1,174 @@
+//
+//  VideoFetcher.swift
+//  Example
+//
+//  Created by Alon Bar-el on 23/11/2025.
+//
+import AVKit
+import DecartSDK
+import Factory
+import Foundation
+import Observation
+import PhotosUI
+import SwiftUI
+
+@MainActor
+@Observable
+final class VideoFetcher {
+    @ObservationIgnored
+    private let decartClient = Container.shared.decartClient()
+
+    private var generateVideoTask: Task<Void, Never>?
+
+    var prompt: String = ""
+    var generatedVideoURL: URL?
+    var videoPlayer: AVPlayer?
+    var isProcessing: Bool = false
+    var errorMessage: String?
+
+    func reset() {
+        prompt = ""
+
+        // Delete temporary video file if it exists
+        if let videoURL = generatedVideoURL {
+            try? FileManager.default.removeItem(at: videoURL)
+        }
+
+        generatedVideoURL = nil
+        errorMessage = nil
+        isProcessing = false
+        videoPlayer?.pause()
+        videoPlayer = nil
+        generateVideoTask?.cancel()
+        generateVideoTask = nil
+    }
+
+    func cancelGeneration() {
+        generateVideoTask?.cancel()
+        generateVideoTask = nil
+        videoPlayer?.pause()
+    }
+
+    func fetchVideo(model: VideoModel, inputType: ModelInputType, selectedItem: PhotosPickerItem?) {
+        let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPrompt.isEmpty else { return }
+
+        generateVideoTask?.cancel()
+        isProcessing = true
+        errorMessage = nil
+        generatedVideoURL = nil
+
+        generateVideoTask = Task { [weak self, selectedItem] in
+            if let videoURL = self?.generatedVideoURL {
+                try? FileManager.default.removeItem(at: videoURL)
+            }
+
+            await self?.generateVideo(
+                trimmedPrompt: trimmedPrompt,
+                model: model,
+                inputType: inputType,
+                selectedItem: selectedItem
+            )
+        }
+    }
+
+    private func generateVideo(
+        trimmedPrompt: String,
+        model: VideoModel,
+        inputType: ModelInputType,
+        selectedItem: PhotosPickerItem?
+    ) async {
+        defer {
+            isProcessing = false
+        }
+
+        do {
+            let processClient = try await buildProcessClient(
+                prompt: trimmedPrompt,
+                model: model,
+                inputType: inputType,
+                selectedItem: selectedItem
+            )
+            guard !Task.isCancelled else { return }
+
+            let data = try await processClient.process()
+            let tempURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension("mp4")
+            try data.write(to: tempURL, options: .atomic)
+
+            if Task.isCancelled {
+                return
+            }
+
+            videoPlayer?.pause()
+            generatedVideoURL = tempURL
+            videoPlayer = AVPlayer(url: tempURL)
+        } catch {
+            if Task.isCancelled {
+                return
+            }
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func buildProcessClient(
+        prompt: String,
+        model: VideoModel,
+        inputType: ModelInputType,
+        selectedItem: PhotosPickerItem?
+    ) async throws -> ProcessClient {
+        switch inputType {
+        case .textToVideo:
+            let input = TextToVideoInput(prompt: prompt)
+            return try decartClient.createProcessClient(model: model, input: input)
+
+        case .imageToVideo:
+            let fileInput = try await fileInput(from: selectedItem, requiresVideo: false)
+            let input = ImageToVideoInput(prompt: prompt, data: fileInput)
+            return try decartClient.createProcessClient(model: model, input: input)
+
+        case .videoToVideo:
+            let fileInput = try await fileInput(from: selectedItem, requiresVideo: true)
+            let input = VideoToVideoInput(prompt: prompt, data: fileInput)
+            return try decartClient.createProcessClient(model: model, input: input)
+
+        default:
+            throw DecartError.invalidInput("Unsupported input type")
+        }
+    }
+
+    private func fileInput(from item: PhotosPickerItem?, requiresVideo: Bool) async throws
+        -> FileInput
+    {
+        guard let item else {
+            throw DecartError.invalidInput(
+                requiresVideo ? "Please attach a video first" : "Please attach an image first"
+            )
+        }
+
+        guard let data = try await item.loadTransferable(type: Data.self) else {
+            throw DecartError.invalidInput("Failed to load selected media")
+        }
+
+        guard let mediaType = resolveMediaType(for: item) else {
+            throw DecartError.invalidInput("Unsupported media type")
+        }
+
+        if requiresVideo && mediaType.conforms(to: .video) == false {
+            throw DecartError.invalidInput("Please attach a video file")
+        }
+
+        if !requiresVideo && mediaType.conforms(to: .image) == false {
+            throw DecartError.invalidInput("Please attach an image file")
+        }
+
+        return try FileInput.from(data: data, uniformType: mediaType)
+    }
+
+    private func resolveMediaType(for item: PhotosPickerItem) -> UTType? {
+        item.supportedContentTypes.first(where: {
+            $0.conforms(to: .video) || $0.conforms(to: .image)
+        }) ?? item.supportedContentTypes.first
+    }
+}

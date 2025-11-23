@@ -147,10 +147,8 @@ struct RealtimeView: View {
 				.cornerRadius(16)
 				.padding(.all, 5)
 				.onDisappear {
-					// Capture viewModel to ensure cleanup runs even if view is deallocated
-					let vm = realtimeManager
-					Task {
-						await vm.cleanup()
+					Task { [realtimeManager] in
+						await realtimeManager.cleanup()
 					}
 				}
 			}

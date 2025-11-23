@@ -6,21 +6,16 @@
 //
 
 import DecartSDK
-import Factory
+import Observation
 import PhotosUI
 import SwiftUI
 
 struct GenerateImageView: View {
 	let model: ImageModel
 
-	@Injected(\.decartClient) private var decartClient
-
-	@State private var prompt: String = ""
+	@State private var imageFetcher = ImageFetcher()
 	@State private var selectedItem: PhotosPickerItem?
 	@State private var selectedImagePreview: UIImage?
-	@State private var generatedImage: UIImage?
-	@State private var isProcessing = false
-	@State private var errorMessage: String?
 	@FocusState private var promptFocused: Bool
 
 	private var inputType: ModelInputType {
@@ -32,9 +27,9 @@ struct GenerateImageView: View {
 	}
 
 	private var canSend: Bool {
-		let hasPrompt = !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+		let hasPrompt = !imageFetcher.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 		let hasReference = !requiresReference || selectedItem != nil
-		return hasPrompt && hasReference && !isProcessing
+		return hasPrompt && hasReference && !imageFetcher.isProcessing
 	}
 
 	var body: some View {
@@ -61,7 +56,7 @@ struct GenerateImageView: View {
 
 	private var resultSection: some View {
 		VStack(spacing: 12) {
-			if let image = generatedImage {
+			if let image = imageFetcher.generatedImage {
 				Image(uiImage: image)
 					.resizable()
 					.scaledToFit()
@@ -71,7 +66,7 @@ struct GenerateImageView: View {
 					UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
 				}
 				.font(.footnote.weight(.semibold))
-			} else if isProcessing {
+			} else if imageFetcher.isProcessing {
 				ProgressView("Generating...")
 					.progressViewStyle(.circular)
 					.padding()
@@ -88,7 +83,7 @@ struct GenerateImageView: View {
 				.padding(.vertical, 24)
 			}
 
-			if let errorMessage {
+			if let errorMessage = imageFetcher.errorMessage {
 				Text(errorMessage)
 					.font(.caption)
 					.foregroundStyle(.red)
@@ -117,10 +112,10 @@ struct GenerateImageView: View {
 				}
 			}
 
-			TextField("Enter prompt…", text: $prompt, axis: .vertical)
-				.lineLimit(1 ... 3)
+			TextField("Enter prompt…", text: $imageFetcher.prompt, axis: .vertical)
+				.lineLimit(1...3)
 				.textFieldStyle(.roundedBorder)
-				.disabled(isProcessing)
+				.disabled(imageFetcher.isProcessing)
 				.focused($promptFocused)
 
 			HStack(spacing: 12) {
@@ -158,73 +153,23 @@ struct GenerateImageView: View {
 	}
 
 	private func generate() {
-		let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !trimmedPrompt.isEmpty else { return }
 		dismissKeyboard()
-
-		isProcessing = true
-		errorMessage = nil
-		generatedImage = nil
-
 		Task {
-			do {
-				let processClient: ProcessClient
-				switch inputType {
-				case .textToImage:
-					let input = TextToImageInput(prompt: trimmedPrompt)
-					processClient = try decartClient.createProcessClient(
-						model: model,
-						input: input
-					)
-
-				case .imageToImage:
-					let selectedImageData = try? await selectedItem?.loadTransferable(
-						type: Data.self
-					)
-					guard let data = selectedImageData else {
-						throw DecartError.invalidInput("Please select an image first")
-					}
-
-					let fileInput = FileInput.image(
-						data: data,
-						filename: "reference.jpg"
-					)
-					let input = ImageToImageInput(prompt: trimmedPrompt, data: fileInput)
-					processClient = try decartClient.createProcessClient(
-						model: model,
-						input: input
-					)
-
-				default:
-					throw DecartError.invalidInput("Unsupported input type")
-				}
-
-				let data = try await processClient.process()
-				if let image = UIImage(data: data) {
-					await MainActor.run {
-						generatedImage = image
-					}
-				} else {
-					await MainActor.run {
-						errorMessage = "Failed to decode image data"
-					}
-				}
-			} catch {
-				await MainActor.run {
-					errorMessage = error.localizedDescription
-				}
+			guard let selectedItem else {
+				return
 			}
-
-			await MainActor.run {
-				isProcessing = false
-				dismissKeyboard()
-			}
+			await imageFetcher.fetchImage(
+				model: model,
+				inputType: inputType,
+				selectedItem: selectedItem
+			)
 		}
 	}
 
 	private func clearAttachment() {
 		selectedItem = nil
 		selectedImagePreview = nil
+		imageFetcher.reset()
 		dismissKeyboard()
 	}
 
