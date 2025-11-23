@@ -18,10 +18,10 @@ struct GenerateImageView: View {
 	@State private var prompt: String = ""
 	@State private var selectedItem: PhotosPickerItem?
 	@State private var selectedImagePreview: UIImage?
-	@State private var selectedImageData: Data?
 	@State private var generatedImage: UIImage?
 	@State private var isProcessing = false
 	@State private var errorMessage: String?
+	@FocusState private var promptFocused: Bool
 
 	private var inputType: ModelInputType {
 		ModelsInputFactory.imageInputType(for: model)
@@ -33,7 +33,7 @@ struct GenerateImageView: View {
 
 	private var canSend: Bool {
 		let hasPrompt = !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-		let hasReference = !requiresReference || selectedImageData != nil
+		let hasReference = !requiresReference || selectedItem != nil
 		return hasPrompt && hasReference && !isProcessing
 	}
 
@@ -43,6 +43,10 @@ struct GenerateImageView: View {
 				resultSection
 					.padding(.horizontal)
 					.padding(.top)
+			}
+			.contentShape(Rectangle())
+			.onTapGesture {
+				dismissKeyboard()
 			}
 
 			Divider()
@@ -114,17 +118,15 @@ struct GenerateImageView: View {
 			}
 
 			TextField("Enter prompt…", text: $prompt, axis: .vertical)
-				.lineLimit(1...3)
+				.lineLimit(1 ... 3)
 				.textFieldStyle(.roundedBorder)
 				.disabled(isProcessing)
+				.focused($promptFocused)
 
 			HStack(spacing: 12) {
 				if requiresReference {
 					PhotosPicker(selection: $selectedItem, matching: .images) {
 						Label("Reference", systemImage: "photo")
-					}
-					.onChange(of: selectedItem) { newItem in
-						loadSelectedImage(from: newItem)
 					}
 				}
 
@@ -139,28 +141,17 @@ struct GenerateImageView: View {
 				}
 				.disabled(!canSend)
 			}
-		}
-	}
-
-	private func loadSelectedImage(from item: PhotosPickerItem?) {
-		guard let item else {
-			clearAttachment()
-			return
-		}
-
-		Task {
-			do {
-				if let data = try await item.loadTransferable(type: Data.self),
-					let image = UIImage(data: data)
-				{
-					await MainActor.run {
-						selectedImageData = data
-						selectedImagePreview = image
-					}
-				}
-			} catch {
-				await MainActor.run {
-					errorMessage = error.localizedDescription
+		}.onChange(of: selectedItem) {
+			guard let selectedItem else {
+				selectedImagePreview = nil
+				return
+			}
+			Task {
+				let imagePreview = try? await selectedItem.loadTransferable(
+					type: Data.self
+				)
+				if let uiImage = UIImage(data: imagePreview ?? Data()) {
+					selectedImagePreview = uiImage
 				}
 			}
 		}
@@ -169,6 +160,7 @@ struct GenerateImageView: View {
 	private func generate() {
 		let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard !trimmedPrompt.isEmpty else { return }
+		dismissKeyboard()
 
 		isProcessing = true
 		errorMessage = nil
@@ -177,7 +169,6 @@ struct GenerateImageView: View {
 		Task {
 			do {
 				let processClient: ProcessClient
-
 				switch inputType {
 				case .textToImage:
 					let input = TextToImageInput(prompt: trimmedPrompt)
@@ -187,12 +178,15 @@ struct GenerateImageView: View {
 					)
 
 				case .imageToImage:
+					let selectedImageData = try? await selectedItem?.loadTransferable(
+						type: Data.self
+					)
 					guard let data = selectedImageData else {
 						throw DecartError.invalidInput("Please select an image first")
 					}
 
-					let fileInput = makeFileInput(
-						from: data,
+					let fileInput = FileInput.image(
+						data: data,
 						filename: "reference.jpg"
 					)
 					let input = ImageToImageInput(prompt: trimmedPrompt, data: fileInput)
@@ -223,21 +217,21 @@ struct GenerateImageView: View {
 
 			await MainActor.run {
 				isProcessing = false
+				dismissKeyboard()
 			}
 		}
 	}
 
-	private func makeFileInput(from data: Data, filename: String) -> FileInput {
-		let sanitizedName = (filename as NSString).lastPathComponent
-		let hasExtension = !(sanitizedName as NSString).pathExtension.isEmpty
-		let finalName = hasExtension ? sanitizedName : "\(sanitizedName).dat"
-		return FileInput(data: data, filename: finalName)
-	}
-
 	private func clearAttachment() {
 		selectedItem = nil
-		selectedImageData = nil
 		selectedImagePreview = nil
+		dismissKeyboard()
+	}
+
+	private func dismissKeyboard() {
+		withAnimation(.linear(duration: 0.5)) {
+			promptFocused = false
+		}
 	}
 }
 

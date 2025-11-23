@@ -5,6 +5,7 @@
 //  Created by Alon Bar-el on 23/11/2025.
 //
 
+import AVFoundation
 import AVKit
 import DecartSDK
 import Factory
@@ -19,11 +20,13 @@ struct GenerateVideoView: View {
 
 	@State private var prompt: String = ""
 	@State private var selectedItem: PhotosPickerItem?
-	@State private var selectedMediaData: Data?
+	@State private var selectedMediaPreview: UIImage?
 	@State private var selectedMediaType: UTType?
 	@State private var generatedVideoURL: URL?
+	@State private var videoPlayer: AVPlayer?
 	@State private var isProcessing = false
 	@State private var errorMessage: String?
+	@FocusState private var promptFocused: Bool
 
 	private var trimmedPrompt: String {
 		prompt.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -39,7 +42,7 @@ struct GenerateVideoView: View {
 
 	private var canSend: Bool {
 		let hasPrompt = !trimmedPrompt.isEmpty
-		let hasAttachment = !requiresAttachment || selectedMediaData != nil
+		let hasAttachment = !requiresAttachment || selectedItem != nil
 		return hasPrompt && hasAttachment && !isProcessing
 	}
 
@@ -56,11 +59,14 @@ struct GenerateVideoView: View {
 
 	var body: some View {
 		VStack(spacing: 16) {
-			ScrollView {
-				resultSection
-					.padding(.horizontal)
-					.padding(.top)
-			}
+			resultSection
+				.padding(.horizontal)
+				.padding(.top)
+				.contentShape(Rectangle())
+				.onTapGesture {
+					dismissKeyboard()
+				}
+			Spacer()
 
 			Divider()
 
@@ -74,9 +80,15 @@ struct GenerateVideoView: View {
 
 	private var resultSection: some View {
 		VStack(spacing: 12) {
-			if let url = generatedVideoURL {
-				VideoPlayer(player: AVPlayer(url: url))
-					.frame(height: 280)
+			if let player = videoPlayer {
+				VideoPlayer(player: player)
+					.onAppear {
+						Task {
+							try? await Task.sleep(for: .milliseconds(500))  // or .seconds(0.5) [web:15][web:18][web:21]
+							player.play()
+						}
+					}
+					.frame(height: 380)
 					.cornerRadius(12)
 					.shadow(radius: 4)
 			} else if isProcessing {
@@ -88,11 +100,11 @@ struct GenerateVideoView: View {
 					systemImage: "video.badge.plus",
 					description: Text(
 						requiresAttachment
-							? "Describe your clip and attach a reference."
+							? "Describe your clip and attach a reference media."
 							: "Describe the motion you'd like."
 					)
 				)
-				.padding(.vertical, 24)
+				.padding(.vertical, 14)
 			}
 
 			if let errorMessage {
@@ -105,14 +117,15 @@ struct GenerateVideoView: View {
 
 	private var inputSection: some View {
 		VStack(spacing: 12) {
-			if let preview = selectedMediaData {
-				attachmentPreview(data: preview)
+			if selectedItem != nil {
+				attachmentPreview()
 			}
 
 			TextField("Enter prompt…", text: $prompt, axis: .vertical)
-				.lineLimit(1 ... 3)
+				.lineLimit(1...3)
 				.textFieldStyle(.roundedBorder)
 				.disabled(isProcessing)
+				.focused($promptFocused)
 
 			HStack(spacing: 12) {
 				if requiresAttachment {
@@ -120,7 +133,7 @@ struct GenerateVideoView: View {
 						Label("Attach", systemImage: "paperclip")
 					}
 					.onChange(of: selectedItem) { newItem in
-						loadSelectedMedia(from: newItem)
+						handleSelectionChange(newItem)
 					}
 				}
 
@@ -138,9 +151,9 @@ struct GenerateVideoView: View {
 		}
 	}
 
-	func attachmentPreview(data: Data) -> some View {
+	func attachmentPreview() -> some View {
 		return HStack {
-			if selectedMediaType?.conforms(to: .image) == true, let image = UIImage(data: data) {
+			if let image = selectedMediaPreview {
 				Image(uiImage: image)
 					.resizable()
 					.scaledToFill()
@@ -169,35 +182,48 @@ struct GenerateVideoView: View {
 		}
 	}
 
-	private func loadSelectedMedia(from item: PhotosPickerItem?) {
+	private func handleSelectionChange(_ item: PhotosPickerItem?) {
 		guard let item else {
-			clearAttachment()
+			selectedMediaPreview = nil
+			selectedMediaType = nil
 			return
 		}
 
 		Task {
-			do {
-				if let data = try await item.loadTransferable(type: Data.self) {
-					let type =
-						item.supportedContentTypes.first(where: { $0.conforms(to: .video) || $0.conforms(to: .image) })
-							?? item.supportedContentTypes.first
+			let resolvedType =
+				item.supportedContentTypes.first(where: {
+					$0.conforms(to: .video) || $0.conforms(to: .image)
+				}) ?? item.supportedContentTypes.first
 
-					await MainActor.run {
-						selectedMediaData = data
-						selectedMediaType = type
-					}
-				}
-			} catch {
-				await MainActor.run {
-					errorMessage = error.localizedDescription
-				}
+			var previewImage: UIImage?
+			if resolvedType?.conforms(to: .image) == true,
+				let data = try? await item.loadTransferable(type: Data.self),
+				let image = UIImage(data: data)
+			{
+				previewImage = image
+			}
+
+			await MainActor.run {
+				selectedMediaType = resolvedType
+				selectedMediaPreview = previewImage
 			}
 		}
+	}
+
+	private func resolveMediaType(for item: PhotosPickerItem) -> UTType? {
+		if let storedType = selectedMediaType {
+			return storedType
+		}
+
+		return item.supportedContentTypes.first(where: {
+			$0.conforms(to: .video) || $0.conforms(to: .image)
+		}) ?? item.supportedContentTypes.first
 	}
 
 	private func generate() {
 		let promptText = trimmedPrompt
 		guard !promptText.isEmpty else { return }
+		dismissKeyboard()
 
 		isProcessing = true
 		errorMessage = nil
@@ -213,18 +239,36 @@ struct GenerateVideoView: View {
 					processClient = try decartClient.createProcessClient(model: model, input: input)
 
 				case .imageToVideo:
-					guard let data = selectedMediaData else {
+					guard let selection = selectedItem else {
 						throw DecartError.invalidInput("Please attach an image first")
 					}
-					let fileInput = makeFileInput(from: data, type: selectedMediaType)
+					guard let data = try await selection.loadTransferable(type: Data.self) else {
+						throw DecartError.invalidInput("Failed to load selected image")
+					}
+					guard let mediaType = resolveMediaType(for: selection) else {
+						throw DecartError.invalidInput("Unsupported media type")
+					}
+					let fileInput = try FileInput.from(
+						data: data,
+						uniformType: mediaType
+					)
 					let input = ImageToVideoInput(prompt: promptText, data: fileInput)
 					processClient = try decartClient.createProcessClient(model: model, input: input)
 
 				case .videoToVideo:
-					guard let data = selectedMediaData else {
+					guard let selection = selectedItem else {
 						throw DecartError.invalidInput("Please attach a video first")
 					}
-					let fileInput = makeFileInput(from: data, type: selectedMediaType)
+					guard let data = try await selection.loadTransferable(type: Data.self) else {
+						throw DecartError.invalidInput("Failed to load selected video")
+					}
+					guard let mediaType = resolveMediaType(for: selection) else {
+						throw DecartError.invalidInput("Unsupported media type")
+					}
+					let fileInput = try FileInput.from(
+						data: data,
+						uniformType: mediaType
+					)
 					let input = VideoToVideoInput(prompt: promptText, data: fileInput)
 					processClient = try decartClient.createProcessClient(model: model, input: input)
 
@@ -240,6 +284,8 @@ struct GenerateVideoView: View {
 
 				await MainActor.run {
 					generatedVideoURL = tempURL
+					let player = AVPlayer(url: tempURL)
+					videoPlayer = player
 				}
 			} catch {
 				await MainActor.run {
@@ -249,30 +295,22 @@ struct GenerateVideoView: View {
 
 			await MainActor.run {
 				isProcessing = false
+				dismissKeyboard()
 			}
 		}
 	}
 
-	private func makeFileInput(from data: Data, type: UTType?) -> FileInput {
-		let ext: String
-		if let preferred = type?.preferredFilenameExtension, !preferred.isEmpty {
-			ext = preferred
-		} else if type?.conforms(to: .image) == true {
-			ext = "jpg"
-		} else if type?.conforms(to: .video) == true {
-			ext = "mp4"
-		} else {
-			ext = "bin"
-		}
-
-		let filename = "attachment.\(ext)"
-		return FileInput(data: data, filename: filename)
-	}
-
 	private func clearAttachment() {
 		selectedItem = nil
-		selectedMediaData = nil
+		selectedMediaPreview = nil
 		selectedMediaType = nil
+		dismissKeyboard()
+	}
+
+	private func dismissKeyboard() {
+		withAnimation(.linear(duration: 0.5)) {
+			promptFocused = false
+		}
 	}
 }
 

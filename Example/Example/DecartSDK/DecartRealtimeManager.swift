@@ -49,7 +49,7 @@ final class DecartRealtimeManager: RealtimeManager {
 
 	init(
 		currentPrompt: Prompt,
-		isMirroringEnabled: Bool = false
+		isMirroringEnabled: Bool = true // since the initial camera is the front facing one
 	) {
 		self.currentPrompt = currentPrompt
 		self.shouldMirror = isMirroringEnabled

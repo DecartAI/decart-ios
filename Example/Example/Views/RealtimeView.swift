@@ -31,8 +31,10 @@ struct RealtimeView: View {
 	var body: some View {
 		ZStack {
 			if realtimeManager.remoteMediaStreams != nil {
+				// we listen to shouldMirror here since the demo reflects the user camera.
 				RTCMLVideoViewWrapper(
-					track: realtimeManager.remoteMediaStreams?.videoTrack
+					track: realtimeManager.remoteMediaStreams?.videoTrack,
+					mirror: realtimeManager.shouldMirror
 				)
 				.background(Color.black)
 				.edgesIgnoringSafeArea(.all)
@@ -56,7 +58,9 @@ struct RealtimeView: View {
 				Spacer()
 
 				// Local video preview
-				if realtimeManager.connectionState.isInSession, realtimeManager.localMediaStream != nil {
+				if realtimeManager.connectionState.isInSession,
+				   realtimeManager.localMediaStream != nil
+				{
 					DraggableRTCVideoView(
 						track: realtimeManager.localMediaStream!.videoTrack,
 						mirror: realtimeManager.shouldMirror
@@ -90,7 +94,8 @@ struct RealtimeView: View {
 								.foregroundColor(.white)
 								.padding(12)
 								.background(
-									realtimeManager.connectionState.isConnected ? Color.blue : Color.gray
+									realtimeManager.connectionState.isConnected
+										? Color.blue : Color.gray
 								)
 								.cornerRadius(8)
 						}
@@ -130,7 +135,8 @@ struct RealtimeView: View {
 							.frame(maxWidth: .infinity)
 							.padding()
 							.background(
-								realtimeManager.connectionState.isConnected ? Color.red : Color.green
+								realtimeManager.connectionState.isConnected
+									? Color.red : Color.green
 							)
 							.cornerRadius(12)
 						}
