@@ -8,7 +8,7 @@ on:
 jobs:
     release:
         name: Create Release
-        runs-on: macos-14
+        runs-on: macos-15
 
         permissions:
             contents: write
@@ -18,7 +18,7 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Select Xcode
-              run: sudo xcode-select -s /Applications/Xcode_15.0.app
+              run: sudo xcode-select -s /Applications/Xcode_16.2.app
 
             - name: Build Release
               run: swift build -c release

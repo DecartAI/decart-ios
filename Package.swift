@@ -5,7 +5,7 @@ let package = Package(
 	name: "DecartSDK",
 	platforms: [
 		.iOS(.v17),
-		.macOS(.v12),
+		.macOS(.v12)
 	],
 	products: [
 		.library(
