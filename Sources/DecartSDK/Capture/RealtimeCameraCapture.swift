@@ -7,19 +7,17 @@
 import AVFoundation
 import WebRTC
 
+#if !targetEnvironment(simulator)
 public enum RealtimeCameraCapture {
 	public static func captureLocalCameraStream(realtimeClient: RealtimeClient, cameraFacing: AVCaptureDevice.Position) async throws -> (
 		RealtimeMediaStream,
 		RTCCameraVideoCapturer
 	) {
 		let currentRealtimeModel = realtimeClient.options.model
-		#if targetEnvironment(simulator)
-		throw CameraError.simulatorUnsupported
-		#else
 		// 1) Source & capturer
 		let videoSource = realtimeClient.createVideoSource()
 		let capturer = RTCCameraVideoCapturer(delegate: videoSource)
-		#endif
+
 		let device = try AVCaptureDevice.pickCamera(position: cameraFacing)
 		let format = try device.pickFormat(
 			minWidth: currentRealtimeModel.width,
@@ -80,3 +78,4 @@ public enum RealtimeCameraCapture {
 		return newPosition
 	}
 }
+#endif
