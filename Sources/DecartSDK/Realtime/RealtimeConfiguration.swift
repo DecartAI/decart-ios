@@ -35,7 +35,7 @@ public struct RealtimeConfiguration: Sendable {
 
 		public init(
 			iceServers: [String] = ["stun:stun.l.google.com:19302"],
-			connectionTimeout: Int32 = 1000,
+			connectionTimeout: Int32 = 7000,
 			pingInterval: Int32 = 2000
 		) {
 			self.iceServers = iceServers
@@ -49,7 +49,7 @@ public struct RealtimeConfiguration: Sendable {
 			config.sdpSemantics = .unifiedPlan
 			config.continualGatheringPolicy = .gatherContinually
 			config.iceConnectionReceivingTimeout = connectionTimeout
-			config.iceBackupCandidatePairPingInterval = pingInterval
+//			config.iceBackupCandidatePairPingInterval = pingInterval
 			return config
 		}
 	}
@@ -84,8 +84,8 @@ public struct RealtimeConfiguration: Sendable {
 
 		public init(
 			maxBitrate: Int = 3_800_000,
-			minBitrate: Int = 800_000,
-			maxFramerate: Int = 30,
+			minBitrate: Int = 100_000,
+			maxFramerate: Int = 26,
 			preferredCodec: String = "VP8"
 		) {
 			self.maxBitrate = maxBitrate
@@ -94,7 +94,6 @@ public struct RealtimeConfiguration: Sendable {
 			self.preferredCodec = preferredCodec
 		}
 
-		@MainActor
 		public func configure(transceiver: RTCRtpTransceiver, factory: RTCPeerConnectionFactory) {
 			let supportedCodecs = factory.rtpSenderCapabilities(forKind: "video").codecs
 
