@@ -120,17 +120,17 @@ final class VideoFetcher {
     ) async throws -> ProcessClient {
         switch inputType {
         case .textToVideo:
-            let input = TextToVideoInput(prompt: prompt)
+            let input = try TextToVideoInput(prompt: prompt)
             return try decartClient.createProcessClient(model: model, input: input)
 
         case .imageToVideo:
-            let fileInput = try await fileInput(from: selectedItem, requiresVideo: false)
-            let input = ImageToVideoInput(prompt: prompt, data: fileInput)
+            let fileInput = try await loadFileInput(from: selectedItem)
+            let input = try ImageToVideoInput(prompt: prompt, data: fileInput)
             return try decartClient.createProcessClient(model: model, input: input)
 
         case .videoToVideo:
-            let fileInput = try await fileInput(from: selectedItem, requiresVideo: true)
-            let input = VideoToVideoInput(prompt: prompt, data: fileInput)
+            let fileInput = try await loadFileInput(from: selectedItem)
+            let input = try VideoToVideoInput(prompt: prompt, data: fileInput)
             return try decartClient.createProcessClient(model: model, input: input)
 
         default:
@@ -138,37 +138,19 @@ final class VideoFetcher {
         }
     }
 
-    private func fileInput(from item: PhotosPickerItem?, requiresVideo: Bool) async throws
-        -> FileInput
-    {
+    private func loadFileInput(from item: PhotosPickerItem?) async throws -> FileInput {
         guard let item else {
-            throw DecartError.invalidInput(
-                requiresVideo ? "Please attach a video first" : "Please attach an image first"
-            )
+            throw DecartError.invalidInput("No media selected")
         }
 
         guard let data = try await item.loadTransferable(type: Data.self) else {
             throw DecartError.invalidInput("Failed to load selected media")
         }
 
-        guard let mediaType = resolveMediaType(for: item) else {
-            throw DecartError.invalidInput("Unsupported media type")
-        }
-
-        if requiresVideo && mediaType.conforms(to: .video) == false {
-            throw DecartError.invalidInput("Please attach a video file")
-        }
-
-        if !requiresVideo && mediaType.conforms(to: .image) == false {
-            throw DecartError.invalidInput("Please attach an image file")
-        }
+        let mediaType = item.supportedContentTypes.first(where: {
+            $0.conforms(to: .movie) || $0.conforms(to: .video) || $0.conforms(to: .image)
+        })
 
         return try FileInput.from(data: data, uniformType: mediaType)
-    }
-
-    private func resolveMediaType(for item: PhotosPickerItem) -> UTType? {
-        item.supportedContentTypes.first(where: {
-            $0.conforms(to: .video) || $0.conforms(to: .image)
-        }) ?? item.supportedContentTypes.first
     }
 }

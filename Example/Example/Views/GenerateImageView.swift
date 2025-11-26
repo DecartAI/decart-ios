@@ -155,14 +155,20 @@ struct GenerateImageView: View {
 	private func generate() {
 		dismissKeyboard()
 		Task {
-			guard let selectedItem else {
-				return
+			if requiresReference {
+				guard let selectedItem else { return }
+				await imageFetcher.fetchImage(
+					model: model,
+					inputType: inputType,
+					selectedItem: selectedItem
+				)
+			} else {
+				await imageFetcher.fetchImage(
+					model: model,
+					inputType: inputType,
+					selectedItem: nil
+				)
 			}
-			await imageFetcher.fetchImage(
-				model: model,
-				inputType: inputType,
-				selectedItem: selectedItem
-			)
 		}
 	}
 

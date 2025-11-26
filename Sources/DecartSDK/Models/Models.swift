@@ -18,7 +18,7 @@ public enum ImageModel: String, CaseIterable {
 
 public enum VideoModel: String, CaseIterable {
 	case lucy_dev_i2v = "lucy-dev-i2v"
-	case lucy_dev_v2v = "lucy-dev-v2v"
+	case lucy_fast_v2v = "lucy-fast-v2v"
 	case lucy_pro_t2v = "lucy-pro-t2v"
 	case lucy_pro_i2v = "lucy-pro-i2v"
 	case lucy_pro_v2v = "lucy-pro-v2v"
@@ -85,10 +85,10 @@ public enum Models {
 				width: 1280,
 				height: 704
 			)
-		case .lucy_dev_v2v:
+		case .lucy_fast_v2v:
 			return ModelDefinition(
-				name: "lucy-dev-v2v",
-				urlPath: "/v1/generate/lucy-dev-v2v",
+				name: "lucy-fast-v2v",
+				urlPath: "/v1/generate/lucy-fast-v2v",
 				fps: 25,
 				width: 1280,
 				height: 704

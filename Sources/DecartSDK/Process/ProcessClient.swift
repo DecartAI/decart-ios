@@ -197,7 +197,7 @@ public struct ProcessClient: Sendable {
 
 		guard (200 ... 299).contains(httpResponse.statusCode) else {
 			let errorText = String(data: data, encoding: .utf8) ?? "Unknown error"
-			DecartLogger.log("error processing request: \(errorText), for route: \(request.url?.absoluteString ?? "unknown"), and body: \(String(decoding: request.httpBody ?? Data(), as: UTF8.self))", level: .error)
+			DecartLogger.log("error processing request: \(errorText), for route: \(request.url?.absoluteString ?? "unknown"), and body:", level: .error)
 			throw DecartError.processingError(
 				"Processing failed: \(httpResponse.statusCode) - \(errorText)")
 		}

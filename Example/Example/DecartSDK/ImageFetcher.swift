@@ -30,12 +30,9 @@ final class ImageFetcher {
 		isProcessing = false
 	}
 
-	func fetchImage(model: ImageModel, inputType: ModelInputType, selectedItem: PhotosPickerItem)
+	func fetchImage(model: ImageModel, inputType: ModelInputType, selectedItem: PhotosPickerItem?)
 		async
 	{
-		let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !trimmedPrompt.isEmpty else { return }
-
 		isProcessing = true
 		errorMessage = nil
 		generatedImage = nil
@@ -49,23 +46,21 @@ final class ImageFetcher {
 
 			switch inputType {
 			case .textToImage:
-				let input = TextToImageInput(prompt: trimmedPrompt)
+				let input = try TextToImageInput(prompt: prompt)
 				processClient = try decartClient.createProcessClient(
 					model: model,
 					input: input
 				)
 
 			case .imageToImage:
-				guard let referenceData = try await selectedItem.loadTransferable(type: Data.self)
+				guard let selectedItem,
+					  let referenceData = try await selectedItem.loadTransferable(type: Data.self)
 				else {
-					throw DecartError.invalidInput("Failed to load the selected image")
+					throw DecartError.invalidInput("No image selected")
 				}
 
-				let fileInput = FileInput.image(
-					data: referenceData,
-					filename: "reference.jpg"
-				)
-				let input = ImageToImageInput(prompt: trimmedPrompt, data: fileInput)
+				let fileInput = try FileInput.image(data: referenceData)
+				let input = try ImageToImageInput(prompt: prompt, data: fileInput)
 				processClient = try decartClient.createProcessClient(
 					model: model,
 					input: input

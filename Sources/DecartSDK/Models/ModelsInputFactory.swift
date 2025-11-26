@@ -10,60 +10,92 @@ public enum DevResolution: String, Codable, Sendable {
 	case res720p = "720p"
 }
 
-public enum FileInputError: Error, LocalizedError {
-	case missingType
-	case unsupportedType
+public enum InputValidationError: LocalizedError {
+	case emptyPrompt
+	case emptyFileData
+	case expectedImage
+	case expectedVideo
+	case unsupportedMediaType
 
 	public var errorDescription: String? {
 		switch self {
-		case .missingType:
-			return "Unable to determine the media type. Only image and video files are supported."
-		case .unsupportedType:
-			return "Unsupported media type. Only image and video files are supported."
+		case .emptyPrompt:
+			return "Prompt cannot be empty"
+		case .emptyFileData:
+			return "File data cannot be empty"
+		case .expectedImage:
+			return "Expected an image file"
+		case .expectedVideo:
+			return "Expected a video file"
+		case .unsupportedMediaType:
+			return "Unsupported media type. Only image and video files are supported"
 		}
 	}
+}
+
+public enum MediaType: Sendable {
+	case image
+	case video
 }
 
 public struct FileInput: Codable, Sendable {
 	public let data: Data
 	public let filename: String
+	public let mediaType: MediaType
 
-	public init(data: Data, filename: String) {
+	private enum CodingKeys: String, CodingKey {
+		case data, filename
+	}
+
+	public init(from decoder: Decoder) throws {
+		let container = try decoder.container(keyedBy: CodingKeys.self)
+		self.data = try container.decode(Data.self, forKey: .data)
+		self.filename = try container.decode(String.self, forKey: .filename)
+		self.mediaType = FileInput.inferMediaType(from: filename)
+	}
+
+	public func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: CodingKeys.self)
+		try container.encode(data, forKey: .data)
+		try container.encode(filename, forKey: .filename)
+	}
+
+	private init(data: Data, filename: String, mediaType: MediaType) {
 		self.data = data
-		self.filename = FileInput.ensureExtension(
-			for: filename,
-			defaultExtension: FileInput.defaultExtension(forFilename: filename)
+		self.filename = filename
+		self.mediaType = mediaType
+	}
+
+	public static func image(data: Data, filename: String = "image.jpg") throws -> FileInput {
+		guard !data.isEmpty else { throw InputValidationError.emptyFileData }
+		return FileInput(
+			data: data,
+			filename: ensureExtension(for: filename, defaultExtension: "jpg"),
+			mediaType: .image
 		)
 	}
 
-	public static func image(data: Data, filename: String = "image.jpg") -> FileInput {
-		FileInput(
+	public static func video(data: Data, filename: String = "video.mp4") throws -> FileInput {
+		guard !data.isEmpty else { throw InputValidationError.emptyFileData }
+		return FileInput(
 			data: data,
-			filename: ensureExtension(for: filename, defaultExtension: "jpg")
-		)
-	}
-
-	public static func video(data: Data, filename: String = "video.mp4") -> FileInput {
-		FileInput(
-			data: data,
-			filename: ensureExtension(for: filename, defaultExtension: "mp4")
+			filename: ensureExtension(for: filename, defaultExtension: "mp4"),
+			mediaType: .video
 		)
 	}
 
 	public static func from(data: Data, uniformType: UTType?) throws -> FileInput {
-		guard let uniformType else {
-			throw FileInputError.missingType
+		guard !data.isEmpty else { throw InputValidationError.emptyFileData }
+
+		if let type = uniformType, type.conforms(to: .image) {
+			return try image(data: data)
 		}
 
-		if uniformType.conforms(to: .image) {
-			return image(data: data)
+		if let type = uniformType, type.conforms(to: .video) || type.conforms(to: .movie) {
+			return try video(data: data)
 		}
 
-		if uniformType.conforms(to: .video) {
-			return video(data: data)
-		}
-
-		throw FileInputError.unsupportedType
+		throw InputValidationError.unsupportedMediaType
 	}
 
 	private static func ensureExtension(for filename: String, defaultExtension: String) -> String {
@@ -79,15 +111,13 @@ public struct FileInput: Codable, Sendable {
 		return trimmed
 	}
 
-	private static func defaultExtension(forFilename filename: String) -> String {
-		let pathExtension = (filename as NSString).pathExtension.lowercased()
-		switch pathExtension {
-		case "jpg", "jpeg", "png", "heic":
-			return "jpg"
-		case "mp4", "mov", "m4v":
-			return "mp4"
+	private static func inferMediaType(from filename: String) -> MediaType {
+		let ext = (filename as NSString).pathExtension.lowercased()
+		switch ext {
+		case "jpg", "jpeg", "png", "heic", "webp":
+			return .image
 		default:
-			return "bin"
+			return .video
 		}
 	}
 }
@@ -103,8 +133,11 @@ public struct TextToVideoInput: Codable, Sendable {
 		seed: Int? = nil,
 		resolution: ProResolution? = .res720p,
 		orientation: String? = nil
-	) {
-		self.prompt = prompt
+	) throws {
+		let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { throw InputValidationError.emptyPrompt }
+
+		self.prompt = trimmed
 		self.seed = seed
 		self.resolution = resolution
 		self.orientation = orientation
@@ -122,8 +155,11 @@ public struct TextToImageInput: Codable, Sendable {
 		seed: Int? = nil,
 		resolution: ProResolution? = .res720p,
 		orientation: String? = nil
-	) {
-		self.prompt = prompt
+	) throws {
+		let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { throw InputValidationError.emptyPrompt }
+
+		self.prompt = trimmed
 		self.seed = seed
 		self.resolution = resolution
 		self.orientation = orientation
@@ -132,17 +168,21 @@ public struct TextToImageInput: Codable, Sendable {
 
 public struct ImageToVideoInput: Codable, Sendable {
 	public let prompt: String
-	public let data: FileInput // We need to handle how this is serialized (e.g. multipart or base64)
+	public let data: FileInput
 	public let seed: Int?
-	public let resolution: ProResolution? // Or separate structs for dev/pro if needed, but factory can handle types
+	public let resolution: ProResolution?
 
 	public init(
 		prompt: String,
 		data: FileInput,
 		seed: Int? = nil,
 		resolution: ProResolution? = .res720p
-	) {
-		self.prompt = prompt
+	) throws {
+		let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { throw InputValidationError.emptyPrompt }
+		guard data.mediaType == .image else { throw InputValidationError.expectedImage }
+
+		self.prompt = trimmed
 		self.data = data
 		self.seed = seed
 		self.resolution = resolution
@@ -162,8 +202,12 @@ public struct ImageToImageInput: Codable, Sendable {
 		seed: Int? = nil,
 		resolution: ProResolution? = .res720p,
 		enhancePrompt: Bool? = nil
-	) {
-		self.prompt = prompt
+	) throws {
+		let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { throw InputValidationError.emptyPrompt }
+		guard data.mediaType == .image else { throw InputValidationError.expectedImage }
+
+		self.prompt = trimmed
 		self.data = data
 		self.seed = seed
 		self.resolution = resolution
@@ -175,7 +219,7 @@ public struct VideoToVideoInput: Codable, Sendable {
 	public let prompt: String
 	public let data: FileInput
 	public let seed: Int?
-	public let resolution: ProResolution? // pro supports 480p/720p, dev supports 720p.
+	public let resolution: ProResolution?
 	public let enhancePrompt: Bool?
 	public let numInferenceSteps: Int?
 
@@ -186,8 +230,12 @@ public struct VideoToVideoInput: Codable, Sendable {
 		resolution: ProResolution? = .res720p,
 		enhancePrompt: Bool? = nil,
 		numInferenceSteps: Int? = nil
-	) {
-		self.prompt = prompt
+	) throws {
+		let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { throw InputValidationError.emptyPrompt }
+		guard data.mediaType == .video else { throw InputValidationError.expectedVideo }
+
+		self.prompt = trimmed
 		self.data = data
 		self.seed = seed
 		self.resolution = resolution
@@ -211,7 +259,7 @@ public enum ModelsInputFactory: Sendable {
 			return .textToVideo
 		case .lucy_dev_i2v, .lucy_pro_i2v:
 			return .imageToVideo
-		case .lucy_dev_v2v, .lucy_pro_v2v:
+		case .lucy_fast_v2v, .lucy_pro_v2v:
 			return .videoToVideo
 		}
 	}

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum DecartError: Error {
+public enum DecartError: LocalizedError {
 	case invalidAPIKey
 	case invalidBaseURL(String?)
 	case webRTCError(String)
