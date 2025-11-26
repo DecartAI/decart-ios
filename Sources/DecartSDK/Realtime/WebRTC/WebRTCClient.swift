@@ -22,7 +22,7 @@ final class WebRTCClient {
 		}
 
 		RTCInitializeSSL()
-		RTCSetMinDebugLogLevel(.warning)
+		// RTCSetMinDebugLogLevel(.warning)
 
 		let factory = RTCPeerConnectionFactory(
 			encoderFactory: RTCDefaultVideoEncoderFactory(),
@@ -34,7 +34,6 @@ final class WebRTCClient {
 
 	init() {
 		self.factory = Self.getOrCreateFactory()
-		RTCSetMinDebugLogLevel(.verbose)
 	}
 
 	func createPeerConnection(

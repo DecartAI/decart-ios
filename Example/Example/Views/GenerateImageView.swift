@@ -16,6 +16,7 @@ struct GenerateImageView: View {
 	@State private var imageFetcher = ImageFetcher()
 	@State private var selectedItem: PhotosPickerItem?
 	@State private var selectedImagePreview: UIImage?
+	@State private var previewLoadTask: Task<Void, Never>?
 	@FocusState private var promptFocused: Bool
 
 	private var inputType: ModelInputType {
@@ -49,6 +50,14 @@ struct GenerateImageView: View {
 			inputSection
 				.padding(.horizontal)
 				.padding(.bottom)
+		}
+		.onDisappear {
+			previewLoadTask?.cancel()
+			previewLoadTask = nil
+			imageFetcher.cancelGeneration()
+			imageFetcher.reset()
+			selectedItem = nil
+			selectedImagePreview = nil
 		}
 		.navigationTitle(model.rawValue)
 		.navigationBarTitleDisplayMode(.inline)
@@ -113,7 +122,7 @@ struct GenerateImageView: View {
 			}
 
 			TextField("Enter prompt…", text: $imageFetcher.prompt, axis: .vertical)
-				.lineLimit(1...3)
+				.lineLimit(1 ... 3)
 				.textFieldStyle(.roundedBorder)
 				.disabled(imageFetcher.isProcessing)
 				.focused($promptFocused)
@@ -137,14 +146,17 @@ struct GenerateImageView: View {
 				.disabled(!canSend)
 			}
 		}.onChange(of: selectedItem) {
+			previewLoadTask?.cancel()
 			guard let selectedItem else {
 				selectedImagePreview = nil
 				return
 			}
-			Task {
+			previewLoadTask = Task {
+				guard !Task.isCancelled else { return }
 				let imagePreview = try? await selectedItem.loadTransferable(
 					type: Data.self
 				)
+				guard !Task.isCancelled else { return }
 				if let uiImage = UIImage(data: imagePreview ?? Data()) {
 					selectedImagePreview = uiImage
 				}
@@ -154,21 +166,19 @@ struct GenerateImageView: View {
 
 	private func generate() {
 		dismissKeyboard()
-		Task {
-			if requiresReference {
-				guard let selectedItem else { return }
-				await imageFetcher.fetchImage(
-					model: model,
-					inputType: inputType,
-					selectedItem: selectedItem
-				)
-			} else {
-				await imageFetcher.fetchImage(
-					model: model,
-					inputType: inputType,
-					selectedItem: nil
-				)
-			}
+		if requiresReference {
+			guard let selectedItem else { return }
+			imageFetcher.fetchImage(
+				model: model,
+				inputType: inputType,
+				selectedItem: selectedItem
+			)
+		} else {
+			imageFetcher.fetchImage(
+				model: model,
+				inputType: inputType,
+				selectedItem: nil
+			)
 		}
 	}
 

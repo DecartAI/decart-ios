@@ -16,6 +16,7 @@ struct GenerateVideoView: View {
 	@State private var videoFetcher = VideoFetcher()
 	@State private var selectedItem: PhotosPickerItem?
 	@State private var selectedMediaPreview: UIImage?
+	@State private var previewLoadTask: Task<Void, Never>?
 	@FocusState private var promptFocused: Bool
 
 	private var trimmedPrompt: String {
@@ -65,8 +66,12 @@ struct GenerateVideoView: View {
 				.padding(.bottom)
 		}
 		.onDisappear {
+			previewLoadTask?.cancel()
+			previewLoadTask = nil
 			videoFetcher.cancelGeneration()
 			videoFetcher.reset()
+			selectedItem = nil
+			selectedMediaPreview = nil
 		}
 		.navigationTitle(model.rawValue)
 		.navigationBarTitleDisplayMode(.inline)
@@ -176,12 +181,16 @@ struct GenerateVideoView: View {
 	}
 
 	private func handleSelectionChange(_ item: PhotosPickerItem?) {
+		previewLoadTask?.cancel()
+
 		guard let item else {
 			selectedMediaPreview = nil
 			return
 		}
 
-		Task {
+		previewLoadTask = Task {
+			guard !Task.isCancelled else { return }
+
 			let resolvedType =
 				item.supportedContentTypes.first(where: {
 					$0.conforms(to: .video) || $0.conforms(to: .image)
@@ -194,6 +203,8 @@ struct GenerateVideoView: View {
 			{
 				previewImage = image
 			}
+
+			guard !Task.isCancelled else { return }
 
 			await MainActor.run {
 				selectedMediaPreview = previewImage
