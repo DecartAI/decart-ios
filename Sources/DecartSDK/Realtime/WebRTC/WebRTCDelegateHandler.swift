@@ -16,6 +16,11 @@ final class WebRTCDelegateHandler: NSObject {
 	func cleanup() {
 		connectionStateContinuation.finish()
 	}
+
+	deinit {
+		DecartLogger.log("WebRTCDelegateHandler deinitialized", level: .info)
+		cleanup()
+	}
 }
 
 extension WebRTCDelegateHandler: RTCPeerConnectionDelegate {

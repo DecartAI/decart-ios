@@ -83,8 +83,8 @@ public struct RealtimeConfiguration: Sendable {
 		public let preferredCodec: String
 
 		public init(
-			maxBitrate: Int = 3_800_000,
-			minBitrate: Int = 100_000,
+			maxBitrate: Int = 2_000_000,
+			minBitrate: Int = 500_000,
 			maxFramerate: Int = 26,
 			preferredCodec: String = "VP8"
 		) {
@@ -126,6 +126,7 @@ public struct RealtimeConfiguration: Sendable {
 				encodingParam.maxBitrateBps = NSNumber(value: maxBitrate)
 				encodingParam.minBitrateBps = NSNumber(value: minBitrate)
 				encodingParam.maxFramerate = NSNumber(value: maxFramerate)
+				encodingParam.scaleResolutionDownBy = NSNumber(value: 1.0)
 
 				parameters.encodings[0] = encodingParam
 				sender.parameters = parameters

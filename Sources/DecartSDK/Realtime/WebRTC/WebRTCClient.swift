@@ -2,6 +2,9 @@ import Foundation
 @preconcurrency import WebRTC
 
 final class WebRTCClient {
+	private nonisolated(unsafe) static var sharedFactory: RTCPeerConnectionFactory?
+	private static let factoryLock = NSLock()
+
 	let factory: RTCPeerConnectionFactory
 	private(set) var peerConnection: RTCPeerConnection?
 	private(set) var connectionStateStream: AsyncStream<RTCPeerConnectionState>?
@@ -10,18 +13,28 @@ final class WebRTCClient {
 	private var signalingClient: SignalingClient?
 	private var connectionStateContinuation: AsyncStream<RTCPeerConnectionState>.Continuation?
 
-	init() {
-		#if IS_DEVELOPMENT
-			RTCSetMinDebugLogLevel(.verbose)
-		#endif
-		RTCInitializeSSL()
+	private static func getOrCreateFactory() -> RTCPeerConnectionFactory {
+		factoryLock.lock()
+		defer { factoryLock.unlock() }
 
-		let videoEncoderFactory = RTCDefaultVideoEncoderFactory()
-		let videoDecoderFactory = RTCDefaultVideoDecoderFactory()
-		self.factory = RTCPeerConnectionFactory(
-			encoderFactory: videoEncoderFactory,
-			decoderFactory: videoDecoderFactory
+		if let factory = sharedFactory {
+			return factory
+		}
+
+		RTCInitializeSSL()
+		RTCSetMinDebugLogLevel(.warning)
+
+		let factory = RTCPeerConnectionFactory(
+			encoderFactory: RTCDefaultVideoEncoderFactory(),
+			decoderFactory: RTCDefaultVideoDecoderFactory()
 		)
+		sharedFactory = factory
+		return factory
+	}
+
+	init() {
+		self.factory = Self.getOrCreateFactory()
+		RTCSetMinDebugLogLevel(.verbose)
 	}
 
 	func createPeerConnection(
@@ -151,5 +164,6 @@ final class WebRTCClient {
 	deinit {
 		DecartLogger.log("Webrtc client deinitialized", level: .info)
 		closePeerConnection()
+		// Note: Don't call RTCCleanupSSL() - factory is singleton, SSL stays initialized
 	}
 }

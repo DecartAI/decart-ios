@@ -8,7 +8,7 @@ import Combine
 import DecartSDK
 import Factory
 import SwiftUI
-import WebRTC
+@preconcurrency import WebRTC
 
 @MainActor
 @Observable
@@ -35,14 +35,16 @@ final class DecartRealtimeManager: RealtimeManagerProtocol {
 
 	@ObservationIgnored
 	private var realtimeManager: RealtimeManager?
+	#if !targetEnvironment(simulator)
 	@ObservationIgnored
-	private var videoCapturer: RTCCameraVideoCapturer?
+	private var capture: RealtimeCapture?
+	#endif
 	@ObservationIgnored
 	private var eventTask: Task<Void, Never>?
 
 	init(
 		currentPrompt: Prompt,
-		isMirroringEnabled: Bool = true // since the initial camera is the front facing one
+		isMirroringEnabled: Bool = true
 	) {
 		self.currentPrompt = currentPrompt
 		self.shouldMirror = isMirroringEnabled
@@ -50,17 +52,10 @@ final class DecartRealtimeManager: RealtimeManagerProtocol {
 
 	func switchCamera() async {
 		#if !targetEnvironment(simulator)
-		print("switching camera to \(shouldMirror ? "back" : "front") camera")
-		guard let videoCapturer, let realtimeManager else {
-			preconditionFailure("🚨 videoCapturer is nil when switching camera")
-		}
+		guard let capture else { return }
 		do {
-			try await RealtimeCameraCapture.switchCamera(
-				capturer: videoCapturer,
-				realtimeManager: realtimeManager,
-				newPosition: shouldMirror ? .back : .front
-			)
-			shouldMirror.toggle()
+			try await capture.switchCamera()
+			shouldMirror = capture.position == .front
 		} catch {
 			DecartLogger.log("error while switching camera!", level: .error)
 		}
@@ -75,33 +70,31 @@ final class DecartRealtimeManager: RealtimeManagerProtocol {
 		connectionState = .connecting
 
 		do {
+			let modelConfig = Models.realtime(model)
 			realtimeManager =
 				try decartClient
 					.createRealtimeManager(
 						options: RealtimeConfiguration(
-							model: Models.realtime(model),
+							model: modelConfig,
 							initialState: ModelState(
 								prompt: currentPrompt
 							)
 						))
 			guard let realtimeManager else {
-				preconditionFailure("🚨 realtimeManager is nil after creating it")
+				preconditionFailure("realtimeManager is nil after creating it")
 			}
 
 			monitorEvents()
 
 			#if !targetEnvironment(simulator)
-			(localMediaStream, videoCapturer) =
-				try await RealtimeCameraCapture
-					.captureLocalCameraStream(
-						realtimeManager: realtimeManager,
-						cameraFacing: .front
-					)
+			let videoSource = realtimeManager.createVideoSource()
+			capture = RealtimeCapture(model: modelConfig, videoSource: videoSource)
+			try await capture?.startCapture()
 
-			DecartLogger.log("Connecting to WebRTC...", level: .info)
-			remoteMediaStreams =
-				try await realtimeManager
-					.connect(localStream: localMediaStream!)
+			let localVideoTrack = realtimeManager.createVideoTrack(source: videoSource, trackId: "video0")
+			localMediaStream = RealtimeMediaStream(videoTrack: localVideoTrack, id: .localStream)
+
+			remoteMediaStreams = try await realtimeManager.connect(localStream: localMediaStream!)
 			#endif
 		} catch {
 			DecartLogger.log(
@@ -126,9 +119,6 @@ final class DecartRealtimeManager: RealtimeManagerProtocol {
 
 				if state == .error {
 					DecartLogger.log("Error state received", level: .error)
-					// Should we disconnect on error? The connection might already be broken.
-					// Cleanup handles it if needed, or we can just stay in error state.
-					// For now, just updating state is enough as UI reacts to it.
 				}
 			}
 			DecartLogger.log("Event monitoring task completed.", level: .info)
@@ -136,21 +126,26 @@ final class DecartRealtimeManager: RealtimeManagerProtocol {
 	}
 
 	func cleanup() async {
+		connectionState = .idle
+		try? await Task.sleep(nanoseconds: 100_000_000)
+
 		eventTask?.cancel()
 		eventTask = nil
 
-		if let capturer = videoCapturer {
-			await withCheckedContinuation { (k: CheckedContinuation<Void, Never>) in
-				capturer.stopCapture { k.resume() }
-			}
-		}
-		videoCapturer = nil
+		localMediaStream?.videoTrack.isEnabled = false
+		localMediaStream?.audioTrack?.isEnabled = false
+		remoteMediaStreams?.videoTrack.isEnabled = false
+		remoteMediaStreams?.audioTrack?.isEnabled = false
+
+		#if !targetEnvironment(simulator)
+		await capture?.stopCapture()
+		capture = nil
+		#endif
+
 		await realtimeManager?.disconnect()
 		realtimeManager = nil
-		remoteMediaStreams = nil
-		localMediaStream = nil
-		connectionState = .idle
 
-		DecartLogger.log("Cleanup of realtime modelview completed.", level: .success)
+		localMediaStream = nil
+		remoteMediaStreams = nil
 	}
 }

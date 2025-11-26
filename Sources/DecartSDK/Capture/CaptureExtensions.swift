@@ -8,13 +8,15 @@ import AVFoundation
 import WebRTC
 
 public extension AVCaptureDevice {
-	/// Pick a format that meets (or exceeds) the requested dimensions; falls back to the first available.
+	/// Pick a format that meets (or exceeds) the requested dimensions in either orientation.
 	func pickFormat(minWidth: Int, minHeight: Int) throws -> AVCaptureDevice.Format {
 		let formats = RTCCameraVideoCapturer.supportedFormats(for: self)
 
 		if let match = formats.first(where: {
 			let d = CMVideoFormatDescriptionGetDimensions($0.formatDescription)
-			return d.width >= minWidth && d.height >= minHeight
+			let landscape = d.width >= minWidth && d.height >= minHeight
+			let portrait = d.height >= minWidth && d.width >= minHeight
+			return landscape || portrait
 		}) {
 			return match
 		}

@@ -74,8 +74,8 @@ public final class RealtimeManager: @unchecked Sendable {
 		sendMessage(.prompt(PromptMessage(prompt: prompt.text)))
 	}
 
-	public func switchCamera(rotateY: Int) {
-		sendMessage(.switchCamera(SwitchCameraMessage(rotateY: rotateY)))
+	public func getStats() async -> RTCStatisticsReport? {
+		await webRTCClient.peerConnection?.statistics()
 	}
 
 	// MARK: - Private
@@ -154,6 +154,14 @@ public final class RealtimeManager: @unchecked Sendable {
 		connectionStateListenerTask?.cancel()
 		connectionStateListenerTask = nil
 		webRTCClient.closePeerConnection()
+
+		let audioSession = RTCAudioSession.sharedInstance()
+		if audioSession.isActive {
+			audioSession.lockForConfiguration()
+			try? audioSession.setActive(false)
+			audioSession.unlockForConfiguration()
+		}
+
 		await webSocketClient?.disconnect()
 		webSocketClient = nil
 	}
@@ -163,5 +171,6 @@ public final class RealtimeManager: @unchecked Sendable {
 		connectionStateListenerTask?.cancel()
 		webRTCClient.closePeerConnection()
 		stateContinuation.finish()
+		DecartLogger.log("RealtimeManager (SDK) deinitialized", level: .info)
 	}
 }

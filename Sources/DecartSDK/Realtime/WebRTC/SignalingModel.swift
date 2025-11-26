@@ -65,16 +65,6 @@ struct PromptMessage: Codable, Sendable {
 	}
 }
 
-struct SwitchCameraMessage: Codable, Sendable {
-	let type: String
-	let rotateY: Int
-
-	init(rotateY: Int) {
-		self.type = "switch_camera"
-		self.rotateY = rotateY
-	}
-}
-
 struct ServerErrorMessage: Codable, Sendable {
 	let type: String
 	let message: String?
@@ -154,7 +144,6 @@ enum OutgoingWebSocketMessage: Codable, Sendable {
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
 	case prompt(PromptMessage)
-	case switchCamera(SwitchCameraMessage)
 
 	func encode(to encoder: Encoder) throws {
 		switch self {
@@ -165,8 +154,6 @@ enum OutgoingWebSocketMessage: Codable, Sendable {
 		case .iceCandidate(let msg):
 			try msg.encode(to: encoder)
 		case .prompt(let msg):
-			try msg.encode(to: encoder)
-		case .switchCamera(let msg):
 			try msg.encode(to: encoder)
 		}
 	}
