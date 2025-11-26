@@ -43,10 +43,7 @@ struct IceCandidateMessage: Codable, Sendable {
 
 	init(candidate: RTCIceCandidate) {
 		guard let sdpMid = candidate.sdpMid else {
-			DecartLogger.log("found invalid candidate without sdpMid", level: .warning)
-			fatalError(
-				"found invalid candidate without sdpMid. This should never happen."
-			)
+			fatalError("found invalid candidate without sdpMid")
 		}
 
 		self.type = "ice-candidate"
@@ -78,15 +75,35 @@ struct SwitchCameraMessage: Codable, Sendable {
 	}
 }
 
+struct ServerErrorMessage: Codable, Sendable {
+	let type: String
+	let message: String?
+	let error: String?
+}
+
+struct SessionIdMessage: Codable, Sendable {
+	let type: String
+	let sessionId: String?
+	let session_id: String?
+
+	var id: String? { sessionId ?? session_id }
+}
+
+struct PromptAckMessage: Codable, Sendable {
+	let type: String
+}
+
 enum IncomingWebSocketMessage: Codable, Sendable {
 	case offer(OfferMessage)
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
+	case error(ServerErrorMessage)
+	case sessionId(SessionIdMessage)
+	case promptAck(PromptAckMessage)
 
 	init(from decoder: Decoder) throws {
 		let container = try decoder.container(keyedBy: CodingKeys.self)
 		let type = try container.decode(String.self, forKey: .type)
-		DecartLogger.log("got incoming message \(type)", level: .info)
 
 		switch type {
 		case "offer":
@@ -95,6 +112,12 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 			self = try .answer(AnswerMessage(from: decoder))
 		case "ice-candidate":
 			self = try .iceCandidate(IceCandidateMessage(from: decoder))
+		case "error":
+			self = try .error(ServerErrorMessage(from: decoder))
+		case "session_id":
+			self = try .sessionId(SessionIdMessage(from: decoder))
+		case "prompt_ack":
+			self = try .promptAck(PromptAckMessage(from: decoder))
 		default:
 			throw DecodingError.dataCorruptedError(
 				forKey: .type,
@@ -111,6 +134,12 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 		case .answer(let msg):
 			try msg.encode(to: encoder)
 		case .iceCandidate(let msg):
+			try msg.encode(to: encoder)
+		case .error(let msg):
+			try msg.encode(to: encoder)
+		case .sessionId(let msg):
+			try msg.encode(to: encoder)
+		case .promptAck(let msg):
 			try msg.encode(to: encoder)
 		}
 	}

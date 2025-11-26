@@ -14,7 +14,7 @@ struct RealtimeView: View {
 	private let realtimeAiModel: RealtimeModel
 	@State private var prompt: String = DecartConfig.defaultPrompt
 
-	@State private var realtimeManager: RealtimeManager
+	@State private var realtimeManager: RealtimeManagerProtocol
 
 	init(realtimeModel: RealtimeModel) {
 		self.realtimeAiModel = realtimeModel

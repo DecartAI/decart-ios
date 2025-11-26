@@ -35,7 +35,7 @@ public struct RealtimeConfiguration: Sendable {
 
 		public init(
 			iceServers: [String] = ["stun:stun.l.google.com:19302"],
-			connectionTimeout: Int32 = 7000,
+			connectionTimeout: Int32 = 15000,
 			pingInterval: Int32 = 2000
 		) {
 			self.iceServers = iceServers

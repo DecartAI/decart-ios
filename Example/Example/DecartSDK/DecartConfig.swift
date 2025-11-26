@@ -9,7 +9,7 @@ import DecartSDK
 import Factory
 import WebRTC
 
-protocol RealtimeManager {
+protocol RealtimeManagerProtocol {
 	var currentPrompt: Prompt { get set }
 	var shouldMirror: Bool { get set }
 

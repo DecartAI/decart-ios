@@ -37,7 +37,7 @@ public struct DecartClient {
 		self.decartConfiguration = decartConfiguration
 	}
 
-	public func createRealtimeClient(options: RealtimeConfiguration) throws -> RealtimeClient {
+	public func createRealtimeManager(options: RealtimeConfiguration) throws -> RealtimeManager {
 		let urlString =
 			"\(decartConfiguration.signalingServerUrl)\(options.model.urlPath)?api_key=\(decartConfiguration.apiKey)&model=\(options.model.name)"
 
@@ -46,7 +46,7 @@ public struct DecartClient {
 			throw DecartError.invalidBaseURL(urlString)
 		}
 
-		return try RealtimeClient(
+		return RealtimeManager(
 			signalingServerURL: signalingServerURL,
 			options: options
 		)

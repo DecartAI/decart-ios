@@ -1,27 +1,25 @@
 import Foundation
 import WebRTC
 
-extension RealtimeClient {
-	// MARK: - Media Factory Methods
-
+extension RealtimeManager {
 	public func getTransceivers() -> [RTCRtpTransceiver] {
-		webRTCManager.peerConnection.transceivers
+		webRTCClient.transceivers
 	}
 
 	public func createAudioSource(constraints: RTCMediaConstraints? = nil) -> RTCAudioSource {
-		webRTCManager.factory.audioSource(with: constraints)
+		webRTCClient.createAudioSource(constraints: constraints)
 	}
 
 	public func createAudioTrack(source: RTCAudioSource, trackId: String) -> RTCAudioTrack {
-		webRTCManager.factory.audioTrack(with: source, trackId: trackId)
+		webRTCClient.createAudioTrack(source: source, trackId: trackId)
 	}
 
 	public func createVideoSource() -> RTCVideoSource {
-		webRTCManager.factory.videoSource()
+		webRTCClient.createVideoSource()
 	}
 
 	public func createVideoTrack(source: RTCVideoSource, trackId: String) -> RTCVideoTrack {
-		webRTCManager.factory.videoTrack(with: source, trackId: trackId)
+		webRTCClient.createVideoTrack(source: source, trackId: trackId)
 	}
 
 	public func createLocalVideoTrack() -> (RTCVideoTrack, RTCCameraVideoCapturer) {
@@ -31,4 +29,3 @@ extension RealtimeClient {
 		return (videoTrack, videoCapturer)
 	}
 }
-

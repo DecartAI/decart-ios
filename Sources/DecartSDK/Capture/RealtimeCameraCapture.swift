@@ -9,13 +9,13 @@ import WebRTC
 
 #if !targetEnvironment(simulator)
 public enum RealtimeCameraCapture {
-	public static func captureLocalCameraStream(realtimeClient: RealtimeClient, cameraFacing: AVCaptureDevice.Position) async throws -> (
+	public static func captureLocalCameraStream(realtimeManager: RealtimeManager, cameraFacing: AVCaptureDevice.Position) async throws -> (
 		RealtimeMediaStream,
 		RTCCameraVideoCapturer
 	) {
-		let currentRealtimeModel = realtimeClient.options.model
-		// 1) Source & capturer
-		let videoSource = realtimeClient.createVideoSource()
+		let currentRealtimeModel = realtimeManager.options.model
+
+		let videoSource = realtimeManager.createVideoSource()
 		let capturer = RTCCameraVideoCapturer(delegate: videoSource)
 
 		let device = try AVCaptureDevice.pickCamera(position: cameraFacing)
@@ -25,13 +25,13 @@ public enum RealtimeCameraCapture {
 		)
 		let targetFPS = try device.pickFPS(for: format, preferred: currentRealtimeModel.fps)
 
-		// 3) Start capture
 		try await startCameraCapture(capturer: capturer, device: device, format: format, fps: targetFPS)
-		let localVideoTrack = realtimeClient.createVideoTrack(
+
+		let localVideoTrack = realtimeManager.createVideoTrack(
 			source: videoSource,
 			trackId: "video0"
 		)
-		// 4) Create track & stream
+
 		return (
 			RealtimeMediaStream(videoTrack: localVideoTrack, id: .localStream),
 			capturer
@@ -55,11 +55,10 @@ public enum RealtimeCameraCapture {
 	@discardableResult
 	public static func switchCamera(
 		capturer: RTCCameraVideoCapturer,
-		realtimeClient: RealtimeClient,
+		realtimeManager: RealtimeManager,
 		newPosition: AVCaptureDevice.Position
 	) async throws -> AVCaptureDevice.Position {
-		let currentRealtimeModel = realtimeClient.options.model
-		let newPosition: AVCaptureDevice.Position = newPosition
+		let currentRealtimeModel = realtimeManager.options.model
 
 		let newDevice = try AVCaptureDevice.pickCamera(position: newPosition)
 		let format = try newDevice.pickFormat(

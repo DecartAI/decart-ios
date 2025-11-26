@@ -12,21 +12,15 @@ import WebRTC
 
 @MainActor
 @Observable
-final class DecartRealtimeManager: RealtimeManager {
+final class DecartRealtimeManager: RealtimeManagerProtocol {
 	@ObservationIgnored
 	private let decartClient = Container.shared.decartClient()
 
 	var currentPrompt: Prompt {
 		didSet {
 			Task { [weak self] in
-				guard let self, let client = self.realtimeClient else { return }
-				do {
-					try await client.setPrompt(currentPrompt)
-				} catch {
-					DecartLogger.log(
-						"failed to update prompt: \(error.localizedDescription)", level: .error
-					)
-				}
+				guard let self, let manager = self.realtimeManager else { return }
+				manager.setPrompt(currentPrompt)
 			}
 		}
 	}
@@ -35,13 +29,12 @@ final class DecartRealtimeManager: RealtimeManager {
 
 	private(set) var connectionState: DecartRealtimeConnectionState = .idle
 
-	@ObservationIgnored
 	private(set) var localMediaStream: RealtimeMediaStream?
-	@ObservationIgnored
+
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
 
 	@ObservationIgnored
-	private var realtimeClient: RealtimeClient?
+	private var realtimeManager: RealtimeManager?
 	@ObservationIgnored
 	private var videoCapturer: RTCCameraVideoCapturer?
 	@ObservationIgnored
@@ -56,56 +49,60 @@ final class DecartRealtimeManager: RealtimeManager {
 	}
 
 	func switchCamera() async {
+		#if !targetEnvironment(simulator)
 		print("switching camera to \(shouldMirror ? "back" : "front") camera")
-		guard let videoCapturer, let realtimeClient else {
+		guard let videoCapturer, let realtimeManager else {
 			preconditionFailure("🚨 videoCapturer is nil when switching camera")
 		}
 		do {
 			try await RealtimeCameraCapture.switchCamera(
 				capturer: videoCapturer,
-				realtimeClient: realtimeClient,
+				realtimeManager: realtimeManager,
 				newPosition: shouldMirror ? .back : .front
 			)
 			shouldMirror.toggle()
 		} catch {
 			DecartLogger.log("error while switching camera!", level: .error)
 		}
+		#endif
 	}
 
 	func connect(model: RealtimeModel) async {
-		if connectionState.isInSession || realtimeClient != nil {
+		if connectionState.isInSession || realtimeManager != nil {
 			await cleanup()
 		}
 
 		connectionState = .connecting
 
 		do {
-			realtimeClient =
+			realtimeManager =
 				try decartClient
-					.createRealtimeClient(
+					.createRealtimeManager(
 						options: RealtimeConfiguration(
 							model: Models.realtime(model),
 							initialState: ModelState(
 								prompt: currentPrompt
 							)
 						))
-			guard let realtimeClient else {
-				preconditionFailure("🚨 realtimeClient is nil after creating it")
+			guard let realtimeManager else {
+				preconditionFailure("🚨 realtimeManager is nil after creating it")
 			}
 
 			monitorEvents()
 
+			#if !targetEnvironment(simulator)
 			(localMediaStream, videoCapturer) =
 				try await RealtimeCameraCapture
 					.captureLocalCameraStream(
-						realtimeClient: realtimeClient,
+						realtimeManager: realtimeManager,
 						cameraFacing: .front
 					)
 
 			DecartLogger.log("Connecting to WebRTC...", level: .info)
 			remoteMediaStreams =
-				try await realtimeClient
+				try await realtimeManager
 					.connect(localStream: localMediaStream!)
+			#endif
 		} catch {
 			DecartLogger.log(
 				"Connection failed with error: \(error.localizedDescription)", level: .error
@@ -119,7 +116,7 @@ final class DecartRealtimeManager: RealtimeManager {
 		eventTask?.cancel()
 
 		eventTask = Task { [weak self] in
-			guard let self, let stream = self.realtimeClient?.events else { return }
+			guard let self, let stream = self.realtimeManager?.events else { return }
 
 			for await state in stream {
 				if Task.isCancelled { return }
@@ -148,8 +145,8 @@ final class DecartRealtimeManager: RealtimeManager {
 			}
 		}
 		videoCapturer = nil
-		await realtimeClient?.disconnect()
-		realtimeClient = nil
+		await realtimeManager?.disconnect()
+		realtimeManager = nil
 		remoteMediaStreams = nil
 		localMediaStream = nil
 		connectionState = .idle

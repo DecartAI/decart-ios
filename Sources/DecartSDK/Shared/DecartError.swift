@@ -11,6 +11,7 @@ public enum DecartError: Error {
 	case connectionTimeout
 	case websocketError(String)
 	case networkError(Error)
+	case serverError(String)
 
 	public var errorDescription: String? {
 		switch self {
@@ -37,6 +38,8 @@ public enum DecartError: Error {
 			return "WebSocket error: \(message)"
 		case .networkError(let error):
 			return "Network error: \(error.localizedDescription)"
+		case .serverError(let message):
+			return "Server error: \(message)"
 		}
 	}
 
@@ -62,6 +65,8 @@ public enum DecartError: Error {
 			return "WEBSOCKET_ERROR"
 		case .networkError:
 			return "NETWORK_ERROR"
+		case .serverError:
+			return "SERVER_ERROR"
 		}
 	}
 }

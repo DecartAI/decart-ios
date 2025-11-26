@@ -1,24 +1,15 @@
-//
-//  WebSocketClient.swift
-//  DecartSDK
-//
-//  Created by Alon Bar-el on 03/11/2025.
-//
-
 import Foundation
-import Observation
 
 actor WebSocketClient {
 	var isConnected: Bool = false
-	var socketError: DecartError?
 
 	private var stream: SocketStream?
 	private var listeningTask: Task<Void, Never>?
 	private let decoder = JSONDecoder()
 	private let encoder = JSONEncoder()
 
-	private var eventStreamContinuation: AsyncStream<IncomingWebSocketMessage>.Continuation
-	let websocketEventStream: AsyncStream<IncomingWebSocketMessage>
+	private nonisolated(unsafe) let eventStreamContinuation: AsyncStream<IncomingWebSocketMessage>.Continuation
+	nonisolated let websocketEventStream: AsyncStream<IncomingWebSocketMessage>
 
 	init() {
 		let (websocketEventStream, eventStreamContinuation) = AsyncStream.makeStream(of: IncomingWebSocketMessage.self)
@@ -27,13 +18,12 @@ actor WebSocketClient {
 	}
 
 	func connect(url: URL) {
-		if stream != nil { return }
+		guard stream == nil else { return }
 		let socketConnection = URLSession.shared.webSocketTask(with: url)
 		stream = SocketStream(task: socketConnection)
+		isConnected = true
 		listeningTask = Task { [weak self] in
-			guard let self = self, let stream = await self.stream else {
-				return
-			}
+			guard let self, let stream = await self.stream else { return }
 			do {
 				for try await msg in stream {
 					switch msg {
@@ -47,8 +37,6 @@ actor WebSocketClient {
 					}
 				}
 			} catch {
-				DecartLogger
-					.log("error in ws listening loop: \(error)", level: .error)
 				await self.eventStreamContinuation.finish()
 			}
 		}
@@ -56,35 +44,20 @@ actor WebSocketClient {
 
 	private func handleIncomingMessage(_ text: String) async {
 		guard let data = text.data(using: .utf8) else { return }
-
-		do {
-			let message = try decoder.decode(IncomingWebSocketMessage.self, from: data)
-			eventStreamContinuation.yield(message)
-		} catch {
-			DecartLogger
-				.log("error while handling incoming message: \(error)", level: .error)
-			eventStreamContinuation.finish()
-		}
+		guard let message = try? decoder.decode(IncomingWebSocketMessage.self, from: data) else { return }
+		eventStreamContinuation.yield(message)
 	}
 
 	func send<T: Codable>(_ message: T) throws {
-		guard let stream = stream else {
-			DecartLogger.log("tried to send ws message when its closed", level: .warning)
-			return
-		}
-
+		guard let stream else { return }
 		let data = try encoder.encode(message)
 		guard let jsonString = String(data: data, encoding: .utf8) else {
-			DecartLogger.log("unable to encode message", level: .warning)
 			throw DecartError.websocketError("unable to encode message")
 		}
-		Task { [stream] in
-			try await stream.sendMessage(.string(jsonString))
-		}
+		Task { [stream] in try await stream.sendMessage(.string(jsonString)) }
 	}
 
 	func disconnect() async {
-		DecartLogger.log("disconnecting from websocket", level: .info)
 		eventStreamContinuation.finish()
 		listeningTask?.cancel()
 		listeningTask = nil
@@ -93,5 +66,7 @@ actor WebSocketClient {
 		isConnected = false
 	}
 
-	deinit { DecartLogger.log("Websocket Client deinit", level: .info) }
+	deinit {
+		eventStreamContinuation.finish()
+	}
 }
