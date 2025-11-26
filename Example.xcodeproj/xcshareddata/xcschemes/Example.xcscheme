@@ -59,6 +59,11 @@
             value = "funcall_eIJgFmMEbcRfsbTNRGdAWFumYkXOJpWyzoXPPcLClZYATEaiiKuHYFzvDEiOGxtO"
             isEnabled = "YES">
          </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "ENABLE_DECART_SDK_DUBUG_LOGS"
+            value = "YES"
+            isEnabled = "YES">
+         </EnvironmentVariable>
       </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction

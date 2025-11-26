@@ -7,8 +7,7 @@
 import Foundation
 
 public enum DecartLogger: Sendable {
-	public static let printImportantOnly: Bool = ProcessInfo.processInfo.environment["printImportantOnly"] == "YES"
-
+	public static let pringDebugLogs: Bool = ProcessInfo.processInfo.environment["ENABLE_DECART_SDK_DUBUG_LOGS"] == "YES"
 	public enum Level: String, Sendable {
 		case info = "ℹ️"
 		case warning = "⚠️"
@@ -30,8 +29,8 @@ public enum DecartLogger: Sendable {
 	public static func log(_ string: String, level: Level, logBreadcrumbEnabled: Bool = true) {
 		let logString = "[DecartSDK -\(dateFormatter.string(from: Date.now)) \(level.rawValue)] - \(string)"
 
-		if DecartLogger.printImportantOnly {
-			if level == .important {
+		if !DecartLogger.pringDebugLogs {
+			if level == .important || level == .error {
 				print(logString)
 			}
 		} else {
