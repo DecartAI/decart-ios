@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ProcessClient {
+public struct ProcessClient: Sendable {
 	private let session: URLSession
 	private let request: URLRequest
 
@@ -188,7 +188,7 @@ public struct ProcessClient {
 
 	// MARK: - Process
 
-	public func process() async throws -> Data {
+	public nonisolated func process() async throws -> Data {
 		let (data, response) = try await session.data(for: request)
 
 		guard let httpResponse = response as? HTTPURLResponse else {

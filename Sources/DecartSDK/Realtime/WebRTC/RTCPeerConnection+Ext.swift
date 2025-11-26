@@ -7,6 +7,7 @@
 @preconcurrency import WebRTC
 
 extension RTCSessionDescription: @unchecked @retroactive Sendable {}
+extension RTCCameraVideoCapturer: @unchecked @retroactive Sendable {}
 
 extension RTCPeerConnection {
 	func offer(for constraints: RTCMediaConstraints) async throws -> RTCSessionDescription? {

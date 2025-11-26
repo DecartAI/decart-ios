@@ -5,7 +5,7 @@
 //  Created by Alon Bar-el on 05/11/2025.
 //
 import AVFoundation
-import WebRTC
+@preconcurrency import WebRTC
 
 #if !targetEnvironment(simulator)
 public enum RealtimeCameraCapture {

@@ -131,11 +131,11 @@ final class DecartRealtimeManager: RealtimeManagerProtocol {
 					// For now, just updating state is enough as UI reacts to it.
 				}
 			}
+			DecartLogger.log("Event monitoring task completed.", level: .info)
 		}
 	}
 
 	func cleanup() async {
-		DecartLogger.log("Starting cleanup...", level: .info)
 		eventTask?.cancel()
 		eventTask = nil
 
@@ -151,6 +151,6 @@ final class DecartRealtimeManager: RealtimeManagerProtocol {
 		localMediaStream = nil
 		connectionState = .idle
 
-		DecartLogger.log("Cleanup complete.", level: .success)
+		DecartLogger.log("Cleanup of realtime modelview completed.", level: .success)
 	}
 }

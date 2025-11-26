@@ -30,21 +30,21 @@ final class WebRTCClient {
 		sendMessage: @escaping (OutgoingWebSocketMessage) -> Void
 	) {
 		let (stream, continuation) = AsyncStream.makeStream(of: RTCPeerConnectionState.self)
-		self.connectionStateStream = stream
-		self.connectionStateContinuation = continuation
+		connectionStateStream = stream
+		connectionStateContinuation = continuation
 
-		self.delegateHandler = WebRTCDelegateHandler(
+		delegateHandler = WebRTCDelegateHandler(
 			sendMessage: sendMessage,
 			connectionStateContinuation: continuation
 		)
 
-		self.peerConnection = factory.peerConnection(
+		peerConnection = factory.peerConnection(
 			with: config,
 			constraints: constraints,
 			delegate: delegateHandler
 		)!
 
-		self.signalingClient = SignalingClient(
+		signalingClient = SignalingClient(
 			peerConnection: peerConnection!,
 			factory: factory,
 			sendMessage: sendMessage
@@ -149,6 +149,7 @@ final class WebRTCClient {
 	}
 
 	deinit {
+		DecartLogger.log("Webrtc client deinitialized", level: .info)
 		closePeerConnection()
 	}
 }
