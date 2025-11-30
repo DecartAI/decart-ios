@@ -30,17 +30,14 @@ public struct RealtimeConfiguration: Sendable {
 
 	public struct ConnectionConfig: Sendable {
 		public let iceServers: [String]
-		public let connectionTimeout: Int32
-		public let pingInterval: Int32
+		public let connectionTimeout: TimeInterval
 
 		public init(
 			iceServers: [String] = ["stun:stun.l.google.com:19302"],
-			connectionTimeout: Int32 = 15000,
-			pingInterval: Int32 = 2000
+			connectionTimeout: TimeInterval = 15
 		) {
 			self.iceServers = iceServers
 			self.connectionTimeout = connectionTimeout
-			self.pingInterval = pingInterval
 		}
 
 		public func makeRTCConfiguration() -> RTCConfiguration {
@@ -48,8 +45,7 @@ public struct RealtimeConfiguration: Sendable {
 			config.iceServers = [RTCIceServer(urlStrings: iceServers)]
 			config.sdpSemantics = .unifiedPlan
 			config.continualGatheringPolicy = .gatherContinually
-			config.iceConnectionReceivingTimeout = connectionTimeout
-//			config.iceBackupCandidatePairPingInterval = pingInterval
+			config.iceCandidatePoolSize = 10
 			return config
 		}
 	}
@@ -83,8 +79,8 @@ public struct RealtimeConfiguration: Sendable {
 		public let preferredCodec: String
 
 		public init(
-			maxBitrate: Int = 3_500_000,
-			minBitrate: Int = 400_000,
+			maxBitrate: Int = 2_500_000,
+			minBitrate: Int = 300_000,
 			maxFramerate: Int = 26,
 			preferredCodec: String = "VP8"
 		) {

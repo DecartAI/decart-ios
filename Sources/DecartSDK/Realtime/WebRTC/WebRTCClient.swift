@@ -43,7 +43,10 @@ final class WebRTCClient: @unchecked Sendable {
 	) {
 		self.factory = Self.getOrCreateFactory()
 
-		let (stream, continuation) = AsyncStream.makeStream(of: RTCPeerConnectionState.self)
+		let (stream, continuation) = AsyncStream.makeStream(
+			of: RTCPeerConnectionState.self,
+			bufferingPolicy: .bufferingNewest(1)
+		)
 		self.connectionStateStream = stream
 		self.connectionStateContinuation = continuation
 

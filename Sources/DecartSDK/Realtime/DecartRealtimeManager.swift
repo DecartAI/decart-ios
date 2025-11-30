@@ -70,7 +70,7 @@ public extension DecartRealtimeManager {
 		try await rtcClient.setLocalDescription(offer)
 		sendMessage(.offer(OfferMessage(sdp: offer.sdp)))
 
-		try await waitForConnection(timeout: TimeInterval(options.connection.connectionTimeout) / 1000)
+		try await waitForConnection(timeout: options.connection.connectionTimeout)
 
 		guard let remoteStream = rtcClient.getRemoteRealtimeStream() else {
 			throw DecartError.webRTCError("couldn't get remote stream, check video transceiver")
