@@ -83,7 +83,7 @@ public struct RealtimeConfiguration: Sendable {
 		public let preferredCodec: String
 
 		public init(
-			maxBitrate: Int = 2_000_000,
+			maxBitrate: Int = 3_000_000,
 			minBitrate: Int = 500_000,
 			maxFramerate: Int = 26,
 			preferredCodec: String = "VP8"

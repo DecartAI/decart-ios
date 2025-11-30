@@ -6,7 +6,7 @@ import WebRTC
 struct RealtimeView: View {
 	private let realtimeAiModel: RealtimeModel
 	@State private var prompt: String = DecartConfig.defaultPrompt
-	@State private var realtimeManager: DecartRealtimeManager?
+	@State private var realtimeManager: RealtimeManager?
 
 	init(realtimeModel: RealtimeModel) {
 		self.realtimeAiModel = realtimeModel
@@ -26,7 +26,7 @@ struct RealtimeView: View {
 		}
 		.onAppear {
 			if realtimeManager == nil {
-				realtimeManager = DecartRealtimeManager(
+				realtimeManager = RealtimeManager(
 					currentPrompt: Prompt(text: DecartConfig.defaultPrompt, enrich: false)
 				)
 			}
@@ -41,7 +41,7 @@ struct RealtimeView: View {
 }
 
 private struct RealtimeContentView: View {
-	@Bindable var realtimeManager: DecartRealtimeManager
+	@Bindable var realtimeManager: RealtimeManager
 	let realtimeAiModel: RealtimeModel
 	@Binding var prompt: String
 

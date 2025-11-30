@@ -1,7 +1,7 @@
 import Foundation
 import WebRTC
 
-extension RealtimeManager {
+extension DecartRealtimeManager {
 	public func getTransceivers() -> [RTCRtpTransceiver] {
 		webRTCClient.transceivers
 	}

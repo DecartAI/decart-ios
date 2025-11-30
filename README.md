@@ -309,6 +309,16 @@ VideoConfig(
 - Swift 5.9+
 - Xcode 15.0+
 
+## Environment Variables
+
+Configure these in your Xcode scheme (Edit Scheme → Run → Environment Variables):
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DECART_API_KEY` | Yes | Your Decart API key from [platform.decart.ai](https://platform.decart.ai) |
+| `DECART_DEFAULT_PROMPT` | No | Default prompt for realtime sessions (defaults to "Simpsons") |
+| `ENABLE_DECART_SDK_DUBUG_LOGS` | No | Set to `YES` to enable verbose SDK logging |
+
 ## Dependencies
 
 - [WebRTC](https://github.com/nickkjordan/WebRTC) - WebRTC framework for iOS/macOS

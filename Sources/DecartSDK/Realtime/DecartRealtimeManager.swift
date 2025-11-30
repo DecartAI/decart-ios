@@ -1,7 +1,7 @@
 import Foundation
 @preconcurrency import WebRTC
 
-public final class RealtimeManager: @unchecked Sendable {
+public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
 	public let events: AsyncStream<DecartRealtimeConnectionState>
 
