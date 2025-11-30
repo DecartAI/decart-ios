@@ -83,8 +83,8 @@ public struct RealtimeConfiguration: Sendable {
 		public let preferredCodec: String
 
 		public init(
-			maxBitrate: Int = 3_000_000,
-			minBitrate: Int = 500_000,
+			maxBitrate: Int = 3_500_000,
+			minBitrate: Int = 400_000,
 			maxFramerate: Int = 26,
 			preferredCodec: String = "VP8"
 		) {
@@ -94,22 +94,32 @@ public struct RealtimeConfiguration: Sendable {
 			self.preferredCodec = preferredCodec
 		}
 
-		public func configure(transceiver: RTCRtpTransceiver, factory: RTCPeerConnectionFactory) {
+		func makeTransceiverInit() -> RTCRtpTransceiverInit {
+			let transceiverInit = RTCRtpTransceiverInit()
+			transceiverInit.direction = .sendRecv
+
+			let encoding = RTCRtpEncodingParameters()
+			encoding.maxBitrateBps = NSNumber(value: maxBitrate)
+			encoding.minBitrateBps = NSNumber(value: minBitrate)
+			encoding.maxFramerate = NSNumber(value: maxFramerate)
+			transceiverInit.sendEncodings = [encoding]
+
+			return transceiverInit
+		}
+
+		func configureTransceiver(_ transceiver: RTCRtpTransceiver, factory: RTCPeerConnectionFactory) {
 			let supportedCodecs = factory.rtpSenderCapabilities(forKind: "video").codecs
+			let preferredCodecName = preferredCodec.uppercased()
 
 			var preferredCodecs: [RTCRtpCodecCapability] = []
 			var otherCodecs: [RTCRtpCodecCapability] = []
 			var utilityCodecs: [RTCRtpCodecCapability] = []
 
-			let preferredCodecName = preferredCodec.uppercased()
-
 			for codec in supportedCodecs {
 				let codecNameUpper = codec.name.uppercased()
 				if codecNameUpper == preferredCodecName {
 					preferredCodecs.append(codec)
-				} else if codecNameUpper == "RTX" || codecNameUpper == "RED"
-					|| codecNameUpper == "ULPFEC"
-				{
+				} else if codecNameUpper == "RTX" || codecNameUpper == "RED" || codecNameUpper == "ULPFEC" {
 					utilityCodecs.append(codec)
 				} else {
 					otherCodecs.append(codec)
@@ -117,20 +127,7 @@ public struct RealtimeConfiguration: Sendable {
 			}
 
 			let sortedCodecs = preferredCodecs + otherCodecs + utilityCodecs
-			try? transceiver.setCodecPreferences(sortedCodecs, error: ())
-
-			let sender = transceiver.sender
-			let parameters = sender.parameters
-			if parameters.encodings.indices.contains(0) {
-				let encodingParam = parameters.encodings[0]
-				encodingParam.maxBitrateBps = NSNumber(value: maxBitrate)
-				encodingParam.minBitrateBps = NSNumber(value: minBitrate)
-				encodingParam.maxFramerate = NSNumber(value: maxFramerate)
-				encodingParam.scaleResolutionDownBy = NSNumber(value: 1.0)
-
-				parameters.encodings[0] = encodingParam
-				sender.parameters = parameters
-			}
+			transceiver.setCodecPreferences(sortedCodecs)
 		}
 	}
 }

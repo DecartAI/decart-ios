@@ -5,7 +5,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
 	public let events: AsyncStream<DecartRealtimeConnectionState>
 
-	let webRTCClient: WebRTCClient
+	private var webRTCClient: WebRTCClient?
 	private var webSocketClient: WebSocketClient?
 
 	private let signalingServerURL: URL
@@ -30,57 +30,78 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		)
 		self.events = stream
 		self.stateContinuation = continuation
-		self.webRTCClient = WebRTCClient()
 	}
 
-	// MARK: - Public API
+	deinit {
+		webSocketListenerTask?.cancel()
+		connectionStateListenerTask?.cancel()
+		webRTCClient?.close()
+		stateContinuation.finish()
+		DecartLogger.log("RealtimeManager (SDK) deinitialized", level: .info)
+	}
+}
 
-	public func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream {
+// MARK: - Public API
+
+public extension DecartRealtimeManager {
+	func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream {
 		connectionState = .connecting
 
-		let wsClient = WebSocketClient()
+		let wsClient = await WebSocketClient(url: signalingServerURL)
 		webSocketClient = wsClient
-		await wsClient.connect(url: signalingServerURL)
 		setupWebSocketListener(wsClient)
 
-		webRTCClient.createPeerConnection(
+		let rtcClient = WebRTCClient(
 			config: options.connection.makeRTCConfiguration(),
 			constraints: options.media.connectionConstraints,
-			sendMessage: { [weak self] in self?.sendMessage($0) }
+			videoConfig: options.media.video,
+			sendMessage: { [weak self] in self?.sendMessage($0) },
+			withAudio: localStream.audioTrack != nil
 		)
-		setupConnectionStateListener()
+		webRTCClient = rtcClient
+		setupConnectionStateListener(rtcClient)
 
-		webRTCClient.addTrack(localStream.videoTrack, streamIds: [localStream.id])
-		if let audioTrack = localStream.audioTrack {
-			webRTCClient.addTrack(audioTrack, streamIds: [localStream.id])
-		}
+		rtcClient.startLocalStreaming(
+			videoTrack: localStream.videoTrack,
+			audioTrack: localStream.audioTrack
+		)
 
-		webRTCClient.configureVideoTransceiver(videoConfig: options.media.video)
-
-		let offer = try await webRTCClient.createOffer(constraints: options.media.offerConstraints)
-		try await webRTCClient.setLocalDescription(offer)
+		let offer = try await rtcClient.createOffer(constraints: options.media.offerConstraints)
+		try await rtcClient.setLocalDescription(offer)
 		sendMessage(.offer(OfferMessage(sdp: offer.sdp)))
 
 		try await waitForConnection(timeout: TimeInterval(options.connection.connectionTimeout) / 1000)
 
-		return try extractRemoteStream()
+		guard let remoteStream = rtcClient.getRemoteRealtimeStream() else {
+			throw DecartError.webRTCError("couldn't get remote stream, check video transceiver")
+		}
+
+		return remoteStream
 	}
 
-	public func disconnect() async {
-		await cleanup()
+	func disconnect() async {
+		connectionState = .disconnected
+		webSocketListenerTask?.cancel()
+		webSocketListenerTask = nil
+		connectionStateListenerTask?.cancel()
+		connectionStateListenerTask = nil
+		webRTCClient?.close()
+		webRTCClient = nil
+
+		let audioSession = RTCAudioSession.sharedInstance()
+		if audioSession.isActive {
+			audioSession.lockForConfiguration()
+			try? audioSession.setActive(false)
+			audioSession.unlockForConfiguration()
+		}
+		webSocketClient = nil
 	}
 
-	public func setPrompt(_ prompt: Prompt) {
+	func setPrompt(_ prompt: Prompt) {
 		sendMessage(.prompt(PromptMessage(prompt: prompt.text)))
 	}
 
-	public func getStats() async -> RTCStatisticsReport? {
-		await webRTCClient.peerConnection?.statistics()
-	}
-
-	// MARK: - Private
-
-	private func waitForConnection(timeout: TimeInterval) async throws {
+	func waitForConnection(timeout: TimeInterval) async throws {
 		let startTime = Date()
 		while connectionState != .connected {
 			if connectionState == .error || connectionState == .disconnected {
@@ -93,32 +114,42 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		}
 		sendMessage(.prompt(PromptMessage(prompt: options.initialState.prompt.text)))
 	}
+}
 
-	private func extractRemoteStream() throws -> RealtimeMediaStream {
-		guard let videoTransceiver = webRTCClient.transceivers.first(where: { $0.mediaType == .video }) else {
-			throw DecartError.webRTCError("Video transceiver not found")
-		}
-		guard let remoteVideoTrack = videoTransceiver.receiver.track as? RTCVideoTrack else {
-			throw DecartError.webRTCError("Remote video track not found")
-		}
-		let remoteAudioTrack = webRTCClient.transceivers
-			.first(where: { $0.mediaType == .audio })?
-			.receiver.track as? RTCAudioTrack
+// MARK: - Connection
 
-		return RealtimeMediaStream(
-			videoTrack: remoteVideoTrack,
-			audioTrack: remoteAudioTrack,
-			id: .remoteStream
-		)
+public extension DecartRealtimeManager {
+	func createVideoSource() -> RTCVideoSource {
+		WebRTCClient.createVideoSource()
 	}
 
-	private func setupWebSocketListener(_ wsClient: WebSocketClient) {
+	func replaceVideoTrack(with newTrack: RTCVideoTrack) {
+		webRTCClient?.replaceVideoTrack(with: newTrack)
+	}
+
+	func createVideoTrack(source: RTCVideoSource, trackId: String) -> RTCVideoTrack {
+		WebRTCClient.createVideoTrack(source: source, trackId: trackId)
+	}
+
+	func createAudioSource(constraints: RTCMediaConstraints? = nil) -> RTCAudioSource {
+		WebRTCClient.createAudioSource(constraints: constraints)
+	}
+
+	func createAudioTrack(source: RTCAudioSource, trackId: String) -> RTCAudioTrack {
+		WebRTCClient.createAudioTrack(source: source, trackId: trackId)
+	}
+}
+
+// MARK: - Listeners
+
+private extension DecartRealtimeManager {
+	func setupWebSocketListener(_ wsClient: WebSocketClient) {
 		webSocketListenerTask?.cancel()
 		webSocketListenerTask = Task { [weak self] in
 			do {
 				for try await message in wsClient.websocketEventStream {
-					guard !Task.isCancelled, let self else { return }
-					try await self.webRTCClient.handleSignalingMessage(message)
+					guard !Task.isCancelled, let self, let webRTCClient = self.webRTCClient else { return }
+					try await webRTCClient.handleSignalingMessage(message)
 				}
 			} catch {
 				self?.connectionState = .error
@@ -126,11 +157,10 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		}
 	}
 
-	private func setupConnectionStateListener() {
+	func setupConnectionStateListener(_ rtcClient: WebRTCClient) {
 		connectionStateListenerTask?.cancel()
-		guard let stateStream = webRTCClient.connectionStateStream else { return }
 		connectionStateListenerTask = Task { [weak self] in
-			for await rtcState in stateStream {
+			for await rtcState in rtcClient.connectionStateStream {
 				guard !Task.isCancelled, let self else { return }
 				switch rtcState {
 				case .connected: self.connectionState = .connected
@@ -141,36 +171,13 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 			}
 		}
 	}
+}
 
-	private func sendMessage(_ message: OutgoingWebSocketMessage) {
+// MARK: - Messaging
+
+private extension DecartRealtimeManager {
+	func sendMessage(_ message: OutgoingWebSocketMessage) {
 		guard let webSocketClient else { return }
 		Task { try? await webSocketClient.send(message) }
-	}
-
-	private func cleanup() async {
-		connectionState = .disconnected
-		webSocketListenerTask?.cancel()
-		webSocketListenerTask = nil
-		connectionStateListenerTask?.cancel()
-		connectionStateListenerTask = nil
-		webRTCClient.closePeerConnection()
-
-		let audioSession = RTCAudioSession.sharedInstance()
-		if audioSession.isActive {
-			audioSession.lockForConfiguration()
-			try? audioSession.setActive(false)
-			audioSession.unlockForConfiguration()
-		}
-
-		await webSocketClient?.disconnect()
-		webSocketClient = nil
-	}
-
-	deinit {
-		webSocketListenerTask?.cancel()
-		connectionStateListenerTask?.cancel()
-		webRTCClient.closePeerConnection()
-		stateContinuation.finish()
-		DecartLogger.log("RealtimeManager (SDK) deinitialized", level: .info)
 	}
 }

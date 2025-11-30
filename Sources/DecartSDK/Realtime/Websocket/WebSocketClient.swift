@@ -3,29 +3,29 @@ import Foundation
 actor WebSocketClient {
 	var isConnected: Bool = false
 
-	private var stream: SocketStream?
+	private let stream: SocketStream
 	private var listeningTask: Task<Void, Never>?
 	private let decoder = JSONDecoder()
 	private let encoder = JSONEncoder()
 
-	private nonisolated(unsafe) let eventStreamContinuation: AsyncStream<IncomingWebSocketMessage>.Continuation
+	private let eventStreamContinuation: AsyncStream<IncomingWebSocketMessage>.Continuation
 	nonisolated let websocketEventStream: AsyncStream<IncomingWebSocketMessage>
 
-	init() {
+	init(url: URL) async {
 		let (websocketEventStream, eventStreamContinuation) = AsyncStream.makeStream(of: IncomingWebSocketMessage.self)
 		self.eventStreamContinuation = eventStreamContinuation
 		self.websocketEventStream = websocketEventStream
-	}
-
-	func connect(url: URL) {
-		guard stream == nil else { return }
 		let socketConnection = URLSession.shared.webSocketTask(with: url)
 		stream = SocketStream(task: socketConnection)
-		isConnected = true
+		mountListener()
+	}
+
+	private func mountListener() {
 		listeningTask = Task { [weak self] in
-			guard let self, let stream = await self.stream else { return }
+			guard let self else { return }
 			do {
-				for try await msg in stream {
+				for try await msg in self.stream {
+					if Task.isCancelled { return }
 					switch msg {
 					case .string(let text):
 						await self.handleIncomingMessage(text)
@@ -37,7 +37,7 @@ actor WebSocketClient {
 					}
 				}
 			} catch {
-				await self.eventStreamContinuation.finish()
+				self.eventStreamContinuation.finish()
 			}
 		}
 	}
@@ -49,7 +49,6 @@ actor WebSocketClient {
 	}
 
 	func send<T: Codable>(_ message: T) throws {
-		guard let stream else { return }
 		let data = try encoder.encode(message)
 		guard let jsonString = String(data: data, encoding: .utf8) else {
 			throw DecartError.websocketError("unable to encode message")
@@ -57,16 +56,9 @@ actor WebSocketClient {
 		Task { [stream] in try await stream.sendMessage(.string(jsonString)) }
 	}
 
-	func disconnect() async {
-		eventStreamContinuation.finish()
-		listeningTask?.cancel()
-		listeningTask = nil
-		stream?.cancel()
-		stream = nil
-		isConnected = false
-	}
-
 	deinit {
+		listeningTask?.cancel()
 		eventStreamContinuation.finish()
+		stream.cancel()
 	}
 }

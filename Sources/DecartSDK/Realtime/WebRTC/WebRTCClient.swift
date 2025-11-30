@@ -1,17 +1,20 @@
 import Foundation
 @preconcurrency import WebRTC
 
-final class WebRTCClient {
+final class WebRTCClient: @unchecked Sendable {
 	private nonisolated(unsafe) static var sharedFactory: RTCPeerConnectionFactory?
 	private static let factoryLock = NSLock()
 
-	let factory: RTCPeerConnectionFactory
-	private(set) var peerConnection: RTCPeerConnection?
-	private(set) var connectionStateStream: AsyncStream<RTCPeerConnectionState>?
+	nonisolated(unsafe) let factory: RTCPeerConnectionFactory
+	let peerConnection: RTCPeerConnection
+	let connectionStateStream: AsyncStream<RTCPeerConnectionState>
 
-	private var delegateHandler: WebRTCDelegateHandler?
-	private var signalingClient: SignalingClient?
-	private var connectionStateContinuation: AsyncStream<RTCPeerConnectionState>.Continuation?
+	private let delegateHandler: WebRTCDelegateHandler
+	private let signalingClient: SignalingClient
+	private let connectionStateContinuation: AsyncStream<RTCPeerConnectionState>.Continuation
+
+	nonisolated(unsafe) var videoTransceiver: RTCRtpTransceiver?
+	nonisolated(unsafe) var audioTransceiver: RTCRtpTransceiver?
 
 	private static func getOrCreateFactory() -> RTCPeerConnectionFactory {
 		factoryLock.lock()
@@ -22,7 +25,6 @@ final class WebRTCClient {
 		}
 
 		RTCInitializeSSL()
-		// RTCSetMinDebugLogLevel(.warning)
 
 		let factory = RTCPeerConnectionFactory(
 			encoderFactory: RTCDefaultVideoEncoderFactory(),
@@ -32,137 +34,158 @@ final class WebRTCClient {
 		return factory
 	}
 
-	init() {
-		self.factory = Self.getOrCreateFactory()
-	}
-
-	func createPeerConnection(
+	init(
 		config: RTCConfiguration,
 		constraints: RTCMediaConstraints,
-		sendMessage: @escaping (OutgoingWebSocketMessage) -> Void
+		videoConfig: RealtimeConfiguration.VideoConfig,
+		sendMessage: @escaping (OutgoingWebSocketMessage) -> Void,
+		withAudio: Bool
 	) {
-		let (stream, continuation) = AsyncStream.makeStream(of: RTCPeerConnectionState.self)
-		connectionStateStream = stream
-		connectionStateContinuation = continuation
+		self.factory = Self.getOrCreateFactory()
 
-		delegateHandler = WebRTCDelegateHandler(
+		let (stream, continuation) = AsyncStream.makeStream(of: RTCPeerConnectionState.self)
+		self.connectionStateStream = stream
+		self.connectionStateContinuation = continuation
+
+		self.delegateHandler = WebRTCDelegateHandler(
 			sendMessage: sendMessage,
 			connectionStateContinuation: continuation
 		)
 
-		peerConnection = factory.peerConnection(
+		self.peerConnection = factory.peerConnection(
 			with: config,
 			constraints: constraints,
 			delegate: delegateHandler
 		)!
 
-		signalingClient = SignalingClient(
-			peerConnection: peerConnection!,
+		self.signalingClient = SignalingClient(
+			peerConnection: peerConnection,
 			factory: factory,
 			sendMessage: sendMessage
 		)
+
+		prepareTransceivers(videoConfig: videoConfig, withAudio: withAudio)
 	}
 
 	func handleSignalingMessage(_ message: IncomingWebSocketMessage) async throws {
-		try await signalingClient?.handleMessage(message)
+		try await signalingClient.handleMessage(message)
 	}
 
-	// MARK: - Track Operations
-
-	func addTrack(_ track: RTCMediaStreamTrack, streamIds: [String]) {
-		peerConnection?.add(track, streamIds: streamIds)
+	deinit {
+		DecartLogger.log("Webrtc client deinitialized", level: .info)
+		close()
 	}
+}
 
-	func configureVideoTransceiver(videoConfig: RealtimeConfiguration.VideoConfig) {
-		if let transceiver = peerConnection?.transceivers.first(where: { $0.mediaType == .video }) {
-			videoConfig.configure(transceiver: transceiver, factory: factory)
+// MARK: - Track Operations
+
+extension WebRTCClient {
+	func prepareTransceivers(videoConfig: RealtimeConfiguration.VideoConfig, withAudio: Bool) {
+		if withAudio {
+			let audioInit = RTCRtpTransceiverInit()
+			audioInit.direction = .sendRecv
+			audioTransceiver = peerConnection.addTransceiver(of: .audio, init: audioInit)
+		}
+
+		videoTransceiver = peerConnection.addTransceiver(of: .video, init: videoConfig.makeTransceiverInit())
+		if let videoTransceiver {
+			videoConfig.configureTransceiver(videoTransceiver, factory: factory)
 		}
 	}
 
-	var transceivers: [RTCRtpTransceiver] {
-		peerConnection?.transceivers ?? []
+	nonisolated func replaceVideoTrack(with newTrack: RTCVideoTrack) {
+		guard let videoTransceiver else {
+			fatalError("Video track does not exist")
+		}
+		videoTransceiver.sender.track = newTrack
 	}
 
-	// MARK: - SDP Operations
+	nonisolated static func createVideoSource() -> RTCVideoSource {
+		WebRTCClient.getOrCreateFactory().videoSource()
+	}
 
+	nonisolated static func createVideoTrack(source: RTCVideoSource, trackId: String) -> RTCVideoTrack {
+		WebRTCClient.getOrCreateFactory().videoTrack(with: source, trackId: trackId)
+	}
+
+	nonisolated static func createAudioSource(constraints: RTCMediaConstraints? = nil) -> RTCAudioSource {
+		WebRTCClient.getOrCreateFactory().audioSource(with: constraints)
+	}
+
+	nonisolated static func createAudioTrack(source: RTCAudioSource, trackId: String) -> RTCAudioTrack {
+		WebRTCClient.getOrCreateFactory().audioTrack(with: source, trackId: trackId)
+	}
+}
+
+// MARK: - Streaming
+
+extension WebRTCClient {
+	nonisolated func getRemoteRealtimeStream() -> RealtimeMediaStream? {
+		guard let remoteVideoTrack = videoTransceiver?.receiver.track as? RTCVideoTrack else {
+			return nil
+		}
+
+		let remoteAudioTrack = audioTransceiver?.receiver.track as? RTCAudioTrack
+
+		return RealtimeMediaStream(
+			videoTrack: remoteVideoTrack,
+			audioTrack: remoteAudioTrack,
+			id: .remoteStream
+		)
+	}
+
+	@discardableResult
+	nonisolated func startLocalStreaming(videoTrack: RTCVideoTrack, audioTrack: RTCAudioTrack? = nil) -> RealtimeMediaStream {
+		if let videoSender = videoTransceiver?.sender {
+			videoSender.track = videoTrack
+		}
+
+		if let audioSender = audioTransceiver?.sender {
+			audioSender.track = audioTrack
+		}
+
+		return RealtimeMediaStream(
+			videoTrack: videoTrack,
+			audioTrack: audioTrack,
+			id: .localStream
+		)
+	}
+}
+
+// MARK: - SDP Operations
+
+extension WebRTCClient {
 	func createOffer(constraints: RTCMediaConstraints) async throws -> RTCSessionDescription {
-		guard let peerConnection else {
-			throw DecartError.webRTCError("peer connection not initialized")
-		}
 		guard let offer = try await peerConnection.offer(for: constraints) else {
 			throw DecartError.webRTCError("failed to create offer")
 		}
 		return offer
 	}
 
-	func createAnswer(constraints: RTCMediaConstraints) async throws -> RTCSessionDescription {
-		guard let peerConnection else {
-			throw DecartError.webRTCError("peer connection not initialized")
-		}
-		guard let answer = try await peerConnection.answer(for: constraints) else {
-			throw DecartError.webRTCError("failed to create answer")
-		}
-		return answer
-	}
-
 	func setLocalDescription(_ sdp: RTCSessionDescription) async throws {
-		guard let peerConnection else {
-			throw DecartError.webRTCError("peer connection not initialized")
-		}
 		try await peerConnection.setLocalDescription(sdp)
 	}
+}
 
-	func setRemoteDescription(_ sdp: RTCSessionDescription) async throws {
-		guard let peerConnection else {
-			throw DecartError.webRTCError("peer connection not initialized")
-		}
-		try await peerConnection.setRemoteDescription(sdp)
-	}
+// MARK: - ICE Operations
 
-	// MARK: - ICE Operations
-
+extension WebRTCClient {
 	func addIceCandidate(_ candidate: RTCIceCandidate) async throws {
-		guard let peerConnection else {
-			throw DecartError.webRTCError("peer connection not initialized")
-		}
 		try await peerConnection.add(candidate)
 	}
+}
 
-	// MARK: - Media Factory
+// MARK: - Cleanup
 
-	func createVideoSource() -> RTCVideoSource {
-		factory.videoSource()
-	}
-
-	func createVideoTrack(source: RTCVideoSource, trackId: String) -> RTCVideoTrack {
-		factory.videoTrack(with: source, trackId: trackId)
-	}
-
-	func createAudioSource(constraints: RTCMediaConstraints?) -> RTCAudioSource {
-		factory.audioSource(with: constraints)
-	}
-
-	func createAudioTrack(source: RTCAudioSource, trackId: String) -> RTCAudioTrack {
-		factory.audioTrack(with: source, trackId: trackId)
-	}
-
-	// MARK: - Cleanup
-
-	func closePeerConnection() {
-		delegateHandler?.cleanup()
-		connectionStateContinuation?.finish()
-		peerConnection?.close()
-		peerConnection?.delegate = nil
-		peerConnection = nil
-		signalingClient = nil
-		delegateHandler = nil
-		connectionStateStream = nil
-		connectionStateContinuation = nil
-	}
-
-	deinit {
-		DecartLogger.log("Webrtc client deinitialized", level: .info)
-		closePeerConnection()
-		// Note: Don't call RTCCleanupSSL() - factory is singleton, SSL stays initialized
+extension WebRTCClient {
+	func close() {
+		videoTransceiver?.sender.track = nil
+		audioTransceiver?.sender.track = nil
+		delegateHandler.cleanup()
+		connectionStateContinuation.finish()
+		peerConnection.close()
+		peerConnection.delegate = nil
+		videoTransceiver = nil
+		audioTransceiver = nil
 	}
 }
