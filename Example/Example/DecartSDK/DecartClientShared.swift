@@ -18,7 +18,7 @@ protocol RealtimeManagerProtocol {
 	var localMediaStream: RealtimeMediaStream? { get }
 	var remoteMediaStreams: RealtimeMediaStream? { get }
 
-	func connect(model: RealtimeModel) async
+	func connect() async
 	func switchCamera() async
 	func cleanup() async
 }

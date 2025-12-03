@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		165B2B9B2ECE09E9004D848C /* Factory in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9A2ECE09E9004D848C /* Factory */; };
 		165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9C2ECE09E9004D848C /* FactoryKit */; };
-		165C49642EDC6F2F00FC00B8 /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 165C49632EDC6F2F00FC00B8 /* DecartSDK */; };
+		16B8AC262EDE0490005EEA8A /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 16B8AC252EDE0490005EEA8A /* DecartSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -31,7 +31,7 @@
 			files = (
 				165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */,
 				165B2B9B2ECE09E9004D848C /* Factory in Frameworks */,
-				165C49642EDC6F2F00FC00B8 /* DecartSDK in Frameworks */,
+				16B8AC262EDE0490005EEA8A /* DecartSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,18 +76,15 @@
 			buildRules = (
 			);
 			dependencies = (
-				165C49662EDC6F3A00FC00B8 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				16D70B982EB8CA0C00455077 /* Example */,
 			);
 			name = Example;
 			packageProductDependencies = (
-				16E67C3B2EB8CC9F00AF5515 /* DecartSDK */,
 				165B2B9A2ECE09E9004D848C /* Factory */,
 				165B2B9C2ECE09E9004D848C /* FactoryKit */,
-				1648B2072ED88F6D00EF4368 /* DecartSDK */,
-				165C49632EDC6F2F00FC00B8 /* DecartSDK */,
+				16B8AC252EDE0490005EEA8A /* DecartSDK */,
 			);
 			productName = Example;
 			productReference = 16D70B962EB8CA0C00455077 /* Example.app */;
@@ -119,7 +116,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */,
-				165C49622EDC6F2F00FC00B8 /* XCLocalSwiftPackageReference "../decart-ios" */,
+				16B8AC242EDE0490005EEA8A /* XCLocalSwiftPackageReference "../decart-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 16D70B972EB8CA0C00455077 /* Products */;
@@ -150,13 +147,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		165C49662EDC6F3A00FC00B8 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = 165C49652EDC6F3A00FC00B8 /* DecartSDK */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		16D70B9F2EB8CA0D00455077 /* Debug */ = {
@@ -384,7 +374,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		165C49622EDC6F2F00FC00B8 /* XCLocalSwiftPackageReference "../decart-ios" */ = {
+		16B8AC242EDE0490005EEA8A /* XCLocalSwiftPackageReference "../decart-ios" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../decart-ios";
 		};
@@ -402,10 +392,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		1648B2072ED88F6D00EF4368 /* DecartSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = DecartSDK;
-		};
 		165B2B9A2ECE09E9004D848C /* Factory */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
@@ -416,16 +402,7 @@
 			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
 			productName = FactoryKit;
 		};
-		165C49632EDC6F2F00FC00B8 /* DecartSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = DecartSDK;
-		};
-		165C49652EDC6F3A00FC00B8 /* DecartSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 165C49622EDC6F2F00FC00B8 /* XCLocalSwiftPackageReference "../decart-ios" */;
-			productName = DecartSDK;
-		};
-		16E67C3B2EB8CC9F00AF5515 /* DecartSDK */ = {
+		16B8AC252EDE0490005EEA8A /* DecartSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DecartSDK;
 		};

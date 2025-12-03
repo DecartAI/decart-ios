@@ -34,6 +34,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	private let decartClient = Container.shared.decartClient()
 
 	@ObservationIgnored
+	private let model: RealtimeModel
+
+	@ObservationIgnored
 	private var realtimeManager: DecartRealtimeManager?
 
 	@ObservationIgnored
@@ -46,14 +49,15 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	// MARK: - Init
 
-	init(currentPrompt: Prompt, isMirroringEnabled: Bool = true) {
+	init(model: RealtimeModel, currentPrompt: Prompt, isMirroringEnabled: Bool = true) {
+		self.model = model
 		self.currentPrompt = currentPrompt
 		self.shouldMirror = isMirroringEnabled
 	}
 
 	// MARK: - Public API
 
-	func connect(model: RealtimeModel) async {
+	func connect() async {
 		if connectionState.isInSession || realtimeManager != nil {
 			await cleanup()
 		}

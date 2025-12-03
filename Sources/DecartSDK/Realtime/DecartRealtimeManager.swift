@@ -52,7 +52,7 @@ public extension DecartRealtimeManager {
 		setupWebSocketListener(wsClient)
 
 		let rtcClient = WebRTCClient(
-			config: options.connection.makeRTCConfiguration(),
+			config: options.connection.rtcConfiguration,
 			constraints: options.media.connectionConstraints,
 			videoConfig: options.media.video,
 			sendMessage: { [weak self] in self?.sendMessage($0) },
@@ -178,6 +178,6 @@ private extension DecartRealtimeManager {
 private extension DecartRealtimeManager {
 	func sendMessage(_ message: OutgoingWebSocketMessage) {
 		guard let webSocketClient else { return }
-		Task { try? await webSocketClient.send(message) }
+		Task { [webSocketClient] in try? await webSocketClient.send(message) }
 	}
 }

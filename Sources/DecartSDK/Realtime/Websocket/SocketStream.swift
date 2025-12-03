@@ -49,18 +49,24 @@ final class SocketStream: AsyncSequence, @unchecked Sendable {
 			continuation?.finish()
 			return
 		}
-		task.receive(completionHandler: { [weak self] result in
-			guard let continuation = self?.continuation else {
-				return
-			}
-			do {
-				let message = try result.get()
-				continuation.yield(message)
-				self?.waitForNextValue()
-			} catch {
-				continuation.finish(throwing: error)
-			}
-		})
+		task.receive(
+			completionHandler: { [weak self] result in
+				guard let continuation = self?.continuation else {
+					return
+				}
+				do {
+					let message = try result.get()
+					continuation.yield(message)
+					self?.waitForNextValue()
+				} catch {
+					DecartLogger
+						.log(
+							"Error in decart realtime websocket: \(error)",
+							level: .error
+						)
+					continuation.finish(throwing: error)
+				}
+			})
 	}
 
 	deinit {

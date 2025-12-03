@@ -31,22 +31,25 @@ public struct RealtimeConfiguration: Sendable {
 	public struct ConnectionConfig: Sendable {
 		public let iceServers: [String]
 		public let connectionTimeout: TimeInterval
+		public let rtcConfiguration: RTCConfiguration
 
 		public init(
 			iceServers: [String] = ["stun:stun.l.google.com:19302"],
-			connectionTimeout: TimeInterval = 15
+			connectionTimeout: TimeInterval = 15,
+			rtcConfiguration: RTCConfiguration? = nil
 		) {
 			self.iceServers = iceServers
 			self.connectionTimeout = connectionTimeout
-		}
-
-		public func makeRTCConfiguration() -> RTCConfiguration {
-			let config = RTCConfiguration()
-			config.iceServers = [RTCIceServer(urlStrings: iceServers)]
-			config.sdpSemantics = .unifiedPlan
-			config.continualGatheringPolicy = .gatherContinually
-			config.iceCandidatePoolSize = 10
-			return config
+			if let rtcConfiguration {
+				self.rtcConfiguration = rtcConfiguration
+			} else {
+				let config = RTCConfiguration()
+				config.iceServers = [RTCIceServer(urlStrings: iceServers)]
+				config.sdpSemantics = .unifiedPlan
+				config.continualGatheringPolicy = .gatherContinually
+				config.iceCandidatePoolSize = 10
+				self.rtcConfiguration = config
+			}
 		}
 	}
 
@@ -123,7 +126,15 @@ public struct RealtimeConfiguration: Sendable {
 			}
 
 			let sortedCodecs = preferredCodecs + otherCodecs + utilityCodecs
-			transceiver.setCodecPreferences(sortedCodecs)
+			do {
+				try transceiver.setCodecPreferences(sortedCodecs, error: ())
+			} catch {
+				DecartLogger
+					.log(
+						"error while setting codec preferences: \(error)",
+						level: .error
+					)
+			}
 		}
 	}
 }

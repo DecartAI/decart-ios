@@ -56,23 +56,15 @@ import DecartSDK
 let config = DecartConfiguration(apiKey: "your-api-key")
 let client = DecartClient(decartConfiguration: config)
 
-let model = Models.realtime(.mirage)
+let model: RealtimeModel = .mirage
+let modelConfig = Models.realtime(model)
+
 let realtimeManager = try client.createRealtimeManager(
     options: RealtimeConfiguration(
-        model: model,
+        model: modelConfig,
         initialState: ModelState(prompt: Prompt(text: "Lego World"))
     )
 )
-
-// Create video source and camera capture
-let videoSource = realtimeManager.createVideoSource()
-let capture = RealtimeCapture(model: model, videoSource: videoSource)
-try await capture.startCapture()
-
-// Create local stream and connect
-let videoTrack = realtimeManager.createVideoTrack(source: videoSource, trackId: "video0")
-let localStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
-let remoteStream = try await realtimeManager.connect(localStream: localStream)
 
 // Listen to connection events
 Task {
@@ -89,6 +81,16 @@ Task {
         }
     }
 }
+
+// Create video source and camera capture
+let videoSource = realtimeManager.createVideoSource()
+let capture = RealtimeCapture(model: modelConfig, videoSource: videoSource)
+try await capture.startCapture()
+
+// Create local stream and connect
+let videoTrack = realtimeManager.createVideoTrack(source: videoSource, trackId: "video0")
+let localStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
+let remoteStream = try await realtimeManager.connect(localStream: localStream)
 
 // Update prompt in real-time
 realtimeManager.setPrompt(Prompt(text: "Anime World"))

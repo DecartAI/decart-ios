@@ -5,11 +5,12 @@ import WebRTC
 
 struct RealtimeView: View {
 	private let realtimeAiModel: RealtimeModel
-	@State private var prompt: String = DecartConfig.defaultPrompt
+	private let presets: [PromptPreset]
 	@State private var realtimeManager: RealtimeManager?
 
 	init(realtimeModel: RealtimeModel) {
 		self.realtimeAiModel = realtimeModel
+		self.presets = DecartConfig.presets(for: realtimeModel)
 	}
 
 	var body: some View {
@@ -17,8 +18,7 @@ struct RealtimeView: View {
 			if let manager = realtimeManager {
 				RealtimeContentView(
 					realtimeManager: manager,
-					realtimeAiModel: realtimeAiModel,
-					prompt: $prompt
+					presets: presets
 				)
 			} else {
 				ProgressView("Loading...")
@@ -26,9 +26,14 @@ struct RealtimeView: View {
 		}
 		.onAppear {
 			if realtimeManager == nil {
+				let defaultPrompt = presets.first?.prompt ?? ""
 				realtimeManager = RealtimeManager(
-					currentPrompt: Prompt(text: DecartConfig.defaultPrompt, enrich: false)
+					model: realtimeAiModel,
+					currentPrompt: Prompt(text: defaultPrompt, enrich: false)
 				)
+				Task {
+					await realtimeManager?.connect()
+				}
 			}
 		}
 		.onDisappear {
@@ -42,8 +47,7 @@ struct RealtimeView: View {
 
 private struct RealtimeContentView: View {
 	@Bindable var realtimeManager: RealtimeManager
-	let realtimeAiModel: RealtimeModel
-	@Binding var prompt: String
+	let presets: [PromptPreset]
 
 	var body: some View {
 		ZStack {
@@ -81,70 +85,21 @@ private struct RealtimeContentView: View {
 					)
 				}
 
-				VStack(spacing: 12) {
-					if realtimeManager.connectionState == .error {
-						Text("Error while connecting to decart realtime servers, please try again later.")
-							.foregroundColor(.red)
-							.font(.caption)
-							.padding(8)
-							.background(Color.black.opacity(0.8))
-							.cornerRadius(8)
-					}
-
-					HStack(spacing: 12) {
-						TextField("Prompt", text: $prompt)
-							.textFieldStyle(RoundedBorderTextFieldStyle())
-
-						Button(action: {
-							realtimeManager.currentPrompt = Prompt(text: prompt, enrich: false)
-						}) {
-							Image(systemName: "paperplane.fill")
-								.foregroundColor(.white)
-								.padding(12)
-								.background(
-									realtimeManager.connectionState.isConnected
-										? Color.blue : Color.gray
-								)
-								.cornerRadius(8)
+				RealtimeControlsView(
+					presets: presets,
+					connectionState: realtimeManager.connectionState,
+					onPresetSelected: { preset in
+						realtimeManager.currentPrompt = Prompt(text: preset.prompt, enrich: false)
+					},
+					onSwitchCamera: { Task { await realtimeManager.switchCamera() } },
+					onConnectToggle: {
+						if realtimeManager.connectionState.isInSession {
+							Task { await realtimeManager.cleanup() }
+						} else {
+							Task { await realtimeManager.connect() }
 						}
 					}
-
-					HStack(spacing: 12) {
-						Toggle("Mirror", isOn: $realtimeManager.shouldMirror)
-							.toggleStyle(SwitchToggleStyle(tint: .blue))
-
-						Button(action: {
-							Task { await realtimeManager.switchCamera() }
-						}) {
-							Image(systemName: "arrow.trianglehead.2.counterclockwise.rotate.90")
-						}
-
-						Spacer()
-
-						Button(action: {
-							if realtimeManager.connectionState.isInSession {
-								Task { await realtimeManager.cleanup() }
-							} else {
-								Task { await realtimeManager.connect(model: realtimeAiModel) }
-							}
-						}) {
-							Text(realtimeManager.connectionState.rawValue)
-								.fontWeight(.semibold)
-								.foregroundColor(.white)
-								.frame(maxWidth: .infinity)
-								.padding()
-								.background(
-									realtimeManager.connectionState.isConnected
-										? Color.red : Color.green
-								)
-								.cornerRadius(12)
-						}
-					}
-				}
-				.padding()
-				.background(Color.black.opacity(0.8))
-				.cornerRadius(16)
-				.padding(.all, 5)
+				)
 			}
 		}
 	}
