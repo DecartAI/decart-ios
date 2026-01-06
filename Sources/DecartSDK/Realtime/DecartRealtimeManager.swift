@@ -88,6 +88,7 @@ public extension DecartRealtimeManager {
 		webRTCClient?.close()
 		webRTCClient = nil
 
+		#if canImport(WebRTC) && (os(iOS))
 		let audioSession = RTCAudioSession.sharedInstance()
 		if audioSession.isActive {
 			audioSession.lockForConfiguration()
@@ -95,6 +96,7 @@ public extension DecartRealtimeManager {
 			audioSession.unlockForConfiguration()
 		}
 		webSocketClient = nil
+		#endif
 	}
 
 	func setPrompt(_ prompt: Prompt) {
