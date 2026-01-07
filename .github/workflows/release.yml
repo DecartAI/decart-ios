@@ -8,7 +8,10 @@ on:
 jobs:
     release:
         name: Create Release
-        runs-on: macos-15
+        runs-on: macos-latest
+        env:
+            IOS_DEVICE_NAME: "iPhone 16 Pro"
+            IOS_OS_VERSION: "18.5"
 
         permissions:
             contents: write
@@ -18,10 +21,21 @@ jobs:
               uses: actions/checkout@v4
 
             - name: Select Xcode
-              run: sudo xcode-select -s /Applications/Xcode_16.2.app
+              run: sudo xcode-select -s /Applications/Xcode_26.1.app
 
             - name: Build Release
-              run: swift build -c release
+              uses: brightdigit/swift-build@v1.4.2
+              with:
+                  build-only: true
+                  scheme: DecartSDK
+                  type: ios
+                  configuration: release
+                  deviceName: ${{ env.IOS_DEVICE_NAME }}
+                  osVersion: ${{ env.IOS_OS_VERSION }}
+                  download-platform: true
+                  xcode: /Applications/Xcode_26.1.app
+                  use-xcbeautify: true
+                  xcbeautify-renderer: github-actions
 
             - name: Extract Version
               id: version
