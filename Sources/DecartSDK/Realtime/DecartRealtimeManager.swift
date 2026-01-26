@@ -12,9 +12,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private let stateContinuation: AsyncStream<DecartRealtimeConnectionState>.Continuation
 	private var webSocketListenerTask: Task<Void, Never>?
 	private var connectionStateListenerTask: Task<Void, Never>?
-	private var setImageAckTimeoutTask: Task<Void, Never>?
-	private var setImageAckContinuation: CheckedContinuation<Void, Error>?
-	private let setImageAckLock = NSLock()
+	private let setImageAckState = SetImageAckState()
 	private let defaultImageSendTimeout: TimeInterval = 15
 
 	private var connectionState: DecartRealtimeConnectionState = .idle {
@@ -40,7 +38,9 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		webSocketListenerTask?.cancel()
 		connectionStateListenerTask?.cancel()
 		webRTCClient?.close()
-		cancelSetImageAckIfNeeded(error: DecartError.websocketError("Realtime manager deinitialized"))
+		Task { [setImageAckState] in
+			await setImageAckState.cancel(error: DecartError.websocketError("Realtime manager deinitialized"))
+		}
 		stateContinuation.finish()
 		DecartLogger.log("RealtimeManager (SDK) deinitialized", level: .info)
 	}
@@ -90,12 +90,12 @@ public extension DecartRealtimeManager {
 		webSocketListenerTask = nil
 		connectionStateListenerTask?.cancel()
 		connectionStateListenerTask = nil
-		cancelSetImageAckIfNeeded(error: DecartError.websocketError("Realtime disconnected"))
+		await setImageAckState.cancel(error: DecartError.websocketError("Realtime disconnected"))
 		webRTCClient?.close()
 		webRTCClient = nil
 		await webSocketClient?.disconnect()
 
-		#if canImport(WebRTC) && (os(iOS))
+		#if canImport(WebRTC) && os(iOS)
 		let audioSession = RTCAudioSession.sharedInstance()
 		if audioSession.isActive {
 			audioSession.lockForConfiguration()
@@ -116,45 +116,19 @@ public extension DecartRealtimeManager {
 		enhance: Bool? = nil,
 		timeout: TimeInterval? = nil
 	) async throws {
-		try await withCheckedThrowingContinuation { continuation in
-			setImageAckLock.lock()
-			if setImageAckContinuation != nil {
-				setImageAckLock.unlock()
-				continuation.resume(
-					throwing: DecartError.invalidOptions("setImageBase64 already in progress")
-				)
-				return
+		let timeoutSeconds = timeout ?? defaultImageSendTimeout
+		let message = SetImageMessage(
+			imageData: imageBase64,
+			prompt: prompt,
+			enhancePrompt: enhance
+		)
+		try await setImageAckState.send(
+			message: message,
+			timeout: timeoutSeconds,
+			sendMessage: { [weak self] outgoing in
+				self?.sendMessage(outgoing)
 			}
-			setImageAckContinuation = continuation
-			setImageAckLock.unlock()
-
-			sendMessage(
-				.setImage(
-					SetImageMessage(
-						imageData: imageBase64,
-						prompt: prompt,
-						enhancePrompt: enhance
-					)
-				)
-			)
-
-			let timeoutSeconds = timeout ?? defaultImageSendTimeout
-			setImageAckTimeoutTask?.cancel()
-			setImageAckTimeoutTask = Task { [weak self] in
-				try? await Task.sleep(nanoseconds: UInt64(timeoutSeconds * 1_000_000_000))
-				guard let self else { return }
-				self.setImageAckLock.lock()
-				guard let continuation = self.setImageAckContinuation else {
-					self.setImageAckLock.unlock()
-					return
-				}
-				self.setImageAckContinuation = nil
-				self.setImageAckLock.unlock()
-				continuation.resume(
-					throwing: DecartError.websocketError("Image send timed out")
-				)
-			}
-		}
+		)
 	}
 
 	func waitForConnection(timeout: TimeInterval) async throws {
@@ -245,16 +219,54 @@ private extension DecartRealtimeManager {
 	}
 
 	func handleSetImageAck(_ message: SetImageAckMessage) {
-		setImageAckLock.lock()
-		guard let continuation = setImageAckContinuation else {
-			setImageAckLock.unlock()
-			return
+		Task { [setImageAckState] in
+			await setImageAckState.handleAck(message: message)
 		}
-		setImageAckContinuation = nil
-		setImageAckTimeoutTask?.cancel()
-		setImageAckTimeoutTask = nil
-		setImageAckLock.unlock()
+	}
+}
 
+// MARK: - SetImageAckState Actor
+
+private actor SetImageAckState {
+	private var continuation: CheckedContinuation<Void, Error>?
+	private var timeoutTask: Task<Void, Never>?
+	
+	func send(
+		message: SetImageMessage,
+		timeout: TimeInterval,
+		sendMessage: (OutgoingWebSocketMessage) -> Void
+	) async throws {
+		guard continuation == nil else {
+			throw DecartError.invalidOptions("setImageBase64 already in progress")
+		}
+
+		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+			self.continuation = continuation
+			sendMessage(.setImage(message))
+
+			timeoutTask?.cancel()
+			timeoutTask = Task { [weak self] in
+				try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+				await self?.timeout()
+			}
+		}
+	}
+
+	private func timeout() {
+		guard let continuation else { return }
+		self.continuation = nil
+		self.timeoutTask = nil
+		continuation.resume(
+			throwing: DecartError.websocketError("Image send timed out")
+		)
+	}
+	
+	func handleAck(message: SetImageAckMessage) {
+		guard let continuation = self.continuation else { return }
+		self.continuation = nil
+		timeoutTask?.cancel()
+		timeoutTask = nil
+		
 		if message.success {
 			continuation.resume()
 		} else {
@@ -263,17 +275,12 @@ private extension DecartRealtimeManager {
 			)
 		}
 	}
-
-	func cancelSetImageAckIfNeeded(error: Error) {
-		setImageAckLock.lock()
-		guard let continuation = setImageAckContinuation else {
-			setImageAckLock.unlock()
-			return
-		}
-		setImageAckContinuation = nil
-		setImageAckTimeoutTask?.cancel()
-		setImageAckTimeoutTask = nil
-		setImageAckLock.unlock()
+	
+	func cancel(error: Error) {
+		guard let continuation = self.continuation else { return }
+		self.continuation = nil
+		timeoutTask?.cancel()
+		timeoutTask = nil
 		continuation.resume(throwing: error)
 	}
 }
