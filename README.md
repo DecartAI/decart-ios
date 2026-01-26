@@ -95,6 +95,13 @@ let remoteStream = try await realtimeManager.connect(localStream: localStream)
 // Update prompt in real-time
 realtimeManager.setPrompt(Prompt(text: "Anime World"))
 
+// Send reference image (base64) to the realtime session
+try await realtimeManager.setImageBase64(
+    imageBase64String,
+    prompt: "Use this as reference",
+    enhance: true
+)
+
 // Cleanup
 await capture.stopCapture()
 await realtimeManager.disconnect()
@@ -226,6 +233,7 @@ func createProcessClient(model: VideoModel, input: VideoToVideoInput) throws -> 
 func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream
 func disconnect() async
 func setPrompt(_ prompt: Prompt)
+func setImageBase64(_ imageBase64: String?, prompt: String?, enhance: Bool?, timeout: TimeInterval?) async throws
 func getStats() async -> RTCStatisticsReport?
 
 let events: AsyncStream<DecartRealtimeConnectionState>

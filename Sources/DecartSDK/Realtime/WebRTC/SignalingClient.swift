@@ -43,7 +43,7 @@ struct SignalingClient {
 		case .error(let msg):
 			throw DecartError.serverError(msg.message ?? msg.error ?? "Unknown server error")
 
-		case .sessionId, .promptAck:
+		case .sessionId, .promptAck, .setImageAck:
 			break
 		}
 	}

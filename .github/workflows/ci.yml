@@ -9,7 +9,7 @@ on:
 jobs:
   build-and-test:
     name: Build and Test (Swift 6.2.1)
-    runs-on: macos-latest
+    runs-on: macos-latest ?
     env:
       IOS_DEVICE_NAME: "iPhone 16 Pro"
       IOS_OS_VERSION: "18.5"

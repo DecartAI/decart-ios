@@ -9,6 +9,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case mirage
 	case mirage_v2
 	case lucy_v2v_720p_rt
+	case lucy_v2v_14b_rt
 }
 
 public enum ImageModel: String, CaseIterable {
@@ -48,6 +49,14 @@ public enum Models {
 				name: "lucy_v2v_720p_rt",
 				urlPath: "/v1/stream",
 				fps: 25,
+				width: 1280,
+				height: 704
+			)
+		case .lucy_v2v_14b_rt:
+			return ModelDefinition(
+				name: "lucy_v2v_14b_rt",
+				urlPath: "/v1/stream",
+				fps: 15,
 				width: 1280,
 				height: 704
 			)

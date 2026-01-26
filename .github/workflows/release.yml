@@ -29,7 +29,6 @@ jobs:
                   build-only: true
                   scheme: DecartSDK
                   type: ios
-                  configuration: release
                   deviceName: ${{ env.IOS_DEVICE_NAME }}
                   osVersion: ${{ env.IOS_OS_VERSION }}
                   download-platform: true

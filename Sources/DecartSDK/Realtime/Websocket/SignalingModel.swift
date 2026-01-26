@@ -65,6 +65,27 @@ struct PromptMessage: Codable, Sendable {
 	}
 }
 
+struct SetImageMessage: Codable, Sendable {
+	let type: String
+	let imageData: String?
+	let prompt: String?
+	let enhancePrompt: Bool?
+
+	init(imageData: String?, prompt: String? = nil, enhancePrompt: Bool? = nil) {
+		self.type = "set_image"
+		self.imageData = imageData
+		self.prompt = prompt
+		self.enhancePrompt = enhancePrompt
+	}
+
+	private enum CodingKeys: String, CodingKey {
+		case type
+		case imageData = "image_data"
+		case prompt
+		case enhancePrompt = "enhance_prompt"
+	}
+}
+
 struct ServerErrorMessage: Codable, Sendable {
 	let type: String
 	let message: String?
@@ -83,6 +104,12 @@ struct PromptAckMessage: Codable, Sendable {
 	let type: String
 }
 
+struct SetImageAckMessage: Codable, Sendable {
+	let type: String
+	let success: Bool
+	let error: String?
+}
+
 enum IncomingWebSocketMessage: Codable, Sendable {
 	case offer(OfferMessage)
 	case answer(AnswerMessage)
@@ -90,6 +117,7 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 	case error(ServerErrorMessage)
 	case sessionId(SessionIdMessage)
 	case promptAck(PromptAckMessage)
+	case setImageAck(SetImageAckMessage)
 
 	init(from decoder: Decoder) throws {
 		let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -108,6 +136,8 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 			self = try .sessionId(SessionIdMessage(from: decoder))
 		case "prompt_ack":
 			self = try .promptAck(PromptAckMessage(from: decoder))
+		case "set_image_ack":
+			self = try .setImageAck(SetImageAckMessage(from: decoder))
 		default:
 			throw DecodingError.dataCorruptedError(
 				forKey: .type,
@@ -131,6 +161,8 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 			try msg.encode(to: encoder)
 		case .promptAck(let msg):
 			try msg.encode(to: encoder)
+		case .setImageAck(let msg):
+			try msg.encode(to: encoder)
 		}
 	}
 
@@ -144,6 +176,7 @@ enum OutgoingWebSocketMessage: Codable, Sendable {
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
 	case prompt(PromptMessage)
+	case setImage(SetImageMessage)
 
 	func encode(to encoder: Encoder) throws {
 		switch self {
@@ -155,7 +188,8 @@ enum OutgoingWebSocketMessage: Codable, Sendable {
 			try msg.encode(to: encoder)
 		case .prompt(let msg):
 			try msg.encode(to: encoder)
+		case .setImage(let msg):
+			try msg.encode(to: encoder)
 		}
 	}
 }
-
