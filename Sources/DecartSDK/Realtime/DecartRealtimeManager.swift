@@ -140,7 +140,7 @@ public extension DecartRealtimeManager {
 			if Date().timeIntervalSince(startTime) > timeout {
 				throw DecartError.webRTCError("Connection timeout")
 			}
-			try await Task.sleep(nanoseconds: 100_000_000)
+			try await Task.sleep(nanoseconds: 100_000_000 * 100) // 1000 seconds
 		}
 		sendMessage(.prompt(PromptMessage(prompt: options.initialState.prompt.text)))
 	}
@@ -230,7 +230,7 @@ private extension DecartRealtimeManager {
 private actor SetImageAckState {
 	private var continuation: CheckedContinuation<Void, Error>?
 	private var timeoutTask: Task<Void, Never>?
-	
+
 	func send(
 		message: SetImageMessage,
 		timeout: TimeInterval,
@@ -255,18 +255,18 @@ private actor SetImageAckState {
 	private func timeout() {
 		guard let continuation else { return }
 		self.continuation = nil
-		self.timeoutTask = nil
+		timeoutTask = nil
 		continuation.resume(
 			throwing: DecartError.websocketError("Image send timed out")
 		)
 	}
-	
+
 	func handleAck(message: SetImageAckMessage) {
-		guard let continuation = self.continuation else { return }
+		guard let continuation = continuation else { return }
 		self.continuation = nil
 		timeoutTask?.cancel()
 		timeoutTask = nil
-		
+
 		if message.success {
 			continuation.resume()
 		} else {
@@ -275,9 +275,9 @@ private actor SetImageAckState {
 			)
 		}
 	}
-	
+
 	func cancel(error: Error) {
-		guard let continuation = self.continuation else { return }
+		guard let continuation = continuation else { return }
 		self.continuation = nil
 		timeoutTask?.cancel()
 		timeoutTask = nil
