@@ -67,21 +67,21 @@ struct PromptMessage: Codable, Sendable {
 
 struct SetImageMessage: Codable, Sendable {
 	let type: String
-	let imageData: String?
 	let prompt: String?
+	let imageData: String?
 	let enhancePrompt: Bool?
 
 	init(imageData: String?, prompt: String? = nil, enhancePrompt: Bool? = nil) {
 		self.type = "set_image"
-		self.imageData = imageData
 		self.prompt = prompt
+		self.imageData = imageData
 		self.enhancePrompt = enhancePrompt
 	}
 
 	private enum CodingKeys: String, CodingKey {
 		case type
-		case imageData = "image_data"
 		case prompt
+		case imageData = "image_data"
 		case enhancePrompt = "enhance_prompt"
 	}
 }

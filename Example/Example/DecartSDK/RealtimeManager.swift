@@ -160,7 +160,12 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 			for await state in stream {
 				if Task.isCancelled { return }
-				self.connectionState = state
+				if state == .error {
+					// Treat signaling (WS) disconnects as disconnected in the example UI.
+					self.connectionState = .error
+				} else {
+					self.connectionState = state
+				}
 			}
 		}
 	}

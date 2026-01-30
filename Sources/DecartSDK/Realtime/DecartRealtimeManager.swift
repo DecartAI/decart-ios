@@ -190,6 +190,7 @@ private extension DecartRealtimeManager {
 						try await webRTCClient.handleSignalingMessage(message)
 					}
 				}
+				self?.connectionState = .disconnected
 			} catch {
 				self?.connectionState = .error
 			}
