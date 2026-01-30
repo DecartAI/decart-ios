@@ -110,6 +110,23 @@ struct SetImageAckMessage: Codable, Sendable {
 	let error: String?
 }
 
+struct StatusMessage: Codable, Sendable {
+	let type: String
+	let status: String
+}
+
+struct QueuePositionMessage: Codable, Sendable {
+	let type: String
+	let queuePosition: Int?
+	let queueSize: Int?
+
+	private enum CodingKeys: String, CodingKey {
+		case type
+		case queuePosition = "queue_position"
+		case queueSize = "queue_size"
+	}
+}
+
 enum IncomingWebSocketMessage: Codable, Sendable {
 	case offer(OfferMessage)
 	case answer(AnswerMessage)
@@ -118,6 +135,8 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 	case sessionId(SessionIdMessage)
 	case promptAck(PromptAckMessage)
 	case setImageAck(SetImageAckMessage)
+	case status(StatusMessage)
+	case queuePosition(QueuePositionMessage)
 
 	init(from decoder: Decoder) throws {
 		let container = try decoder.container(keyedBy: CodingKeys.self)
@@ -138,6 +157,10 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 			self = try .promptAck(PromptAckMessage(from: decoder))
 		case "set_image_ack":
 			self = try .setImageAck(SetImageAckMessage(from: decoder))
+		case "status":
+			self = try .status(StatusMessage(from: decoder))
+		case "queue_position":
+			self = try .queuePosition(QueuePositionMessage(from: decoder))
 		default:
 			throw DecodingError.dataCorruptedError(
 				forKey: .type,
@@ -162,6 +185,10 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 		case .promptAck(let msg):
 			try msg.encode(to: encoder)
 		case .setImageAck(let msg):
+			try msg.encode(to: encoder)
+		case .status(let msg):
+			try msg.encode(to: encoder)
+		case .queuePosition(let msg):
 			try msg.encode(to: encoder)
 		}
 	}

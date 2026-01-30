@@ -1,9 +1,3 @@
-//
-//  Realtime.swift
-//  DecartSDK
-//
-//  Created by Alon Bar-el on 03/11/2025.
-//
 @preconcurrency import WebRTC
 
 public struct RealtimeMediaStream: Sendable {
@@ -32,21 +26,5 @@ public struct RealtimeMediaStream: Sendable {
 		self.videoTrack = videoTrack
 		self.audioTrack = audioTrack
 		self.id = id.id
-	}
-}
-
-public enum DecartRealtimeConnectionState: String, Sendable {
-	case connecting = "Connecting"
-	case connected = "Connected"
-	case disconnected = "Disconnected"
-	case idle = "Idle"
-	case error = "Error"
-
-	public var isConnected: Bool {
-		self == .connected
-	}
-
-	public var isInSession: Bool {
-		self == .connected || self == .connecting
 	}
 }

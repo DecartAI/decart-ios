@@ -4,6 +4,9 @@ import Foundation
 public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
 	public let events: AsyncStream<DecartRealtimeConnectionState>
+	public private(set) var serviceStatus: RealtimeServiceStatus = .unknown
+	public private(set) var queuePosition: Int?
+	public private(set) var queueSize: Int?
 
 	private var webRTCClient: WebRTCClient?
 	private var webSocketClient: WebSocketClient?
@@ -12,8 +15,6 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private let stateContinuation: AsyncStream<DecartRealtimeConnectionState>.Continuation
 	private var webSocketListenerTask: Task<Void, Never>?
 	private var connectionStateListenerTask: Task<Void, Never>?
-	private let setImageAckState = SetImageAckState()
-	private let defaultImageSendTimeout: TimeInterval = 15
 
 	private var connectionState: DecartRealtimeConnectionState = .idle {
 		didSet {
@@ -38,9 +39,6 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		webSocketListenerTask?.cancel()
 		connectionStateListenerTask?.cancel()
 		webRTCClient?.close()
-		Task { [setImageAckState] in
-			await setImageAckState.cancel(error: DecartError.websocketError("Realtime manager deinitialized"))
-		}
 		stateContinuation.finish()
 		DecartLogger.log("RealtimeManager (SDK) deinitialized", level: .info)
 	}
@@ -55,6 +53,10 @@ public extension DecartRealtimeManager {
 		let wsClient = await WebSocketClient(url: signalingServerURL)
 		webSocketClient = wsClient
 		setupWebSocketListener(wsClient)
+
+		if serviceStatus == .enteringQueue {
+			try await waitForServiceReady()
+		}
 
 		let rtcClient = WebRTCClient(
 			config: options.connection.rtcConfiguration,
@@ -76,10 +78,7 @@ public extension DecartRealtimeManager {
 		sendMessage(.offer(OfferMessage(sdp: offer.sdp)))
 
 		try await waitForConnection(timeout: options.connection.connectionTimeout)
-
-		sendMessage(
-			.prompt(PromptMessage(prompt: options.initialPrompt.text))
-		)
+		setPrompt(options.initialPrompt)
 
 		guard let remoteStream = rtcClient.getRemoteRealtimeStream() else {
 			throw DecartError.webRTCError("couldn't get remote stream, check video transceiver")
@@ -94,7 +93,6 @@ public extension DecartRealtimeManager {
 		webSocketListenerTask = nil
 		connectionStateListenerTask?.cancel()
 		connectionStateListenerTask = nil
-		await setImageAckState.cancel(error: DecartError.websocketError("Realtime disconnected"))
 		webRTCClient?.close()
 		webRTCClient = nil
 		await webSocketClient?.disconnect()
@@ -111,28 +109,25 @@ public extension DecartRealtimeManager {
 	}
 
 	func setPrompt(_ prompt: DecartPrompt) {
-		sendMessage(.prompt(PromptMessage(prompt: prompt.text)))
-	}
+		guard
+			let referenceImageData = prompt.referenceImageData,
+			options.model.hasReferenceImage
+		else {
+			// if !options.model.hasReferenceImage {
+				sendMessage(.prompt(PromptMessage(prompt: prompt.text)))
+			// }
+			return
+		}
 
-	func setImageBase64(
-		_ imageBase64: String?,
-		prompt: String? = nil,
-		enhance: Bool? = nil,
-		timeout: TimeInterval? = nil
-	) async throws {
-		let timeoutSeconds = timeout ?? defaultImageSendTimeout
-		let message = SetImageMessage(
-			imageData: imageBase64,
-			prompt: prompt,
-			enhancePrompt: enhance
-		)
-		try await setImageAckState.send(
-			message: message,
-			timeout: timeoutSeconds,
-			sendMessage: { [weak self] outgoing in
-				self?.sendMessage(outgoing)
-			}
-		)
+		let base64Image = referenceImageData.base64EncodedString()
+		Task { [weak self] in
+			guard let self else { return }
+			await self.sendImageWithPrompt(
+				base64Image,
+				prompt: prompt.text,
+				enhance: prompt.enrich
+			)
+		}
 	}
 
 	func waitForConnection(timeout: TimeInterval) async throws {
@@ -144,7 +139,7 @@ public extension DecartRealtimeManager {
 			if Date().timeIntervalSince(startTime) > timeout {
 				throw DecartError.webRTCError("Connection timeout")
 			}
-			try await Task.sleep(nanoseconds: 100_000_000 * 100) // 100 seconds
+			try await Task.sleep(nanoseconds: 3_000_000_000) // 10 seconds
 		}
 	}
 }
@@ -181,13 +176,17 @@ private extension DecartRealtimeManager {
 		webSocketListenerTask = Task { [weak self] in
 			do {
 				for try await message in wsClient.websocketEventStream {
-					guard !Task.isCancelled, let self, let webRTCClient = self.webRTCClient else { return }
+					guard !Task.isCancelled, let self else { return }
 					switch message {
-					case .setImageAck(let ack):
-						self.handleSetImageAck(ack)
+					case .status(let status):
+						self.serviceStatus = RealtimeServiceStatus.fromStatusString(status.status)
+					case .queuePosition(let queue):
+						self.queuePosition = queue.queuePosition
+						self.queueSize = queue.queueSize
 					case .promptAck, .sessionId:
 						break
 					default:
+						guard let webRTCClient = self.webRTCClient else { break }
 						try await webRTCClient.handleSignalingMessage(message)
 					}
 				}
@@ -205,7 +204,7 @@ private extension DecartRealtimeManager {
 				switch rtcState {
 				case .connected: self.connectionState = .connected
 				case .failed, .closed, .disconnected: self.connectionState = .disconnected
-				case .connecting where self.connectionState == .idle: self.connectionState = .connecting
+				case .connecting: self.connectionState = .connecting
 				default: break
 				}
 			}
@@ -213,77 +212,34 @@ private extension DecartRealtimeManager {
 	}
 }
 
-// MARK: - Messaging
+// MARK: - Service Status
 
 private extension DecartRealtimeManager {
-	func sendMessage(_ message: OutgoingWebSocketMessage) {
-		guard let webSocketClient else { return }
-		Task { [webSocketClient] in try? await webSocketClient.send(message) }
-	}
-
-	func handleSetImageAck(_ message: SetImageAckMessage) {
-		Task { [setImageAckState] in
-			await setImageAckState.handleAck(message: message)
+	func waitForServiceReady() async throws {
+		while serviceStatus == .enteringQueue {
+			try await Task.sleep(nanoseconds: 3000_000_000) // 3 seconds
 		}
 	}
 }
 
-// MARK: - SetImageAckState Actor
+// MARK: - Messaging
 
-private actor SetImageAckState {
-	private var continuation: CheckedContinuation<Void, Error>?
-	private var timeoutTask: Task<Void, Never>?
-
-	func send(
-		message: SetImageMessage,
-		timeout: TimeInterval,
-		sendMessage: (OutgoingWebSocketMessage) -> Void
-	) async throws {
-		guard continuation == nil else {
-			throw DecartError.invalidOptions("setImageBase64 already in progress")
-		}
-
-		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-			self.continuation = continuation
-			sendMessage(.setImage(message))
-
-			timeoutTask?.cancel()
-			timeoutTask = Task { [weak self] in
-				try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-				await self?.timeout()
-			}
-		}
+private extension DecartRealtimeManager {
+	private func sendMessage(_ message: OutgoingWebSocketMessage) {
+		guard let webSocketClient else { return }
+		Task { [webSocketClient] in try? await webSocketClient.send(message) }
 	}
 
-	private func timeout() {
-		guard let continuation else { return }
-		self.continuation = nil
-		timeoutTask = nil
-		continuation.resume(
-			throwing: DecartError.websocketError("Image send timed out")
+	func sendImageWithPrompt(
+		_ imageBase64: String?,
+		prompt: String,
+		enhance: Bool
+	) async {
+		let message = SetImageMessage(
+			imageData: imageBase64,
+			prompt: prompt,
+			enhancePrompt: enhance
 		)
-	}
-
-	func handleAck(message: SetImageAckMessage) {
-		guard let continuation = continuation else { return }
-		self.continuation = nil
-		timeoutTask?.cancel()
-		timeoutTask = nil
-
-		if message.success {
-			continuation.resume()
-		} else {
-			continuation.resume(
-				throwing: DecartError.serverError(message.error ?? "Failed to send image")
-			)
-		}
-	}
-
-	func cancel(error: Error) {
-		guard let continuation = continuation else { return }
-		self.continuation = nil
-		timeoutTask?.cancel()
-		timeoutTask = nil
-		continuation.resume(throwing: error)
+		sendMessage(.setImage(message))
 	}
 }

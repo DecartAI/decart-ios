@@ -11,12 +11,14 @@ public struct ModelDefinition: Sendable {
 	public let fps: Int
 	public let width: Int
 	public let height: Int
+	public let hasReferenceImage: Bool
 
-	public init(name: String, urlPath: String, fps: Int, width: Int, height: Int) {
+	public init(name: String, urlPath: String, fps: Int, width: Int, height: Int, hasReferenceImage: Bool = false) {
 		self.name = name
 		self.urlPath = urlPath
 		self.fps = fps
 		self.width = width
 		self.height = height
+		self.hasReferenceImage = hasReferenceImage
 	}
 }

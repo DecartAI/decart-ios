@@ -58,7 +58,8 @@ public enum Models {
 				urlPath: "/v1/stream",
 				fps: 15,
 				width: 1280,
-				height: 704
+				height: 704,
+				hasReferenceImage: true
 			)
 		}
 	}
