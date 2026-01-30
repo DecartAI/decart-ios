@@ -77,6 +77,10 @@ public extension DecartRealtimeManager {
 
 		try await waitForConnection(timeout: options.connection.connectionTimeout)
 
+		sendMessage(
+			.prompt(PromptMessage(prompt: options.initialPrompt.text))
+		)
+
 		guard let remoteStream = rtcClient.getRemoteRealtimeStream() else {
 			throw DecartError.webRTCError("couldn't get remote stream, check video transceiver")
 		}
@@ -106,7 +110,7 @@ public extension DecartRealtimeManager {
 		webSocketClient = nil
 	}
 
-	func setPrompt(_ prompt: Prompt) {
+	func setPrompt(_ prompt: DecartPrompt) {
 		sendMessage(.prompt(PromptMessage(prompt: prompt.text)))
 	}
 
@@ -140,9 +144,8 @@ public extension DecartRealtimeManager {
 			if Date().timeIntervalSince(startTime) > timeout {
 				throw DecartError.webRTCError("Connection timeout")
 			}
-			try await Task.sleep(nanoseconds: 100_000_000 * 100) // 1000 seconds
+			try await Task.sleep(nanoseconds: 100_000_000 * 100) // 100 seconds
 		}
-		sendMessage(.prompt(PromptMessage(prompt: options.initialState.prompt.text)))
 	}
 }
 

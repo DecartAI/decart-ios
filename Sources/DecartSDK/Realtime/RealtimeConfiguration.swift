@@ -10,18 +10,18 @@ import Foundation
 
 public struct RealtimeConfiguration: Sendable {
 	public let model: ModelDefinition
-	public let initialState: ModelState
+	public let initialPrompt: DecartPrompt
 	public let connection: ConnectionConfig
 	public let media: MediaConfig
 
 	public init(
 		model: ModelDefinition,
-		initialState: ModelState,
+		initialPrompt: DecartPrompt,
 		connection: ConnectionConfig = .init(),
 		media: MediaConfig = .init()
 	) {
 		self.model = model
-		self.initialState = initialState
+		self.initialPrompt = initialPrompt
 		self.connection = connection
 		self.media = media
 	}

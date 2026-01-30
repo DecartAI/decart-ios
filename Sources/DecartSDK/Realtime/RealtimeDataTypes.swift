@@ -15,7 +15,7 @@ public struct RealtimeMediaStream: Sendable {
 			case .localStream:
 				return "stream-local"
 			case .remoteStream:
-				return "stream-remote" // It's good practice to handle all cases
+				return "stream-remote"
 			}
 		}
 	}
