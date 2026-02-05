@@ -3,24 +3,49 @@ import Foundation
 
 public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
-	public let events: AsyncStream<DecartRealtimeConnectionState>
-	public private(set) var serviceStatus: RealtimeServiceStatus = .unknown
-	public private(set) var queuePosition: Int?
-	public private(set) var queueSize: Int?
+	public let events: AsyncStream<DecartRealtimeState>
+	public private(set) var serviceStatus: RealtimeServiceStatus = .unknown {
+		didSet {
+			guard oldValue != serviceStatus else { return }
+			emitStateIfChanged()
+		}
+	}
+	public private(set) var queuePosition: Int? {
+		didSet {
+			guard oldValue != queuePosition else { return }
+			emitStateIfChanged()
+		}
+	}
+	public private(set) var queueSize: Int? {
+		didSet {
+			guard oldValue != queueSize else { return }
+			emitStateIfChanged()
+		}
+	}
 
 	private var webRTCClient: WebRTCClient?
 	private var webSocketClient: WebSocketClient?
 
 	private let signalingServerURL: URL
-	private let stateContinuation: AsyncStream<DecartRealtimeConnectionState>.Continuation
+	private let stateContinuation: AsyncStream<DecartRealtimeState>.Continuation
 	private var webSocketListenerTask: Task<Void, Never>?
 	private var connectionStateListenerTask: Task<Void, Never>?
 
 	private var connectionState: DecartRealtimeConnectionState = .idle {
 		didSet {
 			guard oldValue != connectionState else { return }
-			stateContinuation.yield(connectionState)
+			emitStateIfChanged()
 		}
+	}
+
+	private var lastEmittedState: DecartRealtimeState?
+	private var currentState: DecartRealtimeState {
+		DecartRealtimeState(
+			connectionState: connectionState,
+			serviceStatus: serviceStatus,
+			queuePosition: queuePosition,
+			queueSize: queueSize
+		)
 	}
 
 	public init(signalingServerURL: URL, options: RealtimeConfiguration) {
@@ -28,11 +53,20 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		self.options = options
 
 		let (stream, continuation) = AsyncStream.makeStream(
-			of: DecartRealtimeConnectionState.self,
+			of: DecartRealtimeState.self,
 			bufferingPolicy: .bufferingNewest(1)
 		)
 		self.events = stream
 		self.stateContinuation = continuation
+		emitStateIfChanged()
+	}
+
+	private func emitStateIfChanged() {
+		let state = currentState
+		if lastEmittedState != state {
+			lastEmittedState = state
+			stateContinuation.yield(state)
+		}
 	}
 
 	deinit {
@@ -139,7 +173,7 @@ public extension DecartRealtimeManager {
 			if Date().timeIntervalSince(startTime) > timeout {
 				throw DecartError.webRTCError("Connection timeout")
 			}
-			try await Task.sleep(nanoseconds: 3_000_000_000) // 10 seconds
+			try await Task.sleep(nanoseconds: 1_000_000_000) // 1 second
 		}
 	}
 }
@@ -213,12 +247,13 @@ private extension DecartRealtimeManager {
 	}
 }
 
+
 // MARK: - Service Status
 
 private extension DecartRealtimeManager {
 	func waitForServiceReady() async throws {
 		while serviceStatus == .enteringQueue {
-			try await Task.sleep(nanoseconds: 3000_000_000) // 3 seconds
+			try await Task.sleep(nanoseconds: 3_000_000_000)
 		}
 	}
 }
