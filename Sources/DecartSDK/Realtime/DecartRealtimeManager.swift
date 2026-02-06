@@ -144,7 +144,6 @@ public extension DecartRealtimeManager {
 
 	func setPrompt(_ prompt: DecartPrompt) {
 		guard
-			let referenceImageData = prompt.referenceImageData,
 			options.model.hasReferenceImage
 		else {
 			// if !options.model.hasReferenceImage {
@@ -153,7 +152,7 @@ public extension DecartRealtimeManager {
 			return
 		}
 
-		let base64Image = referenceImageData.base64EncodedString()
+		let base64Image = prompt.referenceImageData?.base64EncodedString()
 		Task { [weak self] in
 			guard let self else { return }
 			await self.sendImageWithPrompt(
