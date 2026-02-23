@@ -7,6 +7,7 @@
 
 enum CameraError: Error {
 	case simulatorUnsupported
+	case noCameraDeviceAvailable
 	case noFrontCameraDetected
 	case noBackCameraDetected
 	case noSupportedFormatFound
@@ -16,6 +17,7 @@ enum CameraError: Error {
 	var errorDescription: String? {
 		switch self {
 		case .simulatorUnsupported: return "Camera is not available on the simulator."
+		case .noCameraDeviceAvailable: return "No camera device is available."
 		case .noFrontCameraDetected: return "No front camera detected."
 		case .noSupportedFormatFound: return "No supported camera format found for the requested resolution."
 		case .noSuitableFPSRange: return "No suitable FPS range available for the requested FPS."

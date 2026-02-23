@@ -18,6 +18,7 @@ public final class RealtimeCapture: @unchecked Sendable {
 	private let model: ModelDefinition
 	private let videoSource: RTCVideoSource
 	private let capturer: RTCCameraVideoCapturer
+	private var activeDeviceID: String?
 
 	public init(
 		model: ModelDefinition,
@@ -43,13 +44,39 @@ public final class RealtimeCapture: @unchecked Sendable {
 	}
 
 	public func startCapture() async throws {
-		try await startCapture(position: position)
+		#if os(macOS)
+		try await startCapture(position: position, fallbackToAny: true)
+		#else
+		try await startCapture(position: position, fallbackToAny: false)
+		#endif
 	}
 
 	public func switchCamera() async throws {
+		#if os(macOS)
+		let devices = AVCaptureDevice.availableCameras()
+		guard devices.count > 1 else { return }
+
+		let currentDeviceID: String
+		if let activeDeviceID {
+			currentDeviceID = activeDeviceID
+		} else {
+			currentDeviceID = try AVCaptureDevice.pickCamera(
+				position: position,
+				fallbackToAny: true
+			).uniqueID
+		}
+		guard let nextDevice = AVCaptureDevice.nextCamera(after: currentDeviceID) else {
+			throw CameraError.noCameraDeviceAvailable
+		}
+
+		guard nextDevice.uniqueID != currentDeviceID else { return }
+		try await startCapture(with: nextDevice)
+		position = nextDevice.position
+		#else
 		let newPosition: AVCaptureDevice.Position = position == .front ? .back : .front
-		try await startCapture(position: newPosition)
+		try await startCapture(position: newPosition, fallbackToAny: false)
 		position = newPosition
+		#endif
 	}
 
 	public func stopCapture() async {
@@ -62,10 +89,19 @@ public final class RealtimeCapture: @unchecked Sendable {
 		session.outputs.forEach { session.removeOutput($0) }
 		session.inputs.forEach { session.removeInput($0) }
 		session.commitConfiguration()
+		activeDeviceID = nil
 	}
 
-	private func startCapture(position: AVCaptureDevice.Position) async throws {
-		let device = try AVCaptureDevice.pickCamera(position: position)
+	private func startCapture(
+		position: AVCaptureDevice.Position,
+		fallbackToAny: Bool
+	) async throws {
+		let device = try AVCaptureDevice.pickCamera(position: position, fallbackToAny: fallbackToAny)
+		try await startCapture(with: device)
+		self.position = device.position
+	}
+
+	private func startCapture(with device: AVCaptureDevice) async throws {
 		let format = try device.pickFormat(minWidth: targetWidth, minHeight: targetHeight)
 		let targetFPS = try device.pickFPS(for: format, preferred: model.fps)
 
@@ -76,11 +112,13 @@ public final class RealtimeCapture: @unchecked Sendable {
 		)
 
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-			capturer.startCapture(with: device, format: format, fps: targetFPS) { error in
-				if let error { continuation.resume(throwing: error) }
-				else { continuation.resume() }
+				capturer.startCapture(with: device, format: format, fps: targetFPS) { error in
+					if let error { continuation.resume(throwing: error) }
+					else { continuation.resume() }
+				}
 			}
-		}
+
+		activeDeviceID = device.uniqueID
 	}
 }
 #endif

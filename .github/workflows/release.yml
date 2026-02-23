@@ -23,6 +23,11 @@ jobs:
             - name: Select Xcode
               run: sudo xcode-select -s /Applications/Xcode_26.1.app
 
+            - name: Build Hygiene (Reset Package State)
+              run: |
+                  swift package reset
+                  swift build -c debug
+
             - name: Build Release
               uses: brightdigit/swift-build@v1.4.2
               with:

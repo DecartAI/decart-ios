@@ -18,6 +18,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Build Hygiene (Reset Package State)
+        run: |
+          swift package reset
+          swift build -c debug
+
       - name: Build iOS App
         uses: brightdigit/swift-build@v1.4.2
         with:
