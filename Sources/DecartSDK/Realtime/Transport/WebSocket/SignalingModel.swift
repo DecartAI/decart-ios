@@ -43,10 +43,7 @@ struct IceCandidateMessage: Codable, Sendable {
 
 	init(candidate: RTCIceCandidate) {
 		guard let sdpMid = candidate.sdpMid else {
-			DecartLogger.log("found invalid candidate without sdpMid", level: .warning)
-			fatalError(
-				"found invalid candidate without sdpMid. This should never happen."
-			)
+			fatalError("found invalid candidate without sdpMid")
 		}
 
 		self.type = "ice-candidate"
@@ -68,13 +65,65 @@ struct PromptMessage: Codable, Sendable {
 	}
 }
 
-struct SwitchCameraMessage: Codable, Sendable {
+struct SetImageMessage: Codable, Sendable {
 	let type: String
-	let rotateY: Int
+	let prompt: String?
+	let imageData: String?
+	let enhancePrompt: Bool?
 
-	init(rotateY: Int) {
-		self.type = "switch_camera"
-		self.rotateY = rotateY
+	init(imageData: String?, prompt: String? = nil, enhancePrompt: Bool? = nil) {
+		self.type = "set_image"
+		self.prompt = prompt
+		self.imageData = imageData
+		self.enhancePrompt = enhancePrompt
+	}
+
+	private enum CodingKeys: String, CodingKey {
+		case type
+		case prompt
+		case imageData = "image_data"
+		case enhancePrompt = "enhance_prompt"
+	}
+}
+
+struct ServerErrorMessage: Codable, Sendable {
+	let type: String
+	let message: String?
+	let error: String?
+}
+
+struct SessionIdMessage: Codable, Sendable {
+	let type: String
+	let sessionId: String?
+	let session_id: String?
+
+	var id: String? { sessionId ?? session_id }
+}
+
+struct PromptAckMessage: Codable, Sendable {
+	let type: String
+}
+
+struct SetImageAckMessage: Codable, Sendable {
+	let type: String
+	let success: Bool
+	let error: String?
+}
+
+struct StatusMessage: Codable, Sendable {
+	let type: String
+	let status: String
+}
+
+struct QueuePositionMessage: Codable, Sendable {
+	let type: String
+	let queuePosition: Int?
+	let queueSize: Int?
+
+	private enum CodingKeys: String, CodingKey {
+		case type
+		case queuePosition = "queue_position"
+		case queueSize = "queue_size"
 	}
 }
 
@@ -82,11 +131,16 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 	case offer(OfferMessage)
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
+	case error(ServerErrorMessage)
+	case sessionId(SessionIdMessage)
+	case promptAck(PromptAckMessage)
+	case setImageAck(SetImageAckMessage)
+	case status(StatusMessage)
+	case queuePosition(QueuePositionMessage)
 
 	init(from decoder: Decoder) throws {
 		let container = try decoder.container(keyedBy: CodingKeys.self)
 		let type = try container.decode(String.self, forKey: .type)
-		DecartLogger.log("got incoming message \(type)", level: .info)
 
 		switch type {
 		case "offer":
@@ -95,6 +149,18 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 			self = try .answer(AnswerMessage(from: decoder))
 		case "ice-candidate":
 			self = try .iceCandidate(IceCandidateMessage(from: decoder))
+		case "error":
+			self = try .error(ServerErrorMessage(from: decoder))
+		case "session_id":
+			self = try .sessionId(SessionIdMessage(from: decoder))
+		case "prompt_ack":
+			self = try .promptAck(PromptAckMessage(from: decoder))
+		case "set_image_ack":
+			self = try .setImageAck(SetImageAckMessage(from: decoder))
+		case "status":
+			self = try .status(StatusMessage(from: decoder))
+		case "queue_position":
+			self = try .queuePosition(QueuePositionMessage(from: decoder))
 		default:
 			throw DecodingError.dataCorruptedError(
 				forKey: .type,
@@ -112,6 +178,18 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 			try msg.encode(to: encoder)
 		case .iceCandidate(let msg):
 			try msg.encode(to: encoder)
+		case .error(let msg):
+			try msg.encode(to: encoder)
+		case .sessionId(let msg):
+			try msg.encode(to: encoder)
+		case .promptAck(let msg):
+			try msg.encode(to: encoder)
+		case .setImageAck(let msg):
+			try msg.encode(to: encoder)
+		case .status(let msg):
+			try msg.encode(to: encoder)
+		case .queuePosition(let msg):
+			try msg.encode(to: encoder)
 		}
 	}
 
@@ -125,7 +203,7 @@ enum OutgoingWebSocketMessage: Codable, Sendable {
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
 	case prompt(PromptMessage)
-	case switchCamera(SwitchCameraMessage)
+	case setImage(SetImageMessage)
 
 	func encode(to encoder: Encoder) throws {
 		switch self {
@@ -137,9 +215,8 @@ enum OutgoingWebSocketMessage: Codable, Sendable {
 			try msg.encode(to: encoder)
 		case .prompt(let msg):
 			try msg.encode(to: encoder)
-		case .switchCamera(let msg):
+		case .setImage(let msg):
 			try msg.encode(to: encoder)
 		}
 	}
 }
-

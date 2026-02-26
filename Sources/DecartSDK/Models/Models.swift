@@ -9,6 +9,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case mirage
 	case mirage_v2
 	case lucy_v2v_720p_rt
+	case lucy_v2v_14b_rt
 }
 
 public enum ImageModel: String, CaseIterable {
@@ -18,7 +19,7 @@ public enum ImageModel: String, CaseIterable {
 
 public enum VideoModel: String, CaseIterable {
 	case lucy_dev_i2v = "lucy-dev-i2v"
-	case lucy_dev_v2v = "lucy-dev-v2v"
+	case lucy_fast_v2v = "lucy-fast-v2v"
 	case lucy_pro_t2v = "lucy-pro-t2v"
 	case lucy_pro_i2v = "lucy-pro-i2v"
 	case lucy_pro_v2v = "lucy-pro-v2v"
@@ -50,6 +51,15 @@ public enum Models {
 				fps: 25,
 				width: 1280,
 				height: 704
+			)
+		case .lucy_v2v_14b_rt:
+			return ModelDefinition(
+				name: "lucy_v2v_14b_rt",
+				urlPath: "/v1/stream",
+				fps: 15,
+				width: 1280,
+				height: 704,
+				hasReferenceImage: true
 			)
 		}
 	}
@@ -85,10 +95,10 @@ public enum Models {
 				width: 1280,
 				height: 704
 			)
-		case .lucy_dev_v2v:
+		case .lucy_fast_v2v:
 			return ModelDefinition(
-				name: "lucy-dev-v2v",
-				urlPath: "/v1/generate/lucy-dev-v2v",
+				name: "lucy-fast-v2v",
+				urlPath: "/v1/generate/lucy-fast-v2v",
 				fps: 25,
 				width: 1280,
 				height: 704

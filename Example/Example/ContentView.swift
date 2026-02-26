@@ -10,7 +10,7 @@ import SwiftUI
 
 struct ContentView: View {
 	var body: some View {
-		NavigationView {
+		NavigationStack {
 			List {
 				Section(header: Text("Realtime")) {
 					ForEach(RealtimeModel.allCases, id: \.self) { model in
@@ -22,29 +22,21 @@ struct ContentView: View {
 
 				Section(header: Text("Image Generation")) {
 					ForEach(ImageModel.allCases, id: \.self) { model in
-						NavigationLink(
-							destination: GenerateImageView(
-								model: model
-							)
-						) {
-							Text("Image - \(model.rawValue)")
+						NavigationLink("Image - \(model.rawValue)") {
+							GenerateImageView(model: model)
 						}
 					}
 				}
 
 				Section(header: Text("Video Generation")) {
 					ForEach(VideoModel.allCases, id: \.self) { model in
-						NavigationLink(
-							destination: GenerateVideoView(
-								model: model
-							)
-						) {
-							Text("Video - \(model.rawValue)")
+						NavigationLink("Video - \(model.rawValue)") {
+							GenerateVideoView(model: model)
 						}
 					}
 				}
 			}
-			.navigationBarTitle("Example")
+			.navigationTitle("Example")
 		}
 	}
 }

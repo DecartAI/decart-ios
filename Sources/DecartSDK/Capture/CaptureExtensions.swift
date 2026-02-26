@@ -8,13 +8,25 @@ import AVFoundation
 import WebRTC
 
 public extension AVCaptureDevice {
-	/// Pick a format that meets (or exceeds) the requested dimensions; falls back to the first available.
+	static func availableCameras() -> [AVCaptureDevice] {
+		RTCCameraVideoCapturer.captureDevices().sorted {
+			let nameCompare = $0.localizedName.localizedStandardCompare($1.localizedName)
+			if nameCompare != .orderedSame {
+				return nameCompare == .orderedAscending
+			}
+			return $0.uniqueID < $1.uniqueID
+		}
+	}
+
+	/// Pick a format that meets (or exceeds) the requested dimensions in either orientation.
 	func pickFormat(minWidth: Int, minHeight: Int) throws -> AVCaptureDevice.Format {
 		let formats = RTCCameraVideoCapturer.supportedFormats(for: self)
 
 		if let match = formats.first(where: {
 			let d = CMVideoFormatDescriptionGetDimensions($0.formatDescription)
-			return d.width >= minWidth && d.height >= minHeight
+			let landscape = d.width >= minWidth && d.height >= minHeight
+			let portrait = d.height >= minWidth && d.width >= minHeight
+			return landscape || portrait
 		}) {
 			return match
 		}
@@ -40,11 +52,45 @@ public extension AVCaptureDevice {
 		throw CameraError.noSuitableFPSRange
 	}
 
-	static func pickCamera(position: AVCaptureDevice.Position) throws -> AVCaptureDevice {
-		let devices = RTCCameraVideoCapturer.captureDevices()
-		guard let front = devices.first(where: { $0.position == position }) else {
-			throw CameraError.noFrontCameraDetected
+	static func pickCamera(
+		position: AVCaptureDevice.Position,
+		fallbackToAny: Bool = false
+	) throws -> AVCaptureDevice {
+		let devices = availableCameras()
+		guard !devices.isEmpty else {
+			throw CameraError.noCameraDeviceAvailable
 		}
-		return front
+
+		if let matchingDevice = devices.first(where: { $0.position == position }) {
+			return matchingDevice
+		}
+
+		if fallbackToAny, let firstDevice = devices.first {
+			return firstDevice
+		}
+
+		switch position {
+		case .front:
+			throw CameraError.noFrontCameraDetected
+		case .back:
+			throw CameraError.noBackCameraDetected
+		default:
+			throw CameraError.noCameraDeviceAvailable
+		}
+	}
+
+	static func nextCamera(after currentDeviceID: String?) -> AVCaptureDevice? {
+		let devices = availableCameras()
+		guard !devices.isEmpty else { return nil }
+
+		guard
+			let currentDeviceID,
+			let currentIndex = devices.firstIndex(where: { $0.uniqueID == currentDeviceID })
+		else {
+			return devices.first
+		}
+
+		let nextIndex = (currentIndex + 1) % devices.count
+		return devices[nextIndex]
 	}
 }

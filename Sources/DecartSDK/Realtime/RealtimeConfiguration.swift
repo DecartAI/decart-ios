@@ -10,18 +10,18 @@ import Foundation
 
 public struct RealtimeConfiguration: Sendable {
 	public let model: ModelDefinition
-	public let initialState: ModelState
+	public let initialPrompt: DecartPrompt
 	public let connection: ConnectionConfig
 	public let media: MediaConfig
 
 	public init(
 		model: ModelDefinition,
-		initialState: ModelState,
+		initialPrompt: DecartPrompt,
 		connection: ConnectionConfig = .init(),
 		media: MediaConfig = .init()
 	) {
 		self.model = model
-		self.initialState = initialState
+		self.initialPrompt = initialPrompt
 		self.connection = connection
 		self.media = media
 	}
@@ -30,27 +30,26 @@ public struct RealtimeConfiguration: Sendable {
 
 	public struct ConnectionConfig: Sendable {
 		public let iceServers: [String]
-		public let connectionTimeout: Int32
-		public let pingInterval: Int32
+		public let connectionTimeout: TimeInterval
+		public let rtcConfiguration: RTCConfiguration
 
 		public init(
 			iceServers: [String] = ["stun:stun.l.google.com:19302"],
-			connectionTimeout: Int32 = 7000,
-			pingInterval: Int32 = 2000
+			connectionTimeout: TimeInterval = 15,
+			rtcConfiguration: RTCConfiguration? = nil
 		) {
 			self.iceServers = iceServers
 			self.connectionTimeout = connectionTimeout
-			self.pingInterval = pingInterval
-		}
-
-		public func makeRTCConfiguration() -> RTCConfiguration {
-			let config = RTCConfiguration()
-			config.iceServers = [RTCIceServer(urlStrings: iceServers)]
-			config.sdpSemantics = .unifiedPlan
-			config.continualGatheringPolicy = .gatherContinually
-			config.iceConnectionReceivingTimeout = connectionTimeout
-//			config.iceBackupCandidatePairPingInterval = pingInterval
-			return config
+			if let rtcConfiguration {
+				self.rtcConfiguration = rtcConfiguration
+			} else {
+				let config = RTCConfiguration()
+				config.iceServers = [RTCIceServer(urlStrings: iceServers)]
+				config.sdpSemantics = .unifiedPlan
+				config.continualGatheringPolicy = .gatherContinually
+				config.iceCandidatePoolSize = 10
+				self.rtcConfiguration = config
+			}
 		}
 	}
 
@@ -83,8 +82,8 @@ public struct RealtimeConfiguration: Sendable {
 		public let preferredCodec: String
 
 		public init(
-			maxBitrate: Int = 3_800_000,
-			minBitrate: Int = 100_000,
+			maxBitrate: Int = 2_500_000,
+			minBitrate: Int = 300_000,
 			maxFramerate: Int = 26,
 			preferredCodec: String = "VP8"
 		) {
@@ -94,22 +93,32 @@ public struct RealtimeConfiguration: Sendable {
 			self.preferredCodec = preferredCodec
 		}
 
-		public func configure(transceiver: RTCRtpTransceiver, factory: RTCPeerConnectionFactory) {
+		func makeTransceiverInit() -> RTCRtpTransceiverInit {
+			let transceiverInit = RTCRtpTransceiverInit()
+			transceiverInit.direction = .sendRecv
+
+			let encoding = RTCRtpEncodingParameters()
+			encoding.maxBitrateBps = NSNumber(value: maxBitrate)
+			encoding.minBitrateBps = NSNumber(value: minBitrate)
+			encoding.maxFramerate = NSNumber(value: maxFramerate)
+			transceiverInit.sendEncodings = [encoding]
+
+			return transceiverInit
+		}
+
+		func configureTransceiver(_ transceiver: RTCRtpTransceiver, factory: RTCPeerConnectionFactory) {
 			let supportedCodecs = factory.rtpSenderCapabilities(forKind: "video").codecs
+			let preferredCodecName = preferredCodec.uppercased()
 
 			var preferredCodecs: [RTCRtpCodecCapability] = []
 			var otherCodecs: [RTCRtpCodecCapability] = []
 			var utilityCodecs: [RTCRtpCodecCapability] = []
 
-			let preferredCodecName = preferredCodec.uppercased()
-
 			for codec in supportedCodecs {
 				let codecNameUpper = codec.name.uppercased()
 				if codecNameUpper == preferredCodecName {
 					preferredCodecs.append(codec)
-				} else if codecNameUpper == "RTX" || codecNameUpper == "RED"
-					|| codecNameUpper == "ULPFEC"
-				{
+				} else if codecNameUpper == "RTX" || codecNameUpper == "RED" || codecNameUpper == "ULPFEC" {
 					utilityCodecs.append(codec)
 				} else {
 					otherCodecs.append(codec)
@@ -117,18 +126,14 @@ public struct RealtimeConfiguration: Sendable {
 			}
 
 			let sortedCodecs = preferredCodecs + otherCodecs + utilityCodecs
-			try? transceiver.setCodecPreferences(sortedCodecs, error: ())
-
-			let sender = transceiver.sender
-			let parameters = sender.parameters
-			if parameters.encodings.indices.contains(0) {
-				let encodingParam = parameters.encodings[0]
-				encodingParam.maxBitrateBps = NSNumber(value: maxBitrate)
-				encodingParam.minBitrateBps = NSNumber(value: minBitrate)
-				encodingParam.maxFramerate = NSNumber(value: maxFramerate)
-
-				parameters.encodings[0] = encodingParam
-				sender.parameters = parameters
+			do {
+				try transceiver.setCodecPreferences(sortedCodecs, error: ())
+			} catch {
+				DecartLogger
+					.log(
+						"error while setting codec preferences: \(error)",
+						level: .error
+					)
 			}
 		}
 	}

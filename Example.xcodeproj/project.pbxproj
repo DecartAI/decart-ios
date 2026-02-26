@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		161F07602F0E80DC001B6765 /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 161F075F2F0E80DC001B6765 /* DecartSDK */; };
 		165B2B9B2ECE09E9004D848C /* Factory in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9A2ECE09E9004D848C /* Factory */; };
 		165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */ = {isa = PBXBuildFile; productRef = 165B2B9C2ECE09E9004D848C /* FactoryKit */; };
-		16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 16E67C3B2EB8CC9F00AF5515 /* DecartSDK */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -30,8 +30,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				165B2B9D2ECE09E9004D848C /* FactoryKit in Frameworks */,
-				16E67C3C2EB8CC9F00AF5515 /* DecartSDK in Frameworks */,
 				165B2B9B2ECE09E9004D848C /* Factory in Frameworks */,
+				161F07602F0E80DC001B6765 /* DecartSDK in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -76,16 +76,15 @@
 			buildRules = (
 			);
 			dependencies = (
-				16E67C3E2EB8D01600AF5515 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				16D70B982EB8CA0C00455077 /* Example */,
 			);
 			name = Example;
 			packageProductDependencies = (
-				16E67C3B2EB8CC9F00AF5515 /* DecartSDK */,
 				165B2B9A2ECE09E9004D848C /* Factory */,
 				165B2B9C2ECE09E9004D848C /* FactoryKit */,
+				161F075F2F0E80DC001B6765 /* DecartSDK */,
 			);
 			productName = Example;
 			productReference = 16D70B962EB8CA0C00455077 /* Example.app */;
@@ -116,8 +115,8 @@
 			mainGroup = 16D70B8D2EB8CA0C00455077;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				16E67C3A2EB8CC9F00AF5515 /* XCLocalSwiftPackageReference "../decart-ios" */,
 				165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */,
+				161F075C2F0E80B8001B6765 /* XCLocalSwiftPackageReference "../decart-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 16D70B972EB8CA0C00455077 /* Products */;
@@ -148,13 +147,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		16E67C3E2EB8D01600AF5515 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			productRef = 16E67C3D2EB8D01600AF5515 /* DecartSDK */;
-		};
-/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		16D70B9F2EB8CA0D00455077 /* Debug */ = {
@@ -217,7 +209,10 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Debug;
 		};
@@ -274,6 +269,9 @@
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -283,6 +281,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = BQ3Q4NZWWC;
@@ -302,12 +301,14 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = ai.decart.Example;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Debug;
@@ -317,6 +318,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = BQ3Q4NZWWC;
@@ -334,14 +336,16 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.decart.Examplea;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.decart.Example;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
 				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
+				SWIFT_VERSION = 6.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
 			};
 			name = Release;
@@ -370,7 +374,7 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		16E67C3A2EB8CC9F00AF5515 /* XCLocalSwiftPackageReference "../decart-ios" */ = {
+		161F075C2F0E80B8001B6765 /* XCLocalSwiftPackageReference "../decart-ios" */ = {
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "../decart-ios";
 		};
@@ -388,6 +392,10 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		161F075F2F0E80DC001B6765 /* DecartSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DecartSDK;
+		};
 		165B2B9A2ECE09E9004D848C /* Factory */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
@@ -397,15 +405,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */;
 			productName = FactoryKit;
-		};
-		16E67C3B2EB8CC9F00AF5515 /* DecartSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = DecartSDK;
-		};
-		16E67C3D2EB8D01600AF5515 /* DecartSDK */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 16E67C3A2EB8CC9F00AF5515 /* XCLocalSwiftPackageReference "../decart-ios" */;
-			productName = DecartSDK;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

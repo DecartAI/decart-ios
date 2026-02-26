@@ -10,7 +10,7 @@ import SwiftUI
 import WebRTC
 
 struct DraggableRTCVideoView: View {
-	let track: RTCVideoTrack
+	let track: RTCVideoTrack?
 	let mirror: Bool
 
 	@State private var offset: CGSize = .zero

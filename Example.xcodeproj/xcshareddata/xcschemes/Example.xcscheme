@@ -56,7 +56,12 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "DECART_API_KEY"
-            value = "real_SneqRkuhyIRnMpXDLLrrNpCvkLZvlNiqpxtTJBxRnrerWQIOMtKkysNbOUKTuofs"
+            value = "funcall_eIJgFmMEbcRfsbTNRGdAWFumYkXOJpWyzoXPPcLClZYATEaiiKuHYFzvDEiOGxtO"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+         <EnvironmentVariable
+            key = "ENABLE_DECART_SDK_DUBUG_LOGS"
+            value = "YES"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

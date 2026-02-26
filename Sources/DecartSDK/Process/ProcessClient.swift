@@ -1,6 +1,6 @@
 import Foundation
 
-public struct ProcessClient {
+public struct ProcessClient: Sendable {
 	private let session: URLSession
 	private let request: URLRequest
 
@@ -188,7 +188,7 @@ public struct ProcessClient {
 
 	// MARK: - Process
 
-	public func process() async throws -> Data {
+	public nonisolated func process() async throws -> Data {
 		let (data, response) = try await session.data(for: request)
 
 		guard let httpResponse = response as? HTTPURLResponse else {
@@ -197,7 +197,7 @@ public struct ProcessClient {
 
 		guard (200 ... 299).contains(httpResponse.statusCode) else {
 			let errorText = String(data: data, encoding: .utf8) ?? "Unknown error"
-			DecartLogger.log("error processing request: \(errorText), for route: \(request.url?.absoluteString ?? "unknown"), and body: \(String(decoding: request.httpBody ?? Data(), as: UTF8.self))", level: .error)
+			DecartLogger.log("error processing request: \(errorText), for route: \(request.url?.absoluteString ?? "unknown"), and body:", level: .error)
 			throw DecartError.processingError(
 				"Processing failed: \(httpResponse.statusCode) - \(errorText)")
 		}

@@ -9,7 +9,7 @@ import DecartSDK
 import Factory
 import WebRTC
 
-protocol RealtimeManager {
+protocol RealtimeManagerProtocol {
 	var currentPrompt: Prompt { get set }
 	var shouldMirror: Bool { get set }
 
@@ -18,7 +18,7 @@ protocol RealtimeManager {
 	var localMediaStream: RealtimeMediaStream? { get }
 	var remoteMediaStreams: RealtimeMediaStream? { get }
 
-	func connect(model: RealtimeModel) async
+	func connect() async
 	func switchCamera() async
 	func cleanup() async
 }

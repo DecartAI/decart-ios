@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0.3
+// swift-tools-version: 6.2.1
 import PackageDescription
 
 let package = Package(
@@ -14,13 +14,18 @@ let package = Package(
 		)
 	],
 	dependencies: [
-		.package(url: "https://github.com/stasel/WebRTC.git", from: "140.0.0")
+		.package(url: "https://github.com/stasel/WebRTC.git", from: "140.0.0"),
+		.package(
+			url: "https://github.com/shareup/websocket-apple.git",
+			from: "4.1.0"
+		)
 	],
 	targets: [
 		.target(
 			name: "DecartSDK",
 			dependencies: [
-				.product(name: "WebRTC", package: "WebRTC")
+				.product(name: "WebRTC", package: "WebRTC"),
+				.product(name: "WebSocket", package: "websocket-apple")
 			],
 			path: "Sources/DecartSDK"
 		)
