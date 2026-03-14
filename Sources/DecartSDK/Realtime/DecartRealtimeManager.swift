@@ -311,9 +311,8 @@ private extension DecartRealtimeManager {
 			clearPendingInitialState()
 		}
 
-		try await webSocketClient.send(
-			.prompt(PromptMessage(prompt: prompt.text, enhancePrompt: prompt.enrich))
-		)
+		let message: OutgoingWebSocketMessage = .prompt(PromptMessage(prompt: prompt.text, enhancePrompt: prompt.enrich))
+		try await webSocketClient.send(message)
 		try await waitForPromptAck(prompt: prompt.text, timeout: initialStateAckTimeout)
 	}
 
@@ -339,7 +338,8 @@ private extension DecartRealtimeManager {
 			prompt: prompt,
 			enhancePrompt: enhance
 		)
-		try await webSocketClient.send(.setImage(message))
+		let outgoing: OutgoingWebSocketMessage = .setImage(message)
+		try await webSocketClient.send(outgoing)
 		try await waitForSetImageAck(
 			timeout: initialStateAckTimeout,
 			failureMessage: "Failed to set initial image",
@@ -360,7 +360,8 @@ private extension DecartRealtimeManager {
 			clearPendingInitialState()
 		}
 
-		try await webSocketClient.send(.setImage(.passthrough()))
+		let passthrough: OutgoingWebSocketMessage = .setImage(.passthrough())
+		try await webSocketClient.send(passthrough)
 		try await waitForSetImageAck(
 			timeout: initialStateAckTimeout,
 			failureMessage: "Failed to apply initial passthrough state",
