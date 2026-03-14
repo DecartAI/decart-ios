@@ -117,7 +117,7 @@ public extension DecartRealtimeManager {
 
 		let offer = try await rtcClient.createOffer(constraints: options.media.offerConstraints)
 		try await rtcClient.setLocalDescription(offer)
-		sendMessage(.offer(OfferMessage(sdp: offer.sdp)))
+		try await sendMessageThrowing(.offer(OfferMessage(sdp: offer.sdp)))
 
 		try await waitForConnection(timeout: options.connection.connectionTimeout)
 
@@ -281,6 +281,13 @@ private extension DecartRealtimeManager {
 		Task { [webSocketClient] in try? await webSocketClient.send(message) }
 	}
 
+	private func sendMessageThrowing(_ message: OutgoingWebSocketMessage) async throws {
+		guard let webSocketClient else {
+			throw DecartError.websocketError("WebSocket not connected")
+		}
+		try await webSocketClient.send(message)
+	}
+
 	func sendInitialState() async throws {
 		let initialPrompt = options.initialPrompt
 		if options.model.hasReferenceImage,
@@ -372,6 +379,10 @@ private extension DecartRealtimeManager {
 	func waitForPromptAck(prompt: String, timeout: TimeInterval) async throws {
 		let startTime = Date()
 		while true {
+			if connectionState == .disconnected {
+				throw DecartError.websocketError("Disconnected during initial state setup")
+			}
+
 			if let error = pendingInitialStateError {
 				connectionState = .error
 				throw error
@@ -404,6 +415,10 @@ private extension DecartRealtimeManager {
 	) async throws {
 		let startTime = Date()
 		while true {
+			if connectionState == .disconnected {
+				throw DecartError.websocketError("Disconnected during initial state setup")
+			}
+
 			if let error = pendingInitialStateError {
 				connectionState = .error
 				throw error
