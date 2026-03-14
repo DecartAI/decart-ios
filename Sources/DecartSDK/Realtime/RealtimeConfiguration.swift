@@ -16,7 +16,7 @@ public struct RealtimeConfiguration: Sendable {
 
 	public init(
 		model: ModelDefinition,
-		initialPrompt: DecartPrompt,
+		initialPrompt: DecartPrompt = .init(text: ""),
 		connection: ConnectionConfig = .init(),
 		media: MediaConfig = .init()
 	) {

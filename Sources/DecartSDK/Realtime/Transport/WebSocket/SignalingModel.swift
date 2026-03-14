@@ -55,27 +55,54 @@ struct IceCandidateMessage: Codable, Sendable {
 	}
 }
 
-struct PromptMessage: Codable, Sendable {
+struct PromptMessage: Encodable, Sendable {
 	let type: String
 	let prompt: String
+	let enhancePrompt: Bool?
 
-	init(prompt: String) {
+	init(prompt: String, enhancePrompt: Bool? = nil) {
 		self.type = "prompt"
 		self.prompt = prompt
+		self.enhancePrompt = enhancePrompt
+	}
+
+	private enum CodingKeys: String, CodingKey {
+		case type
+		case prompt
+		case enhancePrompt = "enhance_prompt"
 	}
 }
 
-struct SetImageMessage: Codable, Sendable {
+struct SetImageMessage: Encodable, Sendable {
 	let type: String
 	let prompt: String?
 	let imageData: String?
 	let enhancePrompt: Bool?
+	private let encodeNullPrompt: Bool
+	private let encodeNullImageData: Bool
 
-	init(imageData: String?, prompt: String? = nil, enhancePrompt: Bool? = nil) {
+	init(
+		imageData: String?,
+		prompt: String? = nil,
+		enhancePrompt: Bool? = nil,
+		encodeNullPrompt: Bool = false,
+		encodeNullImageData: Bool = false
+	) {
 		self.type = "set_image"
 		self.prompt = prompt
 		self.imageData = imageData
 		self.enhancePrompt = enhancePrompt
+		self.encodeNullPrompt = encodeNullPrompt
+		self.encodeNullImageData = encodeNullImageData
+	}
+
+	static func passthrough() -> SetImageMessage {
+		SetImageMessage(
+			imageData: nil,
+			prompt: nil,
+			encodeNullPrompt: true,
+			encodeNullImageData: true
+		)
 	}
 
 	private enum CodingKeys: String, CodingKey {
@@ -83,6 +110,27 @@ struct SetImageMessage: Codable, Sendable {
 		case prompt
 		case imageData = "image_data"
 		case enhancePrompt = "enhance_prompt"
+	}
+
+	func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: CodingKeys.self)
+		try container.encode(type, forKey: .type)
+
+		if let prompt {
+			try container.encode(prompt, forKey: .prompt)
+		} else if encodeNullPrompt {
+			try container.encodeNil(forKey: .prompt)
+		}
+
+		if let imageData {
+			try container.encode(imageData, forKey: .imageData)
+		} else if encodeNullImageData {
+			try container.encodeNil(forKey: .imageData)
+		}
+
+		if let enhancePrompt {
+			try container.encode(enhancePrompt, forKey: .enhancePrompt)
+		}
 	}
 }
 
@@ -102,11 +150,14 @@ struct SessionIdMessage: Codable, Sendable {
 
 struct PromptAckMessage: Codable, Sendable {
 	let type: String
+	let prompt: String?
+	let success: Bool?
+	let error: String?
 }
 
 struct SetImageAckMessage: Codable, Sendable {
 	let type: String
-	let success: Bool
+	let success: Bool?
 	let error: String?
 }
 
@@ -198,7 +249,7 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 	}
 }
 
-enum OutgoingWebSocketMessage: Codable, Sendable {
+enum OutgoingWebSocketMessage: Encodable, Sendable {
 	case offer(OfferMessage)
 	case answer(AnswerMessage)
 	case iceCandidate(IceCandidateMessage)
