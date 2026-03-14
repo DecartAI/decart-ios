@@ -66,8 +66,12 @@ actor WebSocketClient {
 
 	func send<T: Encodable & Sendable>(_ message: T) async throws {
 		let data = try encoder.encode(message)
-		guard let jsonString = String(data: data, encoding: .utf8) else { return }
-		guard let socket else { return }
+		guard let jsonString = String(data: data, encoding: .utf8) else {
+			throw DecartError.websocketError("Failed to encode websocket message")
+		}
+		guard let socket else {
+			throw DecartError.websocketError("WebSocket not connected")
+		}
 		try await socket.send(.text(jsonString))
 	}
 
