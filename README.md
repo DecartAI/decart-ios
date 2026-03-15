@@ -10,17 +10,21 @@ Native Swift SDK for [Decart AI](https://decart.ai) - Real-time video processing
 
 ## Overview
 
-Decart iOS SDK provides two primary APIs:
+Decart iOS SDK provides three primary APIs:
 
-- **RealtimeManager** - Real-time video processing with WebRTC streaming
-- **ProcessClient** - Batch image and video generation
+- **RealtimeManager** - Real-time video processing with WebRTC streaming, automatic reconnection, and generation tracking
+- **QueueClient** - Async video generation via the Queue API (`/v1/jobs/*`) with submit, poll, and download
+- **ProcessClient** - Synchronous image generation
 
-Both APIs leverage modern Swift concurrency (async/await) with type-safe interfaces and comprehensive error handling.
+All APIs leverage modern Swift concurrency (async/await) with type-safe interfaces and comprehensive error handling.
 
 ## Features
 
 - Real-time video processing with WebRTC
-- Batch image and video generation
+- Automatic reconnection with exponential backoff
+- Generation tick events for billing/usage tracking
+- Async Queue API for video generation (submit → poll → download)
+- Synchronous image generation
 - Native Swift with modern concurrency (async/await)
 - AsyncStream events for reactive state management
 - Type-safe API with compile-time guarantees
@@ -69,16 +73,21 @@ let realtimeManager = try client.createRealtimeManager(
 // Listen to connection events
 Task {
     for await state in realtimeManager.events {
-        switch state {
-        case .connected:
-            print("Connected")
-        case .disconnected:
-            print("Disconnected")
-        case .error:
-            print("Connection error")
-        default:
-            break
+        print("State: \(state.connectionState)")
+        if let tick = state.generationTick {
+            print("Generation: \(tick)s")
         }
+        if let sessionId = state.sessionId {
+            print("Session: \(sessionId)")
+        }
+    }
+}
+
+// Rebind tracks after automatic reconnection
+Task {
+    for await newRemoteStream in realtimeManager.remoteStreamUpdates {
+        print("Got new remote stream after reconnect")
+        // Update your UI with newRemoteStream.videoTrack
     }
 }
 
@@ -94,13 +103,6 @@ let remoteStream = try await realtimeManager.connect(localStream: localStream)
 
 // Update prompt in real-time
 realtimeManager.setPrompt(Prompt(text: "Anime World"))
-
-// Send reference image (base64) to the realtime session
-try await realtimeManager.setImageBase64(
-    imageBase64String,
-    prompt: "Use this as reference",
-    enhance: true
-)
 
 // Cleanup
 await capture.stopCapture()
@@ -152,9 +154,9 @@ let resultData = try await processClient.process()
 let image = UIImage(data: resultData)
 ```
 
-### 4. Image-to-Video Generation
+### 4. Video Generation (Queue API)
 
-Generate videos from reference images:
+Generate videos using the Queue API — handles long-running jobs without HTTP timeouts.
 
 ```swift
 import DecartSDK
@@ -162,42 +164,91 @@ import DecartSDK
 let config = DecartConfiguration(apiKey: "your-api-key")
 let client = DecartClient(decartConfiguration: config)
 
-let imageData = try Data(contentsOf: referenceImageURL)
-let fileInput = try FileInput.image(data: imageData)
+// Text to video
+let input = try TextToVideoInput(prompt: "A sunset over the ocean")
 
-let input = try ImageToVideoInput(prompt: "Make it dance", data: fileInput)
+let result = try await client.queue.submitAndPoll(model: .lucy_pro_t2v, input: input) { status in
+    print("Job \(status.jobId): \(status.status)")
+}
 
-let processClient = try client.createProcessClient(
-    model: .lucy_pro_i2v,
-    input: input
-)
-
-let videoData = try await processClient.process()
-try videoData.write(to: outputURL)
+switch result {
+case .completed(let jobId, let data):
+    try data.write(to: outputURL)
+case .failed(let jobId, let error):
+    print("Failed: \(error)")
+}
 ```
 
-### 5. Video-to-Video Generation
-
-Transform videos with AI:
+#### Step-by-step control
 
 ```swift
-import DecartSDK
+// Submit and manage the job manually
+let submitResponse = try await client.queue.submit(model: .lucy_pro_t2v, input: input)
+print("Job ID: \(submitResponse.jobId)")
 
-let config = DecartConfiguration(apiKey: "your-api-key")
-let client = DecartClient(decartConfiguration: config)
+// Poll status
+let statusResponse = try await client.queue.status(jobId: submitResponse.jobId)
 
-let videoData = try Data(contentsOf: referenceVideoURL)
-let fileInput = try FileInput.video(data: videoData)
+// Download result when complete
+if statusResponse.status == .completed {
+    let videoData = try await client.queue.result(jobId: submitResponse.jobId)
+}
+```
 
-let input = try VideoToVideoInput(prompt: "Apply anime style", data: fileInput)
+#### Check status of any job
 
-let processClient = try client.createProcessClient(
-    model: .lucy_pro_v2v,
-    input: input
-)
+```swift
+let status = try await client.queue.status(jobId: "some-job-id")
+let data = try await client.queue.result(jobId: "some-job-id")
+```
 
-let resultData = try await processClient.process()
-try resultData.write(to: outputURL)
+### 5. Video Edit (lucy-2-v2v)
+
+Edit a video with a prompt and optional reference image:
+
+```swift
+let videoData = try Data(contentsOf: videoURL)
+let videoFile = try FileInput.video(data: videoData)
+
+let input = try VideoEditInput(prompt: "Add snow", data: videoFile)
+let result = try await client.queue.submitAndPoll(model: .lucy_2_v2v, input: input)
+```
+
+### 6. Video Restyle (lucy-restyle-v2v)
+
+Restyle a video using either a text prompt or a reference image (mutually exclusive):
+
+```swift
+let videoData = try Data(contentsOf: videoURL)
+let videoFile = try FileInput.video(data: videoData)
+
+// With prompt
+let input = try VideoRestyleInput(prompt: "Studio Ghibli style", data: videoFile)
+
+// Or with reference image
+let refData = try Data(contentsOf: referenceURL)
+let refImage = try FileInput.image(data: refData)
+let input = try VideoRestyleInput(data: videoFile, referenceImage: refImage)
+
+let result = try await client.queue.submitAndPoll(model: .lucy_restyle_v2v, input: input)
+```
+
+### 7. Motion Video (lucy-motion)
+
+Generate a video from an image with trajectory-based motion control:
+
+```swift
+let imageData = try Data(contentsOf: imageURL)
+let imageFile = try FileInput.image(data: imageData)
+
+let trajectory = [
+    try TrajectoryPoint(frame: 0, x: 0.5, y: 0.5),
+    try TrajectoryPoint(frame: 30, x: 0.7, y: 0.3),
+    try TrajectoryPoint(frame: 60, x: 0.5, y: 0.5),
+]
+
+let input = try MotionVideoInput(data: imageFile, trajectory: trajectory)
+let result = try await client.queue.submitAndPoll(model: .lucy_motion, input: input)
 ```
 
 ## API Reference
@@ -219,12 +270,31 @@ let client = DecartClient(decartConfiguration: config)
 // Create realtime manager
 func createRealtimeManager(options: RealtimeConfiguration) throws -> RealtimeManager
 
-// Create process clients
+// Create process clients (synchronous image generation)
 func createProcessClient(model: ImageModel, input: TextToImageInput) throws -> ProcessClient
 func createProcessClient(model: ImageModel, input: ImageToImageInput) throws -> ProcessClient
-func createProcessClient(model: VideoModel, input: TextToVideoInput) throws -> ProcessClient
-func createProcessClient(model: VideoModel, input: ImageToVideoInput) throws -> ProcessClient
-func createProcessClient(model: VideoModel, input: VideoToVideoInput) throws -> ProcessClient
+
+// Queue client for async video generation (recommended)
+var queue: QueueClient { get }
+```
+
+### QueueClient
+
+```swift
+// Submit a job (one overload per input type)
+func submit(model: VideoModel, input: TextToVideoInput) async throws -> JobSubmitResponse
+func submit(model: VideoModel, input: ImageToVideoInput) async throws -> JobSubmitResponse
+func submit(model: VideoModel, input: VideoToVideoInput) async throws -> JobSubmitResponse
+func submit(model: VideoModel, input: VideoEditInput) async throws -> JobSubmitResponse
+func submit(model: VideoModel, input: VideoRestyleInput) async throws -> JobSubmitResponse
+func submit(model: VideoModel, input: MotionVideoInput) async throws -> JobSubmitResponse
+
+// Poll / download
+func status(jobId: String) async throws -> JobStatusResponse
+func result(jobId: String) async throws -> Data
+
+// Submit + poll until terminal state (one overload per input type)
+func submitAndPoll(model: VideoModel, input: ..., onStatusChange: ((JobStatusResponse) -> Void)?) async throws -> QueueJobResult
 ```
 
 ### RealtimeManager
@@ -232,12 +302,15 @@ func createProcessClient(model: VideoModel, input: VideoToVideoInput) throws -> 
 ```swift
 func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream
 func disconnect() async
-func setPrompt(_ prompt: Prompt)
-func setImageBase64(_ imageBase64: String?, prompt: String?, enhance: Bool?, timeout: TimeInterval?) async throws
-func getStats() async -> RTCStatisticsReport?
+func setPrompt(_ prompt: DecartPrompt)
 
-let events: AsyncStream<DecartRealtimeConnectionState>
-// States: .idle, .connecting, .connected, .disconnected, .error
+// State events (connection, queue position, generation ticks, session ID)
+let events: AsyncStream<DecartRealtimeState>
+
+// New remote stream after automatic reconnection
+let remoteStreamUpdates: AsyncStream<RealtimeMediaStream>
+
+// Connection states: .idle, .connecting, .connected, .generating, .reconnecting, .disconnected, .error
 ```
 
 ### ProcessClient
@@ -252,6 +325,7 @@ func process() async throws -> Data
 - `RealtimeModel.mirage`
 - `RealtimeModel.mirage_v2`
 - `RealtimeModel.lucy_v2v_720p_rt`
+- `RealtimeModel.lucy_2_rt` - V2V with reference image support
 
 **Image Models:**
 - `ImageModel.lucy_pro_t2i` - Text to image
@@ -263,6 +337,9 @@ func process() async throws -> Data
 - `VideoModel.lucy_pro_v2v` - Video to video
 - `VideoModel.lucy_dev_i2v` - Image to video (dev)
 - `VideoModel.lucy_fast_v2v` - Fast video to video
+- `VideoModel.lucy_2_v2v` - Video edit with optional reference image
+- `VideoModel.lucy_restyle_v2v` - Video restyle (prompt or reference image)
+- `VideoModel.lucy_motion` - Motion video from image + trajectory
 
 ### Input Types
 
@@ -275,11 +352,33 @@ TextToVideoInput(prompt: String, seed: Int?, resolution: ProResolution?)
 ImageToImageInput(prompt: String, data: FileInput, seed: Int?)
 ImageToVideoInput(prompt: String, data: FileInput, seed: Int?)
 VideoToVideoInput(prompt: String, data: FileInput, seed: Int?)
+VideoEditInput(prompt: String, data: FileInput, referenceImage: FileInput?, seed: Int?)
+VideoRestyleInput(prompt: String?, data: FileInput, referenceImage: FileInput?, seed: Int?)
+MotionVideoInput(data: FileInput, trajectory: [TrajectoryPoint], seed: Int?)
+
+// Trajectory point for motion video (x/y normalized 0-1)
+TrajectoryPoint(frame: Int, x: Double, y: Double)
 
 // File input helpers
 FileInput.image(data: Data, filename: String)
 FileInput.video(data: Data, filename: String)
 FileInput.from(data: Data, uniformType: UTType?)
+```
+
+### Queue Types
+
+```swift
+enum JobStatus: String, Codable {
+    case pending, processing, completed, failed
+}
+
+struct JobSubmitResponse: Codable { let jobId: String; let status: JobStatus }
+struct JobStatusResponse: Codable { let jobId: String; let status: JobStatus }
+
+enum QueueJobResult {
+    case completed(jobId: String, data: Data)
+    case failed(jobId: String, error: String)
+}
 ```
 
 ### RealtimeConfiguration
