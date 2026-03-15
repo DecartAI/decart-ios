@@ -138,12 +138,12 @@ extension WebRTCClient {
 	}
 
 	@discardableResult
-	nonisolated func startLocalStreaming(videoTrack: RTCVideoTrack, audioTrack: RTCAudioTrack? = nil) -> RealtimeMediaStream {
-		if let videoSender = videoTransceiver?.sender {
+	nonisolated func startLocalStreaming(videoTrack: RTCVideoTrack? = nil, audioTrack: RTCAudioTrack? = nil) -> RealtimeMediaStream {
+		if let videoTrack, let videoSender = videoTransceiver?.sender {
 			videoSender.track = videoTrack
 		}
 
-		if let audioSender = audioTransceiver?.sender {
+		if let audioTrack, let audioSender = audioTransceiver?.sender {
 			audioSender.track = audioTrack
 		}
 

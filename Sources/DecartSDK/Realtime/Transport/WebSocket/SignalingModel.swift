@@ -148,6 +148,21 @@ struct SessionIdMessage: Codable, Sendable {
 	var id: String? { sessionId ?? session_id }
 }
 
+struct GenerationStartedMessage: Codable, Sendable {
+	let type: String
+}
+
+struct GenerationTickMessage: Codable, Sendable {
+	let type: String
+	let seconds: Double
+}
+
+struct GenerationEndedMessage: Codable, Sendable {
+	let type: String
+	let seconds: Double?
+	let reason: String?
+}
+
 struct PromptAckMessage: Codable, Sendable {
 	let type: String
 	let prompt: String?
@@ -184,6 +199,9 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 	case iceCandidate(IceCandidateMessage)
 	case error(ServerErrorMessage)
 	case sessionId(SessionIdMessage)
+	case generationStarted(GenerationStartedMessage)
+	case generationTick(GenerationTickMessage)
+	case generationEnded(GenerationEndedMessage)
 	case promptAck(PromptAckMessage)
 	case setImageAck(SetImageAckMessage)
 	case status(StatusMessage)
@@ -204,6 +222,12 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 			self = try .error(ServerErrorMessage(from: decoder))
 		case "session_id":
 			self = try .sessionId(SessionIdMessage(from: decoder))
+		case "generation_started":
+			self = try .generationStarted(GenerationStartedMessage(from: decoder))
+		case "generation_tick":
+			self = try .generationTick(GenerationTickMessage(from: decoder))
+		case "generation_ended":
+			self = try .generationEnded(GenerationEndedMessage(from: decoder))
 		case "prompt_ack":
 			self = try .promptAck(PromptAckMessage(from: decoder))
 		case "set_image_ack":
@@ -232,6 +256,12 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 		case .error(let msg):
 			try msg.encode(to: encoder)
 		case .sessionId(let msg):
+			try msg.encode(to: encoder)
+		case .generationStarted(let msg):
+			try msg.encode(to: encoder)
+		case .generationTick(let msg):
+			try msg.encode(to: encoder)
+		case .generationEnded(let msg):
 			try msg.encode(to: encoder)
 		case .promptAck(let msg):
 			try msg.encode(to: encoder)
