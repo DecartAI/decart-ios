@@ -16,6 +16,9 @@ public enum InputValidationError: LocalizedError {
 	case expectedImage
 	case expectedVideo
 	case unsupportedMediaType
+	case restyleMissingInput
+	case restyleMutuallyExclusive
+	case invalidTrajectory
 
 	public var errorDescription: String? {
 		switch self {
@@ -29,6 +32,12 @@ public enum InputValidationError: LocalizedError {
 			return "Expected a video file"
 		case .unsupportedMediaType:
 			return "Unsupported media type. Only image and video files are supported"
+		case .restyleMissingInput:
+			return "Video restyle requires either a prompt or a reference image"
+		case .restyleMutuallyExclusive:
+			return "Video restyle accepts either a prompt or a reference image, not both"
+		case .invalidTrajectory:
+			return "Invalid trajectory: requires 2-1000 points with frame >= 0, x/y in [0, 1]"
 		}
 	}
 }
