@@ -86,4 +86,8 @@ public struct DecartClient {
 			session: session
 		)
 	}
+
+	public var queue: QueueClient {
+		QueueClient(baseURL: decartConfiguration.baseURL, apiKey: decartConfiguration.apiKey)
+	}
 }
