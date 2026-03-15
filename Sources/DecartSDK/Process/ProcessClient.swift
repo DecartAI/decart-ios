@@ -6,32 +6,6 @@ public struct ProcessClient: Sendable {
 
 	// MARK: - Initializers
 
-	/// Initializer for Text to Video models (e.g. lucy-pro-t2v)
-	public init(
-		configuration: DecartConfiguration,
-		model: VideoModel,
-		input: TextToVideoInput,
-		session: URLSession = .shared
-	) throws {
-		guard ModelsInputFactory.videoInputType(for: model) == .textToVideo else {
-			throw DecartError.invalidInput(
-				"Model \(model.rawValue) does not support TextToVideoInput")
-		}
-		let modelDef = Models.video(model)
-		try self.init(
-			configuration: configuration,
-			endpoint: modelDef.urlPath,
-			params: [
-				"prompt": input.prompt,
-				"seed": input.seed,
-				"resolution": input.resolution?.rawValue,
-				"orientation": input.orientation,
-			],
-			file: nil,
-			session: session)
-	}
-
-	/// Initializer for Text to Image models (e.g. lucy-pro-t2i)
 	public init(
 		configuration: DecartConfiguration,
 		model: ImageModel,
@@ -56,31 +30,6 @@ public struct ProcessClient: Sendable {
 			session: session)
 	}
 
-	/// Initializer for Image to Video models (e.g. lucy-pro-i2v)
-	public init(
-		configuration: DecartConfiguration,
-		model: VideoModel,
-		input: ImageToVideoInput,
-		session: URLSession = .shared
-	) throws {
-		guard ModelsInputFactory.videoInputType(for: model) == .imageToVideo else {
-			throw DecartError.invalidInput(
-				"Model \(model.rawValue) does not support ImageToVideoInput")
-		}
-		let modelDef = Models.video(model)
-		try self.init(
-			configuration: configuration,
-			endpoint: modelDef.urlPath,
-			params: [
-				"prompt": input.prompt,
-				"seed": input.seed,
-				"resolution": input.resolution?.rawValue,
-			],
-			file: input.data,
-			session: session)
-	}
-
-	/// Initializer for Image to Image models (e.g. lucy-pro-i2i)
 	public init(
 		configuration: DecartConfiguration,
 		model: ImageModel,
@@ -100,32 +49,6 @@ public struct ProcessClient: Sendable {
 				"seed": input.seed,
 				"resolution": input.resolution?.rawValue,
 				"enhance_prompt": input.enhancePrompt,
-			],
-			file: input.data,
-			session: session)
-	}
-
-	/// Initializer for Video to Video models (e.g. lucy-pro-v2v)
-	public init(
-		configuration: DecartConfiguration,
-		model: VideoModel,
-		input: VideoToVideoInput,
-		session: URLSession = .shared
-	) throws {
-		guard ModelsInputFactory.videoInputType(for: model) == .videoToVideo else {
-			throw DecartError.invalidInput(
-				"Model \(model.rawValue) does not support VideoToVideoInput")
-		}
-		let modelDef = Models.video(model)
-		try self.init(
-			configuration: configuration,
-			endpoint: modelDef.urlPath,
-			params: [
-				"prompt": input.prompt,
-				"seed": input.seed,
-				"resolution": input.resolution?.rawValue,
-				"enhance_prompt": input.enhancePrompt,
-				"num_inference_steps": input.numInferenceSteps,
 			],
 			file: input.data,
 			session: session)

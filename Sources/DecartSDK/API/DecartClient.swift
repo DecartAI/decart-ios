@@ -23,45 +23,6 @@ public struct DecartClient {
 	}
 
 	public func createProcessClient(
-		model: VideoModel,
-		input: TextToVideoInput,
-		session: URLSession = .shared
-	) throws -> ProcessClient {
-		try ProcessClient(
-			configuration: decartConfiguration,
-			model: model,
-			input: input,
-			session: session
-		)
-	}
-
-	public func createProcessClient(
-		model: VideoModel,
-		input: ImageToVideoInput,
-		session: URLSession = .shared
-	) throws -> ProcessClient {
-		try ProcessClient(
-			configuration: decartConfiguration,
-			model: model,
-			input: input,
-			session: session
-		)
-	}
-
-	public func createProcessClient(
-		model: VideoModel,
-		input: VideoToVideoInput,
-		session: URLSession = .shared
-	) throws -> ProcessClient {
-		try ProcessClient(
-			configuration: decartConfiguration,
-			model: model,
-			input: input,
-			session: session
-		)
-	}
-
-	public func createProcessClient(
 		model: ImageModel,
 		input: TextToImageInput,
 		session: URLSession = .shared

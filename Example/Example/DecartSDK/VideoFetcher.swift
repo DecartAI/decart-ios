@@ -90,7 +90,7 @@ final class VideoFetcher {
 		}
 
 		do {
-			let processClient = try await buildProcessClient(
+			let result = try await submitVideoJob(
 				prompt: trimmedPrompt,
 				model: model,
 				inputType: inputType,
@@ -98,19 +98,19 @@ final class VideoFetcher {
 			)
 			guard !Task.isCancelled else { return }
 
-			let data = try await processClient.process()
-			let tempURL = FileManager.default.temporaryDirectory
-				.appendingPathComponent(UUID().uuidString)
-				.appendingPathExtension("mp4")
-			try data.write(to: tempURL, options: .atomic)
+			switch result {
+			case .completed(_, let data):
+				let tempURL = FileManager.default.temporaryDirectory
+					.appendingPathComponent(UUID().uuidString)
+					.appendingPathExtension("mp4")
+				try data.write(to: tempURL, options: .atomic)
 
-			if Task.isCancelled {
-				return
+				videoPlayer?.pause()
+				generatedVideoURL = tempURL
+				videoPlayer = AVPlayer(url: tempURL)
+			case .failed(_, let error):
+				errorMessage = error
 			}
-
-			videoPlayer?.pause()
-			generatedVideoURL = tempURL
-			videoPlayer = AVPlayer(url: tempURL)
 		} catch {
 			if Task.isCancelled {
 				return
@@ -119,26 +119,26 @@ final class VideoFetcher {
 		}
 	}
 
-	private func buildProcessClient(
+	private func submitVideoJob(
 		prompt: String,
 		model: VideoModel,
 		inputType: ModelInputType,
 		selectedItem: PhotosPickerItem?
-	) async throws -> ProcessClient {
+	) async throws -> QueueJobResult {
 		switch inputType {
 		case .textToVideo:
 			let input = try TextToVideoInput(prompt: prompt)
-			return try decartClient.createProcessClient(model: model, input: input, session: Self.urlSession)
+			return try await decartClient.queue.submitAndPoll(model: model, input: input)
 
 		case .imageToVideo:
 			let fileInput = try await loadFileInput(from: selectedItem)
 			let input = try ImageToVideoInput(prompt: prompt, data: fileInput)
-			return try decartClient.createProcessClient(model: model, input: input, session: Self.urlSession)
+			return try await decartClient.queue.submitAndPoll(model: model, input: input)
 
 		case .videoToVideo:
 			let fileInput = try await loadFileInput(from: selectedItem)
 			let input = try VideoToVideoInput(prompt: prompt, data: fileInput)
-			return try decartClient.createProcessClient(model: model, input: input, session: Self.urlSession)
+			return try await decartClient.queue.submitAndPoll(model: model, input: input)
 
 		default:
 			throw DecartError.invalidInput("Unsupported input type")
