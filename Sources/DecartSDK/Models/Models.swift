@@ -9,7 +9,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case mirage
 	case mirage_v2
 	case lucy_v2v_720p_rt
-	case lucy_v2v_14b_rt
+	case lucy_2_rt
 }
 
 public enum ImageModel: String, CaseIterable {
@@ -23,6 +23,10 @@ public enum VideoModel: String, CaseIterable {
 	case lucy_pro_t2v = "lucy-pro-t2v"
 	case lucy_pro_i2v = "lucy-pro-i2v"
 	case lucy_pro_v2v = "lucy-pro-v2v"
+	case lucy_2_v2v = "lucy-2-v2v"
+	case lucy_restyle_v2v = "lucy-restyle-v2v"
+	case lucy_motion = "lucy-motion"
+
 }
 
 public enum Models {
@@ -52,15 +56,16 @@ public enum Models {
 				width: 1280,
 				height: 704
 			)
-		case .lucy_v2v_14b_rt:
+		case .lucy_2_rt:
 			return ModelDefinition(
-				name: "lucy_v2v_14b_rt",
+				name: "lucy_2_rt",
 				urlPath: "/v1/stream",
-				fps: 15,
+				fps: 20,
 				width: 1280,
-				height: 704,
+				height: 720,
 				hasReferenceImage: true
 			)
+
 		}
 	}
 
@@ -91,6 +96,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-dev-i2v",
 				urlPath: "/v1/generate/lucy-dev-i2v",
+				jobsUrlPath: "/v1/jobs/lucy-dev-i2v",
 				fps: 25,
 				width: 1280,
 				height: 704
@@ -99,6 +105,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-fast-v2v",
 				urlPath: "/v1/generate/lucy-fast-v2v",
+				jobsUrlPath: "/v1/jobs/lucy-fast-v2v",
 				fps: 25,
 				width: 1280,
 				height: 704
@@ -107,6 +114,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-pro-t2v",
 				urlPath: "/v1/generate/lucy-pro-t2v",
+				jobsUrlPath: "/v1/jobs/lucy-pro-t2v",
 				fps: 25,
 				width: 1280,
 				height: 704
@@ -115,6 +123,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-pro-i2v",
 				urlPath: "/v1/generate/lucy-pro-i2v",
+				jobsUrlPath: "/v1/jobs/lucy-pro-i2v",
 				fps: 25,
 				width: 1280,
 				height: 704
@@ -123,10 +132,39 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-pro-v2v",
 				urlPath: "/v1/generate/lucy-pro-v2v",
+				jobsUrlPath: "/v1/jobs/lucy-pro-v2v",
 				fps: 25,
 				width: 1280,
 				height: 704
 			)
+		case .lucy_2_v2v:
+			return ModelDefinition(
+				name: "lucy-2-v2v",
+				urlPath: "/v1/generate/lucy-2-v2v",
+				jobsUrlPath: "/v1/jobs/lucy-2-v2v",
+				fps: 20,
+				width: 1280,
+				height: 720
+			)
+		case .lucy_restyle_v2v:
+			return ModelDefinition(
+				name: "lucy-restyle-v2v",
+				urlPath: "/v1/generate/lucy-restyle-v2v",
+				jobsUrlPath: "/v1/jobs/lucy-restyle-v2v",
+				fps: 25,
+				width: 1280,
+				height: 704
+			)
+		case .lucy_motion:
+			return ModelDefinition(
+				name: "lucy-motion",
+				urlPath: "/v1/generate/lucy-motion",
+				jobsUrlPath: "/v1/jobs/lucy-motion",
+				fps: 25,
+				width: 1280,
+				height: 704
+			)
+
 		}
 	}
 }
