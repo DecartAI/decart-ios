@@ -18,14 +18,6 @@ final class VideoFetcher {
 	@ObservationIgnored
 	private let decartClient = Container.shared.decartClient()
 
-	@ObservationIgnored
-	private static let urlSession: URLSession = {
-		let config = URLSessionConfiguration.default
-		config.urlCache = nil
-		config.requestCachePolicy = .reloadIgnoringLocalCacheData
-		return URLSession(configuration: config)
-	}()
-
 	private var generateVideoTask: Task<Void, Never>?
 
 	var prompt: String = ""
@@ -88,35 +80,42 @@ final class VideoFetcher {
 		}
 
 		do {
-			let fileInput = try await loadFileInput(from: selectedItem)
-			let input = try VideoToVideoInput(prompt: trimmedPrompt, data: fileInput)
-			let processClient = try decartClient.createProcessClient(
+			let result = try await submitVideoJob(
+				prompt: trimmedPrompt,
 				model: model,
-				input: input,
-				session: Self.urlSession
+				selectedItem: selectedItem
 			)
-
 			guard !Task.isCancelled else { return }
 
-			let data = try await processClient.process()
-			let tempURL = FileManager.default.temporaryDirectory
-				.appendingPathComponent(UUID().uuidString)
-				.appendingPathExtension("mp4")
-			try data.write(to: tempURL, options: .atomic)
+			switch result {
+			case .completed(_, let data):
+				let tempURL = FileManager.default.temporaryDirectory
+					.appendingPathComponent(UUID().uuidString)
+					.appendingPathExtension("mp4")
+				try data.write(to: tempURL, options: .atomic)
 
-			if Task.isCancelled {
-				return
+				videoPlayer?.pause()
+				generatedVideoURL = tempURL
+				videoPlayer = AVPlayer(url: tempURL)
+			case .failed(_, let error):
+				errorMessage = error
 			}
-
-			videoPlayer?.pause()
-			generatedVideoURL = tempURL
-			videoPlayer = AVPlayer(url: tempURL)
 		} catch {
 			if Task.isCancelled {
 				return
 			}
 			errorMessage = error.localizedDescription
 		}
+	}
+
+	private func submitVideoJob(
+		prompt: String,
+		model: VideoModel,
+		selectedItem: PhotosPickerItem?
+	) async throws -> QueueJobResult {
+		let fileInput = try await loadFileInput(from: selectedItem)
+		let input = try VideoToVideoInput(prompt: prompt, data: fileInput)
+		return try await decartClient.queue.submitAndPoll(model: model, input: input)
 	}
 
 	private func loadFileInput(from item: PhotosPickerItem?) async throws -> FileInput {

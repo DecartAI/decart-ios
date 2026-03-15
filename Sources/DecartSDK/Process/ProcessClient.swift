@@ -31,32 +31,6 @@ public struct ProcessClient: Sendable {
 			session: session)
 	}
 
-	/// Initializer for Video to Video models (e.g. lucy-pro-v2v)
-	public init(
-		configuration: DecartConfiguration,
-		model: VideoModel,
-		input: VideoToVideoInput,
-		session: URLSession = .shared
-	) throws {
-		guard ModelsInputFactory.videoInputType(for: model) == .videoToVideo else {
-			throw DecartError.invalidInput(
-				"Model \(model.rawValue) does not support VideoToVideoInput")
-		}
-		let modelDef = Models.video(model)
-		try self.init(
-			configuration: configuration,
-			endpoint: modelDef.urlPath,
-			params: [
-				"prompt": input.prompt,
-				"seed": input.seed,
-				"resolution": input.resolution?.rawValue,
-				"enhance_prompt": input.enhancePrompt,
-				"num_inference_steps": input.numInferenceSteps,
-			],
-			file: input.data,
-			session: session)
-	}
-
 	// MARK: - Private Common Init
 
 	private init(
