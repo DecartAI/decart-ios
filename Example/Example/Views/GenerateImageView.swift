@@ -19,17 +19,9 @@ struct GenerateImageView: View {
 	@State private var previewLoadTask: Task<Void, Never>?
 	@FocusState private var promptFocused: Bool
 
-	private var inputType: ModelInputType {
-		ModelsInputFactory.imageInputType(for: model)
-	}
-
-	private var requiresReference: Bool {
-		inputType == .imageToImage
-	}
-
 	private var canSend: Bool {
 		let hasPrompt = !imageFetcher.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-		let hasReference = !requiresReference || selectedItem != nil
+		let hasReference = selectedItem != nil
 		return hasPrompt && hasReference && !imageFetcher.isProcessing
 	}
 
@@ -83,11 +75,7 @@ struct GenerateImageView: View {
 				ContentUnavailableView(
 					"Ready to generate",
 					systemImage: "photo.badge.plus",
-					description: Text(
-						requiresReference
-							? "Enter a prompt and pick a reference image."
-							: "Enter a prompt to start."
-					)
+					description: Text("Enter a prompt and pick a reference image.")
 				)
 				.padding(.vertical, 24)
 			}
@@ -128,10 +116,8 @@ struct GenerateImageView: View {
 				.focused($promptFocused)
 
 			HStack(spacing: 12) {
-				if requiresReference {
-					PhotosPicker(selection: $selectedItem, matching: .images) {
-						Label("Reference", systemImage: "photo")
-					}
+				PhotosPicker(selection: $selectedItem, matching: .images) {
+					Label("Reference", systemImage: "photo")
 				}
 
 				Spacer()
@@ -166,20 +152,11 @@ struct GenerateImageView: View {
 
 	private func generate() {
 		dismissKeyboard()
-		if requiresReference {
-			guard let selectedItem else { return }
-			imageFetcher.fetchImage(
-				model: model,
-				inputType: inputType,
-				selectedItem: selectedItem
-			)
-		} else {
-			imageFetcher.fetchImage(
-				model: model,
-				inputType: inputType,
-				selectedItem: nil
-			)
-		}
+		guard let selectedItem else { return }
+		imageFetcher.fetchImage(
+			model: model,
+			selectedItem: selectedItem
+		)
 	}
 
 	private func clearAttachment() {
@@ -198,6 +175,6 @@ struct GenerateImageView: View {
 
 #Preview {
 	NavigationView {
-		GenerateImageView(model: .lucy_pro_t2i)
+		GenerateImageView(model: .lucy_pro_i2i)
 	}
 }

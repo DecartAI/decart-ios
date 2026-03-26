@@ -6,80 +6,6 @@ public struct ProcessClient: Sendable {
 
 	// MARK: - Initializers
 
-	/// Initializer for Text to Video models (e.g. lucy-pro-t2v)
-	public init(
-		configuration: DecartConfiguration,
-		model: VideoModel,
-		input: TextToVideoInput,
-		session: URLSession = .shared
-	) throws {
-		guard ModelsInputFactory.videoInputType(for: model) == .textToVideo else {
-			throw DecartError.invalidInput(
-				"Model \(model.rawValue) does not support TextToVideoInput")
-		}
-		let modelDef = Models.video(model)
-		try self.init(
-			configuration: configuration,
-			endpoint: modelDef.urlPath,
-			params: [
-				"prompt": input.prompt,
-				"seed": input.seed,
-				"resolution": input.resolution?.rawValue,
-				"orientation": input.orientation,
-			],
-			file: nil,
-			session: session)
-	}
-
-	/// Initializer for Text to Image models (e.g. lucy-pro-t2i)
-	public init(
-		configuration: DecartConfiguration,
-		model: ImageModel,
-		input: TextToImageInput,
-		session: URLSession = .shared
-	) throws {
-		guard ModelsInputFactory.imageInputType(for: model) == .textToImage else {
-			throw DecartError.invalidInput(
-				"Model \(model.rawValue) does not support TextToImageInput")
-		}
-		let modelDef = Models.image(model)
-		try self.init(
-			configuration: configuration,
-			endpoint: modelDef.urlPath,
-			params: [
-				"prompt": input.prompt,
-				"seed": input.seed,
-				"resolution": input.resolution?.rawValue,
-				"orientation": input.orientation,
-			],
-			file: nil,
-			session: session)
-	}
-
-	/// Initializer for Image to Video models (e.g. lucy-pro-i2v)
-	public init(
-		configuration: DecartConfiguration,
-		model: VideoModel,
-		input: ImageToVideoInput,
-		session: URLSession = .shared
-	) throws {
-		guard ModelsInputFactory.videoInputType(for: model) == .imageToVideo else {
-			throw DecartError.invalidInput(
-				"Model \(model.rawValue) does not support ImageToVideoInput")
-		}
-		let modelDef = Models.video(model)
-		try self.init(
-			configuration: configuration,
-			endpoint: modelDef.urlPath,
-			params: [
-				"prompt": input.prompt,
-				"seed": input.seed,
-				"resolution": input.resolution?.rawValue,
-			],
-			file: input.data,
-			session: session)
-	}
-
 	/// Initializer for Image to Image models (e.g. lucy-pro-i2i)
 	public init(
 		configuration: DecartConfiguration,
@@ -145,7 +71,6 @@ public struct ProcessClient: Sendable {
 		var request = URLRequest(url: url)
 		request.httpMethod = "POST"
 		request.setValue(configuration.apiKey, forHTTPHeaderField: "X-API-KEY")
-		// User-Agent logic could go here if needed
 
 		let boundary = "Boundary-\(UUID().uuidString)"
 		request.setValue(

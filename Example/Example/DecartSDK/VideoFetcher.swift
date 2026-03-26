@@ -56,7 +56,7 @@ final class VideoFetcher {
 		videoPlayer?.pause()
 	}
 
-	func fetchVideo(model: VideoModel, inputType: ModelInputType, selectedItem: PhotosPickerItem?) {
+	func fetchVideo(model: VideoModel, selectedItem: PhotosPickerItem?) {
 		let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 		guard !trimmedPrompt.isEmpty else { return }
 
@@ -73,7 +73,6 @@ final class VideoFetcher {
 			await self?.generateVideo(
 				trimmedPrompt: trimmedPrompt,
 				model: model,
-				inputType: inputType,
 				selectedItem: selectedItem
 			)
 		}
@@ -82,7 +81,6 @@ final class VideoFetcher {
 	private func generateVideo(
 		trimmedPrompt: String,
 		model: VideoModel,
-		inputType: ModelInputType,
 		selectedItem: PhotosPickerItem?
 	) async {
 		defer {
@@ -90,12 +88,14 @@ final class VideoFetcher {
 		}
 
 		do {
-			let processClient = try await buildProcessClient(
-				prompt: trimmedPrompt,
+			let fileInput = try await loadFileInput(from: selectedItem)
+			let input = try VideoToVideoInput(prompt: trimmedPrompt, data: fileInput)
+			let processClient = try decartClient.createProcessClient(
 				model: model,
-				inputType: inputType,
-				selectedItem: selectedItem
+				input: input,
+				session: Self.urlSession
 			)
+
 			guard !Task.isCancelled else { return }
 
 			let data = try await processClient.process()
@@ -119,54 +119,18 @@ final class VideoFetcher {
 		}
 	}
 
-	private func buildProcessClient(
-		prompt: String,
-		model: VideoModel,
-		inputType: ModelInputType,
-		selectedItem: PhotosPickerItem?
-	) async throws -> ProcessClient {
-		switch inputType {
-		case .textToVideo:
-			let input = try TextToVideoInput(prompt: prompt)
-			return try decartClient.createProcessClient(model: model, input: input, session: Self.urlSession)
-
-		case .imageToVideo:
-			let fileInput = try await loadFileInput(from: selectedItem)
-			let input = try ImageToVideoInput(prompt: prompt, data: fileInput)
-			return try decartClient.createProcessClient(model: model, input: input, session: Self.urlSession)
-
-		case .videoToVideo:
-			let fileInput = try await loadFileInput(from: selectedItem)
-			let input = try VideoToVideoInput(prompt: prompt, data: fileInput)
-			return try decartClient.createProcessClient(model: model, input: input, session: Self.urlSession)
-
-		default:
-			throw DecartError.invalidInput("Unsupported input type")
-		}
-	}
-
 	private func loadFileInput(from item: PhotosPickerItem?) async throws -> FileInput {
 		guard let item else {
 			throw DecartError.invalidInput("No media selected")
 		}
 
-		guard var data = try await item.loadTransferable(type: Data.self) else {
+		guard let data = try await item.loadTransferable(type: Data.self) else {
 			throw DecartError.invalidInput("Failed to load selected media")
 		}
 
 		let mediaType = item.supportedContentTypes.first(where: {
-			$0.conforms(to: .movie) || $0.conforms(to: .video) || $0.conforms(to: .image)
+			$0.conforms(to: .movie) || $0.conforms(to: .video)
 		})
-
-		if let type = mediaType, type.conforms(to: .image) {
-			guard let image = UIImage(data: data),
-			      let fixedImage = image.fixOrientation(),
-			      let jpegData = fixedImage.jpegData(compressionQuality: 0.9)
-			else {
-				throw DecartError.invalidInput("Failed to process image")
-			}
-			data = jpegData
-		}
 
 		return try FileInput.from(data: data, uniformType: mediaType)
 	}

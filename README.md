@@ -1,8 +1,8 @@
 # Decart iOS SDK
 
 <p align="center">
-  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-5.9+-orange.svg" alt="Swift 5.9+"></a>
-  <a href="https://developer.apple.com/ios/"><img src="https://img.shields.io/badge/iOS-15.0+-blue.svg" alt="iOS 15.0+"></a>
+  <a href="https://swift.org"><img src="https://img.shields.io/badge/Swift-6.2.1-orange.svg" alt="Swift 6.2.1"></a>
+  <a href="https://developer.apple.com/ios/"><img src="https://img.shields.io/badge/iOS-17.0+-blue.svg" alt="iOS 17.0+"></a>
   <a href="https://github.com/decartai/decart-ios/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License: MIT"></a>
 </p>
 
@@ -13,7 +13,7 @@ Native Swift SDK for [Decart AI](https://decart.ai) - Real-time video processing
 Decart iOS SDK provides two primary APIs:
 
 - **RealtimeManager** - Real-time video processing with WebRTC streaming
-- **ProcessClient** - Batch image and video generation
+- **ProcessClient** - Batch image and video generation for file-based workflows
 
 Both APIs leverage modern Swift concurrency (async/await) with type-safe interfaces and comprehensive error handling.
 
@@ -107,28 +107,7 @@ await capture.stopCapture()
 await realtimeManager.disconnect()
 ```
 
-### 2. Text-to-Image Generation
-
-Generate images from text prompts:
-
-```swift
-import DecartSDK
-
-let config = DecartConfiguration(apiKey: "your-api-key")
-let client = DecartClient(decartConfiguration: config)
-
-let input = try TextToImageInput(prompt: "Retro robot in neon city")
-
-let processClient = try client.createProcessClient(
-    model: .lucy_pro_t2i,
-    input: input
-)
-
-let imageData = try await processClient.process()
-let image = UIImage(data: imageData)
-```
-
-### 3. Image-to-Image Generation
+### 2. Image-to-Image Generation
 
 Transform images with AI:
 
@@ -152,31 +131,7 @@ let resultData = try await processClient.process()
 let image = UIImage(data: resultData)
 ```
 
-### 4. Image-to-Video Generation
-
-Generate videos from reference images:
-
-```swift
-import DecartSDK
-
-let config = DecartConfiguration(apiKey: "your-api-key")
-let client = DecartClient(decartConfiguration: config)
-
-let imageData = try Data(contentsOf: referenceImageURL)
-let fileInput = try FileInput.image(data: imageData)
-
-let input = try ImageToVideoInput(prompt: "Make it dance", data: fileInput)
-
-let processClient = try client.createProcessClient(
-    model: .lucy_pro_i2v,
-    input: input
-)
-
-let videoData = try await processClient.process()
-try videoData.write(to: outputURL)
-```
-
-### 5. Video-to-Video Generation
+### 3. Video-to-Video Generation
 
 Transform videos with AI:
 
@@ -220,10 +175,7 @@ let client = DecartClient(decartConfiguration: config)
 func createRealtimeManager(options: RealtimeConfiguration) throws -> RealtimeManager
 
 // Create process clients
-func createProcessClient(model: ImageModel, input: TextToImageInput) throws -> ProcessClient
 func createProcessClient(model: ImageModel, input: ImageToImageInput) throws -> ProcessClient
-func createProcessClient(model: VideoModel, input: TextToVideoInput) throws -> ProcessClient
-func createProcessClient(model: VideoModel, input: ImageToVideoInput) throws -> ProcessClient
 func createProcessClient(model: VideoModel, input: VideoToVideoInput) throws -> ProcessClient
 ```
 
@@ -254,26 +206,16 @@ func process() async throws -> Data
 - `RealtimeModel.lucy_v2v_720p_rt`
 
 **Image Models:**
-- `ImageModel.lucy_pro_t2i` - Text to image
 - `ImageModel.lucy_pro_i2i` - Image to image
 
 **Video Models:**
-- `VideoModel.lucy_pro_t2v` - Text to video
-- `VideoModel.lucy_pro_i2v` - Image to video
 - `VideoModel.lucy_pro_v2v` - Video to video
-- `VideoModel.lucy_dev_i2v` - Image to video (dev)
-- `VideoModel.lucy_fast_v2v` - Fast video to video
 
 ### Input Types
 
 ```swift
-// Text-based inputs
-TextToImageInput(prompt: String, seed: Int?, resolution: ProResolution?)
-TextToVideoInput(prompt: String, seed: Int?, resolution: ProResolution?)
-
 // File-based inputs
 ImageToImageInput(prompt: String, data: FileInput, seed: Int?)
-ImageToVideoInput(prompt: String, data: FileInput, seed: Int?)
 VideoToVideoInput(prompt: String, data: FileInput, seed: Int?)
 
 // File input helpers
@@ -315,9 +257,9 @@ VideoConfig(
 
 ## Requirements
 
-- iOS 15.0+ / macOS 12.0+
-- Swift 5.9+
-- Xcode 15.0+
+- iOS 17.0+ / macOS 12.0+
+- Swift 6.2.1
+- Xcode with the Swift 6.2.1 toolchain
 
 ## Environment Variables
 
