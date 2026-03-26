@@ -46,7 +46,7 @@ final class ImageFetcher {
 		isProcessing = false
 	}
 
-	func fetchImage(model: ImageModel, inputType: ModelInputType, selectedItem: PhotosPickerItem?) {
+	func fetchImage(model: ImageModel, selectedItem: PhotosPickerItem) {
 		let currentPrompt = prompt
 		guard !currentPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
@@ -58,7 +58,6 @@ final class ImageFetcher {
 		generateImageTask = Task { [weak self] in
 			await self?.performFetchImage(
 				model: model,
-				inputType: inputType,
 				selectedItem: selectedItem,
 				prompt: currentPrompt
 			)
@@ -67,8 +66,7 @@ final class ImageFetcher {
 
 	private func performFetchImage(
 		model: ImageModel,
-		inputType: ModelInputType,
-		selectedItem: PhotosPickerItem?,
+		selectedItem: PhotosPickerItem,
 		prompt: String
 	) async {
 		defer {
@@ -76,45 +74,25 @@ final class ImageFetcher {
 		}
 
 		do {
-			let processClient: ProcessClient
+			guard !Task.isCancelled else { return }
 
-			switch inputType {
-			case .textToImage:
-				let input = try TextToImageInput(prompt: prompt)
-				processClient = try decartClient.createProcessClient(
-					model: model,
-					input: input,
-					session: Self.urlSession
-				)
-
-			case .imageToImage:
-				guard let selectedItem else {
-					throw DecartError.invalidInput("No image selected")
-				}
-
-				guard !Task.isCancelled else { return }
-
-				guard let rawData = try await selectedItem.loadTransferable(type: Data.self),
-				      let image = UIImage(data: rawData),
-				      let fixedImage = image.fixOrientation(),
-				      let imageData = fixedImage.jpegData(compressionQuality: 0.9)
-				else {
-					throw DecartError.invalidInput("Failed to load image data")
-				}
-
-				guard !Task.isCancelled else { return }
-
-				let fileInput = try FileInput.image(data: imageData)
-				let input = try ImageToImageInput(prompt: prompt, data: fileInput)
-				processClient = try decartClient.createProcessClient(
-					model: model,
-					input: input,
-					session: Self.urlSession
-				)
-
-			default:
-				throw DecartError.invalidInput("Unsupported input type")
+			guard let rawData = try await selectedItem.loadTransferable(type: Data.self),
+			      let image = UIImage(data: rawData),
+			      let fixedImage = image.fixOrientation(),
+			      let imageData = fixedImage.jpegData(compressionQuality: 0.9)
+			else {
+				throw DecartError.invalidInput("Failed to load image data")
 			}
+
+			guard !Task.isCancelled else { return }
+
+			let fileInput = try FileInput.image(data: imageData)
+			let input = try ImageToImageInput(prompt: prompt, data: fileInput)
+			let processClient = try decartClient.createProcessClient(
+				model: model,
+				input: input,
+				session: Self.urlSession
+			)
 
 			guard !Task.isCancelled else { return }
 

@@ -23,29 +23,10 @@ struct GenerateVideoView: View {
 		videoFetcher.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
-	private var inputType: ModelInputType {
-		ModelsInputFactory.videoInputType(for: model)
-	}
-
-	private var requiresAttachment: Bool {
-		inputType == .imageToVideo || inputType == .videoToVideo
-	}
-
 	private var canSend: Bool {
 		let hasPrompt = !trimmedPrompt.isEmpty
-		let hasAttachment = !requiresAttachment || selectedItem != nil
+		let hasAttachment = selectedItem != nil
 		return hasPrompt && hasAttachment && !videoFetcher.isProcessing
-	}
-
-	private var pickerFilter: PHPickerFilter {
-		switch inputType {
-		case .imageToVideo:
-			return .images
-		case .videoToVideo:
-			return .videos
-		default:
-			return .any(of: [.images, .videos])
-		}
 	}
 
 	var body: some View {
@@ -97,11 +78,7 @@ struct GenerateVideoView: View {
 				ContentUnavailableView(
 					"Ready to animate",
 					systemImage: "video.badge.plus",
-					description: Text(
-						requiresAttachment
-							? "Describe your clip and attach a reference media."
-							: "Describe the motion you'd like."
-					)
+					description: Text("Describe your clip and attach a reference video.")
 				)
 				.padding(.vertical, 14)
 			}
@@ -127,10 +104,8 @@ struct GenerateVideoView: View {
 				.focused($promptFocused)
 
 			HStack(spacing: 12) {
-				if requiresAttachment {
-					PhotosPicker(selection: $selectedItem, matching: pickerFilter) {
-						Label("Attach", systemImage: "paperclip")
-					}
+				PhotosPicker(selection: $selectedItem, matching: .videos) {
+					Label("Attach", systemImage: "paperclip")
 				}
 
 				Spacer()
@@ -214,15 +189,11 @@ struct GenerateVideoView: View {
 
 	private func generate() {
 		guard !trimmedPrompt.isEmpty else { return }
-
-		if requiresAttachment, selectedItem == nil {
-			return
-		}
+		guard selectedItem != nil else { return }
 
 		dismissKeyboard()
 		videoFetcher.fetchVideo(
 			model: model,
-			inputType: inputType,
 			selectedItem: selectedItem
 		)
 	}
@@ -243,6 +214,6 @@ struct GenerateVideoView: View {
 
 #Preview {
 	NavigationView {
-		GenerateVideoView(model: .lucy_pro_t2v)
+		GenerateVideoView(model: .lucy_pro_v2v)
 	}
 }
