@@ -72,6 +72,7 @@ public struct VideoEditInput: Codable, Sendable {
 		enhancePrompt: Bool? = nil
 	) throws {
 		let trimmed = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
+		guard !trimmed.isEmpty else { throw InputValidationError.emptyPrompt }
 		guard data.mediaType == .video else { throw InputValidationError.expectedVideo }
 		if let ref = referenceImage {
 			guard ref.mediaType == .image else { throw InputValidationError.expectedImage }
