@@ -13,23 +13,6 @@ public struct QueueClient: Sendable {
 
 	// MARK: - Submit
 
-	public func submit(model: VideoModel, input: TextToVideoInput) async throws -> JobSubmitResponse {
-		try await submitRequest(model: model, expectedType: .textToVideo, params: [
-			"prompt": input.prompt,
-			"seed": input.seed,
-			"resolution": input.resolution?.rawValue,
-			"orientation": input.orientation,
-		], files: [])
-	}
-
-	public func submit(model: VideoModel, input: ImageToVideoInput) async throws -> JobSubmitResponse {
-		try await submitRequest(model: model, expectedType: .imageToVideo, params: [
-			"prompt": input.prompt,
-			"seed": input.seed,
-			"resolution": input.resolution?.rawValue,
-		], files: [("data", input.data)])
-	}
-
 	public func submit(model: VideoModel, input: VideoToVideoInput) async throws -> JobSubmitResponse {
 		try await submitRequest(model: model, expectedType: .videoToVideo, params: [
 			"prompt": input.prompt,
@@ -91,24 +74,6 @@ public struct QueueClient: Sendable {
 	}
 
 	// MARK: - Convenience
-
-	public func submitAndPoll(
-		model: VideoModel,
-		input: TextToVideoInput,
-		onStatusChange: ((JobStatusResponse) -> Void)? = nil
-	) async throws -> QueueJobResult {
-		let response = try await submit(model: model, input: input)
-		return try await poll(jobId: response.jobId, initialStatus: response.status, onStatusChange: onStatusChange)
-	}
-
-	public func submitAndPoll(
-		model: VideoModel,
-		input: ImageToVideoInput,
-		onStatusChange: ((JobStatusResponse) -> Void)? = nil
-	) async throws -> QueueJobResult {
-		let response = try await submit(model: model, input: input)
-		return try await poll(jobId: response.jobId, initialStatus: response.status, onStatusChange: onStatusChange)
-	}
 
 	public func submitAndPoll(
 		model: VideoModel,
@@ -192,7 +157,7 @@ private extension QueueClient {
 			break
 		}
 
-		try await Task.sleep(for: .milliseconds(500))
+		try await Task.sleep(nanoseconds: 500_000_000)
 
 		while true {
 			let statusResponse = try await status(jobId: jobId)
@@ -200,7 +165,7 @@ private extension QueueClient {
 
 			switch statusResponse.status {
 			case .pending, .processing:
-				try await Task.sleep(for: .milliseconds(1500))
+				try await Task.sleep(nanoseconds: 1_500_000_000)
 			case .completed:
 				let data = try await result(jobId: jobId)
 				return .completed(jobId: jobId, data: data)
