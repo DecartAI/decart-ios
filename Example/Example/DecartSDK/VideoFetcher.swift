@@ -48,9 +48,8 @@ final class VideoFetcher {
 		videoPlayer?.pause()
 	}
 
-	func fetchVideo(model: VideoModel, selectedItem: PhotosPickerItem?) {
+	func fetchVideo(model: VideoModel, inputType: ModelInputType, selectedItem: PhotosPickerItem?) {
 		let trimmedPrompt = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-		guard !trimmedPrompt.isEmpty else { return }
 
 		generateVideoTask?.cancel()
 		isProcessing = true
@@ -65,6 +64,7 @@ final class VideoFetcher {
 			await self?.generateVideo(
 				trimmedPrompt: trimmedPrompt,
 				model: model,
+				inputType: inputType,
 				selectedItem: selectedItem
 			)
 		}
@@ -73,6 +73,7 @@ final class VideoFetcher {
 	private func generateVideo(
 		trimmedPrompt: String,
 		model: VideoModel,
+		inputType: ModelInputType,
 		selectedItem: PhotosPickerItem?
 	) async {
 		defer {
@@ -83,6 +84,7 @@ final class VideoFetcher {
 			let result = try await submitVideoJob(
 				prompt: trimmedPrompt,
 				model: model,
+				inputType: inputType,
 				selectedItem: selectedItem
 			)
 			guard !Task.isCancelled else { return }
@@ -111,11 +113,33 @@ final class VideoFetcher {
 	private func submitVideoJob(
 		prompt: String,
 		model: VideoModel,
+		inputType: ModelInputType,
 		selectedItem: PhotosPickerItem?
 	) async throws -> QueueJobResult {
-		let fileInput = try await loadFileInput(from: selectedItem)
-		let input = try VideoToVideoInput(prompt: prompt, data: fileInput)
-		return try await decartClient.queue.submitAndPoll(model: model, input: input)
+		let queue = decartClient.queue
+
+		switch inputType {
+		case .videoToVideo:
+			let fileInput = try await loadFileInput(from: selectedItem)
+			let input = try VideoToVideoInput(prompt: prompt, data: fileInput)
+			return try await queue.submitAndPoll(model: model, input: input)
+
+		case .videoEdit:
+			let fileInput = try await loadFileInput(from: selectedItem)
+			let input = try VideoEditInput(prompt: prompt, data: fileInput)
+			return try await queue.submitAndPoll(model: model, input: input)
+
+		case .videoRestyle:
+			let fileInput = try await loadFileInput(from: selectedItem)
+			let input = try VideoRestyleInput(prompt: prompt, data: fileInput)
+			return try await queue.submitAndPoll(model: model, input: input)
+
+		case .motionVideo:
+			throw DecartError.invalidInput("Motion video requires a trajectory UI which is not yet implemented in this example app")
+
+		case .imageToImage:
+			throw DecartError.invalidInput("Image models are not supported in video generation")
+		}
 	}
 
 	private func loadFileInput(from item: PhotosPickerItem?) async throws -> FileInput {
@@ -128,7 +152,7 @@ final class VideoFetcher {
 		}
 
 		let mediaType = item.supportedContentTypes.first(where: {
-			$0.conforms(to: .movie) || $0.conforms(to: .video)
+			$0.conforms(to: .movie) || $0.conforms(to: .video) || $0.conforms(to: .image)
 		})
 
 		return try FileInput.from(data: data, uniformType: mediaType)
