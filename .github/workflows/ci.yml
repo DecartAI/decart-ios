@@ -19,7 +19,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_26.1.app
+        run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
       - name: Build Hygiene (Reset Package State)
         run: |
@@ -40,7 +40,7 @@ jobs:
           download-platform: true
           
           # 3. FIX: Path issue. This moves the context into the subfolder
-          xcode: /Applications/Xcode_26.1.app
+          xcode: /Applications/Xcode_26.1.1.app
           # 6. Prettify the logs (optional but recommended)
           use-xcbeautify: true
           xcbeautify-renderer: github-actions
