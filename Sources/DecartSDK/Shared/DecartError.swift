@@ -12,6 +12,7 @@ public enum DecartError: LocalizedError {
 	case websocketError(String)
 	case networkError(Error)
 	case serverError(String)
+	case queueError(String)
 
 	public var errorDescription: String? {
 		switch self {
@@ -40,6 +41,8 @@ public enum DecartError: LocalizedError {
 			return "Network error: \(error.localizedDescription)"
 		case .serverError(let message):
 			return "Server error: \(message)"
+		case .queueError(let message):
+			return "Queue error: \(message)"
 		}
 	}
 
@@ -67,6 +70,8 @@ public enum DecartError: LocalizedError {
 			return "NETWORK_ERROR"
 		case .serverError:
 			return "SERVER_ERROR"
+		case .queueError:
+			return "QUEUE_ERROR"
 		}
 	}
 }

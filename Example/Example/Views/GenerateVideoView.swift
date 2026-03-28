@@ -23,7 +23,16 @@ struct GenerateVideoView: View {
 		videoFetcher.prompt.trimmingCharacters(in: .whitespacesAndNewlines)
 	}
 
+	private var inputType: ModelInputType {
+		ModelsInputFactory.videoInputType(for: model)
+	}
+
+	private var isMotionVideo: Bool {
+		inputType == .motionVideo
+	}
+
 	private var canSend: Bool {
+		guard !isMotionVideo else { return false }
 		let hasPrompt = !trimmedPrompt.isEmpty
 		let hasAttachment = selectedItem != nil
 		return hasPrompt && hasAttachment && !videoFetcher.isProcessing
@@ -78,7 +87,11 @@ struct GenerateVideoView: View {
 				ContentUnavailableView(
 					"Ready to animate",
 					systemImage: "video.badge.plus",
-					description: Text("Describe your clip and attach a reference video.")
+					description: Text(
+						isMotionVideo
+							? "Motion video requires a trajectory UI (not yet available)."
+							: "Describe your clip and attach a reference video."
+					)
 				)
 				.padding(.vertical, 14)
 			}
@@ -188,12 +201,14 @@ struct GenerateVideoView: View {
 	}
 
 	private func generate() {
+		guard !isMotionVideo else { return }
 		guard !trimmedPrompt.isEmpty else { return }
 		guard selectedItem != nil else { return }
 
 		dismissKeyboard()
 		videoFetcher.fetchVideo(
 			model: model,
+			inputType: inputType,
 			selectedItem: selectedItem
 		)
 	}

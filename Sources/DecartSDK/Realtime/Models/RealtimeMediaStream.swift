@@ -14,12 +14,12 @@ public struct RealtimeMediaStream: Sendable {
 		}
 	}
 
-	public let videoTrack: RTCVideoTrack
+	public let videoTrack: RTCVideoTrack?
 	public let audioTrack: RTCAudioTrack?
 	public let id: String
 
 	public init(
-		videoTrack: RTCVideoTrack,
+		videoTrack: RTCVideoTrack? = nil,
 		audioTrack: RTCAudioTrack? = nil,
 		id: StreamId
 	) {
