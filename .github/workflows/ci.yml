@@ -27,20 +27,9 @@ jobs:
           swift build -c debug
 
       - name: Build iOS App
-        uses: brightdigit/swift-build@v1.4.2
-        with:
-          build-only: true
-          # 1. Provide the scheme name
-          scheme: DecartSDK
-          
-          # 2. Specify 'ios' to trigger xcodebuild (instead of 'swift build')
-          type: ios
-          deviceName: ${{ env.IOS_DEVICE_NAME }}
-          osVersion: ${{ env.IOS_OS_VERSION }}
-          download-platform: true
-          
-          # 3. FIX: Path issue. This moves the context into the subfolder
-          xcode: /Applications/Xcode_26.1.1.app
-          # 6. Prettify the logs (optional but recommended)
-          use-xcbeautify: true
-          xcbeautify-renderer: github-actions
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -scheme DecartSDK \
+            -destination "platform=iOS Simulator,name=$IOS_DEVICE_NAME,OS=$IOS_OS_VERSION" \
+            2>&1 | xcbeautify --renderer github-actions
