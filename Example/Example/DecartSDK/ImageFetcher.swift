@@ -46,7 +46,7 @@ final class ImageFetcher {
 		isProcessing = false
 	}
 
-	func fetchImage(model: ImageModel, selectedItem: PhotosPickerItem) {
+	func fetchImage(model: ImageModel, selectedItem: PhotosPickerItem, referenceSelectedItem: PhotosPickerItem? = nil) {
 		let currentPrompt = prompt
 		guard !currentPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
 
@@ -59,6 +59,7 @@ final class ImageFetcher {
 			await self?.performFetchImage(
 				model: model,
 				selectedItem: selectedItem,
+				referenceSelectedItem: referenceSelectedItem,
 				prompt: currentPrompt
 			)
 		}
@@ -67,6 +68,7 @@ final class ImageFetcher {
 	private func performFetchImage(
 		model: ImageModel,
 		selectedItem: PhotosPickerItem,
+		referenceSelectedItem: PhotosPickerItem?,
 		prompt: String
 	) async {
 		defer {
@@ -86,8 +88,22 @@ final class ImageFetcher {
 
 			guard !Task.isCancelled else { return }
 
+			var referenceFileInput: FileInput?
+			if let refItem = referenceSelectedItem {
+				guard let refRawData = try await refItem.loadTransferable(type: Data.self),
+				      let refImage = UIImage(data: refRawData),
+				      let refFixed = refImage.fixOrientation(),
+				      let refData = refFixed.jpegData(compressionQuality: 0.9)
+				else {
+					throw DecartError.invalidInput("Failed to load reference image data")
+				}
+				referenceFileInput = try FileInput.image(data: refData)
+			}
+
+			guard !Task.isCancelled else { return }
+
 			let fileInput = try FileInput.image(data: imageData)
-			let input = try ImageToImageInput(prompt: prompt, data: fileInput)
+			let input = try ImageToImageInput(prompt: prompt, data: fileInput, referenceImage: referenceFileInput)
 			let processClient = try decartClient.createProcessClient(
 				model: model,
 				input: input,
