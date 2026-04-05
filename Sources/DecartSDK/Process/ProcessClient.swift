@@ -18,6 +18,8 @@ public struct ProcessClient: Sendable {
 				"Model \(model.rawValue) does not support ImageToImageInput")
 		}
 		let modelDef = Models.image(model)
+		var files: [(String, FileInput)] = [("data", input.data)]
+		if let ref = input.referenceImage { files.append(("reference_image", ref)) }
 		try self.init(
 			configuration: configuration,
 			endpoint: modelDef.urlPath,
@@ -27,7 +29,7 @@ public struct ProcessClient: Sendable {
 				"resolution": input.resolution?.rawValue,
 				"enhance_prompt": input.enhancePrompt,
 			],
-			file: input.data,
+			files: files,
 			session: session)
 	}
 
@@ -37,7 +39,7 @@ public struct ProcessClient: Sendable {
 		configuration: DecartConfiguration,
 		endpoint: String,
 		params: [String: Any?],
-		file: FileInput? = nil,
+		files: [(String, FileInput)],
 		session: URLSession
 	) throws {
 		self.session = session
@@ -61,21 +63,14 @@ public struct ProcessClient: Sendable {
 			body.append("\(value)\r\n".data(using: .utf8)!)
 		}
 
-		// Add file if present (always under the key "data")
-		if let fileInput = file {
+		// Add files
+		for (fieldName, fileInput) in files {
 			body.append("--\(boundary)\r\n".data(using: .utf8)!)
-
-			// Default filename and mime type logic
 			let filename = fileInput.filename.isEmpty ? "file" : fileInput.filename
-			// We could infer mime type from filename extension, defaulting to application/octet-stream
-			let mimeType = "application/octet-stream"
-
-			// The key for the file input is strictly "data" based on the single file constraint
 			body.append(
-				"Content-Disposition: form-data; name=\"data\"; filename=\"\(filename)\"\r\n".data(
+				"Content-Disposition: form-data; name=\"\(fieldName)\"; filename=\"\(filename)\"\r\n".data(
 					using: .utf8)!)
-			body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
-
+			body.append("Content-Type: application/octet-stream\r\n\r\n".data(using: .utf8)!)
 			body.append(fileInput.data)
 			body.append("\r\n".data(using: .utf8)!)
 		}

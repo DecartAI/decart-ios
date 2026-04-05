@@ -16,13 +16,16 @@ struct GenerateImageView: View {
 	@State private var imageFetcher = ImageFetcher()
 	@State private var selectedItem: PhotosPickerItem?
 	@State private var selectedImagePreview: UIImage?
+	@State private var referenceItem: PhotosPickerItem?
+	@State private var referenceImagePreview: UIImage?
 	@State private var previewLoadTask: Task<Void, Never>?
+	@State private var referencePreviewLoadTask: Task<Void, Never>?
 	@FocusState private var promptFocused: Bool
 
 	private var canSend: Bool {
 		let hasPrompt = !imageFetcher.prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-		let hasReference = selectedItem != nil
-		return hasPrompt && hasReference && !imageFetcher.isProcessing
+		let hasInput = selectedItem != nil
+		return hasPrompt && hasInput && !imageFetcher.isProcessing
 	}
 
 	var body: some View {
@@ -46,10 +49,14 @@ struct GenerateImageView: View {
 		.onDisappear {
 			previewLoadTask?.cancel()
 			previewLoadTask = nil
+			referencePreviewLoadTask?.cancel()
+			referencePreviewLoadTask = nil
 			imageFetcher.cancelGeneration()
 			imageFetcher.reset()
 			selectedItem = nil
 			selectedImagePreview = nil
+			referenceItem = nil
+			referenceImagePreview = nil
 		}
 		.navigationTitle(model.rawValue)
 		.navigationBarTitleDisplayMode(.inline)
@@ -75,7 +82,7 @@ struct GenerateImageView: View {
 				ContentUnavailableView(
 					"Ready to generate",
 					systemImage: "photo.badge.plus",
-					description: Text("Enter a prompt and pick a reference image.")
+					description: Text("Enter a prompt and pick an input image.")
 				)
 				.padding(.vertical, 24)
 			}
@@ -91,21 +98,14 @@ struct GenerateImageView: View {
 	private var inputSection: some View {
 		VStack(spacing: 12) {
 			if let preview = selectedImagePreview {
-				HStack {
-					Image(uiImage: preview)
-						.resizable()
-						.scaledToFill()
-						.frame(width: 64, height: 64)
-						.clipShape(RoundedRectangle(cornerRadius: 8))
-					Text("Reference attached")
-						.font(.subheadline)
-					Spacer()
-					Button {
-						clearAttachment()
-					} label: {
-						Image(systemName: "xmark.circle.fill")
-							.foregroundStyle(.secondary)
-					}
+				attachmentRow(label: "Input image", preview: preview) {
+					clearInputAttachment()
+				}
+			}
+
+			if let preview = referenceImagePreview {
+				attachmentRow(label: "Reference image", preview: preview) {
+					clearReferenceAttachment()
 				}
 			}
 
@@ -117,7 +117,11 @@ struct GenerateImageView: View {
 
 			HStack(spacing: 12) {
 				PhotosPicker(selection: $selectedItem, matching: .images) {
-					Label("Reference", systemImage: "photo")
+					Label("Input", systemImage: "photo")
+				}
+
+				PhotosPicker(selection: $referenceItem, matching: .images) {
+					Label("Reference", systemImage: "photo.on.rectangle")
 				}
 
 				Spacer()
@@ -131,7 +135,8 @@ struct GenerateImageView: View {
 				}
 				.disabled(!canSend)
 			}
-		}.onChange(of: selectedItem) {
+		}
+		.onChange(of: selectedItem) {
 			previewLoadTask?.cancel()
 			guard let selectedItem else {
 				selectedImagePreview = nil
@@ -139,13 +144,43 @@ struct GenerateImageView: View {
 			}
 			previewLoadTask = Task {
 				guard !Task.isCancelled else { return }
-				let imagePreview = try? await selectedItem.loadTransferable(
-					type: Data.self
-				)
+				let imagePreview = try? await selectedItem.loadTransferable(type: Data.self)
 				guard !Task.isCancelled else { return }
 				if let uiImage = UIImage(data: imagePreview ?? Data()) {
 					selectedImagePreview = uiImage
 				}
+			}
+		}
+		.onChange(of: referenceItem) {
+			referencePreviewLoadTask?.cancel()
+			guard let referenceItem else {
+				referenceImagePreview = nil
+				return
+			}
+			referencePreviewLoadTask = Task {
+				guard !Task.isCancelled else { return }
+				let imagePreview = try? await referenceItem.loadTransferable(type: Data.self)
+				guard !Task.isCancelled else { return }
+				if let uiImage = UIImage(data: imagePreview ?? Data()) {
+					referenceImagePreview = uiImage
+				}
+			}
+		}
+	}
+
+	private func attachmentRow(label: String, preview: UIImage, onClear: @escaping () -> Void) -> some View {
+		HStack {
+			Image(uiImage: preview)
+				.resizable()
+				.scaledToFill()
+				.frame(width: 64, height: 64)
+				.clipShape(RoundedRectangle(cornerRadius: 8))
+			Text(label)
+				.font(.subheadline)
+			Spacer()
+			Button(action: onClear) {
+				Image(systemName: "xmark.circle.fill")
+					.foregroundStyle(.secondary)
 			}
 		}
 	}
@@ -155,14 +190,21 @@ struct GenerateImageView: View {
 		guard let selectedItem else { return }
 		imageFetcher.fetchImage(
 			model: model,
-			selectedItem: selectedItem
+			selectedItem: selectedItem,
+			referenceSelectedItem: referenceItem
 		)
 	}
 
-	private func clearAttachment() {
+	private func clearInputAttachment() {
 		selectedItem = nil
 		selectedImagePreview = nil
 		imageFetcher.reset()
+		dismissKeyboard()
+	}
+
+	private func clearReferenceAttachment() {
+		referenceItem = nil
+		referenceImagePreview = nil
 		dismissKeyboard()
 	}
 
