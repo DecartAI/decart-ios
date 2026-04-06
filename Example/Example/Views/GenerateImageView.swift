@@ -217,6 +217,6 @@ struct GenerateImageView: View {
 
 #Preview {
 	NavigationView {
-		GenerateImageView(model: .lucy_pro_i2i)
+		GenerateImageView(model: .lucyImage2)
 	}
 }

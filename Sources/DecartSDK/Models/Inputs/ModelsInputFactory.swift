@@ -10,21 +10,20 @@ public enum ModelInputType: Sendable {
 public enum ModelsInputFactory: Sendable {
 	public static func videoInputType(for model: VideoModel) -> ModelInputType {
 		switch model {
-		case .lucy_pro_v2v:
+		case .lucyClip, .lucy_pro_v2v:
 			return .videoToVideo
-		case .lucy_2_v2v:
+		case .lucy2, .lucy2_1, .lucy_2_v2v:
 			return .videoEdit
-		case .lucy_restyle_v2v:
+		case .lucyRestyle2, .lucy_restyle_v2v:
 			return .videoRestyle
-		case .lucy_motion:
+		case .lucyMotion:
 			return .motionVideo
-
 		}
 	}
 
 	public static func imageInputType(for model: ImageModel) -> ModelInputType {
 		switch model {
-		case .lucy_pro_i2i:
+		case .lucyImage2, .lucy_pro_i2i:
 			return .imageToImage
 		}
 	}
