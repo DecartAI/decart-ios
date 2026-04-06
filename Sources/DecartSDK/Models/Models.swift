@@ -2,12 +2,18 @@ import Foundation
 import os.log
 
 private let logger = Logger(subsystem: "ai.decart.sdk", category: "Models")
+private let warnedAliasesLock = NSLock()
 private nonisolated(unsafe) var warnedAliases: Set<String> = []
 
 private func warnDeprecated(_ oldName: String, canonical: String) {
-	guard !warnedAliases.contains(oldName) else { return }
-	warnedAliases.insert(oldName)
-	logger.warning("[Decart SDK] Model \"\(oldName)\" is deprecated. Use \"\(canonical)\" instead. See https://docs.platform.decart.ai/models for details.")
+	let shouldWarn: Bool = warnedAliasesLock.withLock {
+		guard !warnedAliases.contains(oldName) else { return false }
+		warnedAliases.insert(oldName)
+		return true
+	}
+	if shouldWarn {
+		logger.warning("[Decart SDK] Model \"\(oldName)\" is deprecated. Use \"\(canonical)\" instead. See https://docs.platform.decart.ai/models for details.")
+	}
 }
 
 public enum VideoCodec: String {
