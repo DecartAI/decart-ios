@@ -19,11 +19,11 @@ enum DecartConfig: Sendable {
 
 	static func presets(for model: RealtimeModel) -> [PromptPreset] {
 		switch model {
-		case .lucyRestyle, .lucyRestyle2:
+		case .lucyRestyle, .lucyRestyle2, .lucyRestyleLatest:
 			return miragePresets
 		case .lucy:
 			return lucyEditPresets
-		case .lucy2, .lucy2_1, .lucy2_1_vton:
+		case .lucy2, .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest:
 			return lucyEditPresets
 		}
 	}
