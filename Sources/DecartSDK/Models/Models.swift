@@ -71,8 +71,10 @@ public enum VideoModel: String, CaseIterable {
 	case lucy2_1 = "lucy-2.1"
 	case lucyRestyle2 = "lucy-restyle-2"
 	case lucyMotion = "lucy-motion"
+	case lucy2_1_vton = "lucy-2.1-vton"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
+	case lucyVtonLatest = "lucy-vton-latest"
 	case lucyRestyleLatest = "lucy-restyle-latest"
 	case lucyClipLatest = "lucy-clip-latest"
 	case lucyMotionLatest = "lucy-motion-latest"
@@ -86,7 +88,7 @@ public enum VideoModel: String, CaseIterable {
 	case lucy_restyle_v2v = "lucy-restyle-v2v"
 
 	public static var allCases: [VideoModel] {
-		[.lucyClip, .lucy2, .lucy2_1, .lucyRestyle2, .lucyMotion, .lucyLatest, .lucyRestyleLatest, .lucyClipLatest, .lucyMotionLatest]
+		[.lucyClip, .lucy2, .lucy2_1, .lucyRestyle2, .lucyMotion, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest, .lucyMotionLatest]
 	}
 }
 
@@ -238,6 +240,15 @@ public enum Models {
 				width: 1088,
 				height: 624
 			)
+		case .lucy2_1_vton:
+			return ModelDefinition(
+				name: "lucy-2.1-vton",
+				urlPath: "/v1/generate/lucy-2.1-vton",
+				jobsUrlPath: "/v1/jobs/lucy-2.1-vton",
+				fps: 20,
+				width: 1088,
+				height: 624
+			)
 		case .lucyRestyle2:
 			return ModelDefinition(
 				name: "lucy-restyle-2",
@@ -261,6 +272,15 @@ public enum Models {
 				name: "lucy-latest",
 				urlPath: "/v1/generate/lucy-latest",
 				jobsUrlPath: "/v1/jobs/lucy-latest",
+				fps: 20,
+				width: 1088,
+				height: 624
+			)
+		case .lucyVtonLatest:
+			return ModelDefinition(
+				name: "lucy-vton-latest",
+				urlPath: "/v1/generate/lucy-vton-latest",
+				jobsUrlPath: "/v1/jobs/lucy-vton-latest",
 				fps: 20,
 				width: 1088,
 				height: 624
