@@ -12,7 +12,7 @@ public enum ModelsInputFactory: Sendable {
 		switch model {
 		case .lucyClip, .lucyClipLatest, .lucy_pro_v2v:
 			return .videoToVideo
-		case .lucy2, .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest, .lucy_2_v2v:
+		case .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest:
 			return .videoEdit
 		case .lucyRestyle2, .lucyRestyleLatest, .lucy_restyle_v2v:
 			return .videoRestyle

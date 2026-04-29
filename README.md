@@ -183,7 +183,7 @@ let status = try await client.queue.status(jobId: "some-job-id")
 let data = try await client.queue.result(jobId: "some-job-id")
 ```
 
-### 5. Video Edit (lucy-2-v2v)
+### 5. Video Edit (lucy-2.1)
 
 Edit a video with a prompt and optional reference image:
 
@@ -192,7 +192,7 @@ let videoData = try Data(contentsOf: videoURL)
 let videoFile = try FileInput.video(data: videoData)
 
 let input = try VideoEditInput(prompt: "Add snow", data: videoFile)
-let result = try await client.queue.submitAndPoll(model: .lucy_2_v2v, input: input)
+let result = try await client.queue.submitAndPoll(model: .lucy2_1, input: input)
 ```
 
 ### 6. Video Restyle (lucy-restyle-v2v)
@@ -300,19 +300,21 @@ func process() async throws -> Data
 ### Available Models
 
 **Realtime Models:**
-- `RealtimeModel.mirage`
-- `RealtimeModel.mirage_v2`
-- `RealtimeModel.lucy_v2v_720p_rt`
-- `RealtimeModel.lucy_2_rt` - V2V with reference image support
+- `RealtimeModel.lucy`
+- `RealtimeModel.lucy2_1` - Realtime video editing with reference image support
+- `RealtimeModel.lucy2_1_vton` - Virtual try-on
+- `RealtimeModel.lucyRestyle`
+- `RealtimeModel.lucyRestyle2`
 
 **Image Models:**
-- `ImageModel.lucy_pro_i2i` - Image to image
+- `ImageModel.lucyImage2` - Image to image
 
 **Video Models:**
-- `VideoModel.lucy_pro_v2v` - Video to video
-- `VideoModel.lucy_2_v2v` - Video edit with optional reference image
-- `VideoModel.lucy_restyle_v2v` - Video restyle (prompt or reference image)
-- `VideoModel.lucy_motion` - Motion video from image + trajectory
+- `VideoModel.lucyClip` - Video to video
+- `VideoModel.lucy2_1` - Video edit with optional reference image
+- `VideoModel.lucy2_1_vton` - Virtual try-on video edit
+- `VideoModel.lucyRestyle2` - Video restyle (prompt or reference image)
+- `VideoModel.lucyMotion` - Motion video from image + trajectory
 
 ### Input Types
 
