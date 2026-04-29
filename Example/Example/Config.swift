@@ -23,7 +23,7 @@ enum DecartConfig: Sendable {
 			return miragePresets
 		case .lucy:
 			return lucyEditPresets
-		case .lucy2, .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest:
+		case .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest:
 			return lucyEditPresets
 		}
 	}
