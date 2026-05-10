@@ -60,7 +60,7 @@ import DecartSDK
 let config = DecartConfiguration(apiKey: "your-api-key")
 let client = DecartClient(decartConfiguration: config)
 
-let model: RealtimeModel = .mirage
+let model: RealtimeModel = .lucyRestyle2
 let modelConfig = Models.realtime(model)
 
 let realtimeManager = try client.createRealtimeManager(
@@ -214,24 +214,6 @@ let input = try VideoRestyleInput(data: videoFile, referenceImage: refImage)
 let result = try await client.queue.submitAndPoll(model: .lucy_restyle_v2v, input: input)
 ```
 
-### 7. Motion Video (lucy-motion)
-
-Generate a video from an image with trajectory-based motion control:
-
-```swift
-let imageData = try Data(contentsOf: imageURL)
-let imageFile = try FileInput.image(data: imageData)
-
-let trajectory = [
-    try TrajectoryPoint(frame: 0, x: 0.5, y: 0.5),
-    try TrajectoryPoint(frame: 30, x: 0.7, y: 0.3),
-    try TrajectoryPoint(frame: 60, x: 0.5, y: 0.5),
-]
-
-let input = try MotionVideoInput(data: imageFile, trajectory: trajectory)
-let result = try await client.queue.submitAndPoll(model: .lucy_motion, input: input)
-```
-
 ## API Reference
 
 ### DecartConfiguration
@@ -265,7 +247,6 @@ var queue: QueueClient { get }
 func submit(model: VideoModel, input: VideoToVideoInput) async throws -> JobSubmitResponse
 func submit(model: VideoModel, input: VideoEditInput) async throws -> JobSubmitResponse
 func submit(model: VideoModel, input: VideoRestyleInput) async throws -> JobSubmitResponse
-func submit(model: VideoModel, input: MotionVideoInput) async throws -> JobSubmitResponse
 
 // Poll / download
 func status(jobId: String) async throws -> JobStatusResponse
@@ -300,11 +281,9 @@ func process() async throws -> Data
 ### Available Models
 
 **Realtime Models:**
-- `RealtimeModel.lucy`
 - `RealtimeModel.lucy2_1` - Realtime video editing with reference image support
 - `RealtimeModel.lucy2_1_vton` - Virtual try-on
-- `RealtimeModel.lucyRestyle`
-- `RealtimeModel.lucyRestyle2`
+- `RealtimeModel.lucyRestyle2` - Realtime video restyling
 
 **Image Models:**
 - `ImageModel.lucyImage2` - Image to image
@@ -314,7 +293,6 @@ func process() async throws -> Data
 - `VideoModel.lucy2_1` - Video edit with optional reference image
 - `VideoModel.lucy2_1_vton` - Virtual try-on video edit
 - `VideoModel.lucyRestyle2` - Video restyle (prompt or reference image)
-- `VideoModel.lucyMotion` - Motion video from image + trajectory
 
 ### Input Types
 
@@ -324,10 +302,6 @@ ImageToImageInput(prompt: String, data: FileInput, seed: Int?)
 VideoToVideoInput(prompt: String, data: FileInput, seed: Int?)
 VideoEditInput(prompt: String, data: FileInput, referenceImage: FileInput?, seed: Int?)
 VideoRestyleInput(prompt: String?, data: FileInput, referenceImage: FileInput?, seed: Int?)
-MotionVideoInput(data: FileInput, trajectory: [TrajectoryPoint], seed: Int?)
-
-// Trajectory point for motion video (x/y normalized 0-1)
-TrajectoryPoint(frame: Int, x: Double, y: Double)
 
 // File input helpers
 FileInput.image(data: Data, filename: String)

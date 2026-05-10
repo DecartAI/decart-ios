@@ -23,9 +23,7 @@ public enum VideoCodec: String {
 
 public enum RealtimeModel: String, CaseIterable {
 	// Canonical names
-	case lucyRestyle = "lucy-restyle"
 	case lucyRestyle2 = "lucy-restyle-2"
-	case lucy = "lucy"
 	case lucy2_1 = "lucy-2.1"
 	case lucy2_1_vton = "lucy-2.1-vton"
 	// Latest aliases (server-side resolution)
@@ -34,15 +32,11 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucyRestyleLatest = "lucy-restyle-latest"
 
 	// Deprecated aliases
-	@available(*, deprecated, renamed: "lucyRestyle")
-	case mirage = "mirage"
 	@available(*, deprecated, renamed: "lucyRestyle2")
 	case mirage_v2 = "mirage_v2"
-	@available(*, deprecated, renamed: "lucy")
-	case lucy_v2v_720p_rt = "lucy_v2v_720p_rt"
 
 	public static var allCases: [RealtimeModel] {
-		[.lucyRestyle, .lucyRestyle2, .lucy, .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
+		[.lucyRestyle2, .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
 	}
 }
 
@@ -66,14 +60,12 @@ public enum VideoModel: String, CaseIterable {
 	case lucyClip = "lucy-clip"
 	case lucy2_1 = "lucy-2.1"
 	case lucyRestyle2 = "lucy-restyle-2"
-	case lucyMotion = "lucy-motion"
 	case lucy2_1_vton = "lucy-2.1-vton"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
 	case lucyVtonLatest = "lucy-vton-latest"
 	case lucyRestyleLatest = "lucy-restyle-latest"
 	case lucyClipLatest = "lucy-clip-latest"
-	case lucyMotionLatest = "lucy-motion-latest"
 
 	// Deprecated aliases
 	@available(*, deprecated, renamed: "lucyClip")
@@ -82,34 +74,18 @@ public enum VideoModel: String, CaseIterable {
 	case lucy_restyle_v2v = "lucy-restyle-v2v"
 
 	public static var allCases: [VideoModel] {
-		[.lucyClip, .lucy2_1, .lucyRestyle2, .lucyMotion, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest, .lucyMotionLatest]
+		[.lucyClip, .lucy2_1, .lucyRestyle2, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest]
 	}
 }
 
 public enum Models {
 	public static func realtime(_ model: RealtimeModel) -> ModelDefinition {
 		switch model {
-		case .lucyRestyle:
-			return ModelDefinition(
-				name: "lucy-restyle",
-				urlPath: "/v1/stream",
-				fps: 25,
-				width: 1280,
-				height: 704
-			)
 		case .lucyRestyle2:
 			return ModelDefinition(
 				name: "lucy-restyle-2",
 				urlPath: "/v1/stream",
 				fps: 22,
-				width: 1280,
-				height: 704
-			)
-		case .lucy:
-			return ModelDefinition(
-				name: "lucy",
-				urlPath: "/v1/stream",
-				fps: 25,
 				width: 1280,
 				height: 704
 			)
@@ -157,15 +133,9 @@ public enum Models {
 				width: 1280,
 				height: 704
 			)
-		case .mirage:
-			warnDeprecated("mirage", canonical: "lucy-restyle")
-			return realtime(.lucyRestyle)
 		case .mirage_v2:
 			warnDeprecated("mirage_v2", canonical: "lucy-restyle-2")
 			return realtime(.lucyRestyle2)
-		case .lucy_v2v_720p_rt:
-			warnDeprecated("lucy_v2v_720p_rt", canonical: "lucy")
-			return realtime(.lucy)
 		}
 	}
 
@@ -231,15 +201,6 @@ public enum Models {
 				width: 1280,
 				height: 704
 			)
-		case .lucyMotion:
-			return ModelDefinition(
-				name: "lucy-motion",
-				urlPath: "/v1/generate/lucy-motion",
-				jobsUrlPath: "/v1/jobs/lucy-motion",
-				fps: 25,
-				width: 1280,
-				height: 704
-			)
 		case .lucyLatest:
 			return ModelDefinition(
 				name: "lucy-latest",
@@ -272,15 +233,6 @@ public enum Models {
 				name: "lucy-clip-latest",
 				urlPath: "/v1/generate/lucy-clip-latest",
 				jobsUrlPath: "/v1/jobs/lucy-clip-latest",
-				fps: 25,
-				width: 1280,
-				height: 704
-			)
-		case .lucyMotionLatest:
-			return ModelDefinition(
-				name: "lucy-motion-latest",
-				urlPath: "/v1/generate/lucy-motion-latest",
-				jobsUrlPath: "/v1/jobs/lucy-motion-latest",
 				fps: 25,
 				width: 1280,
 				height: 704

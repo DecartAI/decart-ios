@@ -134,9 +134,6 @@ final class VideoFetcher {
 			let input = try VideoRestyleInput(prompt: prompt, data: fileInput)
 			return try await queue.submitAndPoll(model: model, input: input)
 
-		case .motionVideo:
-			throw DecartError.invalidInput("Motion video requires a trajectory UI which is not yet implemented in this example app")
-
 		case .imageToImage:
 			throw DecartError.invalidInput("Image models are not supported in video generation")
 		}

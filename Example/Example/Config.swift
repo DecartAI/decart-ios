@@ -19,16 +19,14 @@ enum DecartConfig: Sendable {
 
 	static func presets(for model: RealtimeModel) -> [PromptPreset] {
 		switch model {
-		case .lucyRestyle, .lucyRestyle2, .lucyRestyleLatest:
-			return miragePresets
-		case .lucy:
-			return lucyEditPresets
+		case .lucyRestyle2, .lucyRestyleLatest, .mirage_v2:
+			return restylePresets
 		case .lucy2_1, .lucy2_1_vton, .lucyLatest, .lucyVtonLatest:
 			return lucyEditPresets
 		}
 	}
 
-	private static let miragePresets: [PromptPreset] = [
+	private static let restylePresets: [PromptPreset] = [
 		PromptPreset(
 			label: "Pirates",
 			prompt: "Transform the image into Pirates of the Caribbean swashbuckling fantasy style while maintaining the same composition. Use weathered nautical browns and blues, supernatural green ghost effects and tropical Caribbean colors with golden treasure accents. Add water-damaged wooden ship textures, weathered pirate clothing with character-specific details and supernatural decay with ghostly material properties. Apply dramatic lantern and moonlight with supernatural transformation effects, reimagining the elements with historical pirate meets cursed treasure qualities while keeping the same overall arrangement."
