@@ -3,8 +3,6 @@ public enum ModelInputType: Sendable {
 	case videoToVideo
 	case videoEdit
 	case videoRestyle
-	case motionVideo
-
 }
 
 public enum ModelsInputFactory: Sendable {
@@ -16,8 +14,6 @@ public enum ModelsInputFactory: Sendable {
 			return .videoEdit
 		case .lucyRestyle2, .lucyRestyleLatest, .lucy_restyle_v2v:
 			return .videoRestyle
-		case .lucyMotion, .lucyMotionLatest:
-			return .motionVideo
 		}
 	}
 

@@ -45,18 +45,6 @@ public struct QueueClient: Sendable {
 		], files: files)
 	}
 
-	public func submit(model: VideoModel, input: MotionVideoInput) async throws -> JobSubmitResponse {
-		let trajectoryData = try JSONEncoder().encode(input.trajectory)
-		guard let trajectoryString = String(data: trajectoryData, encoding: .utf8) else {
-			throw DecartError.invalidInput("Unable to encode trajectory")
-		}
-		return try await submitRequest(model: model, expectedType: .motionVideo, params: [
-			"trajectory": trajectoryString,
-			"seed": input.seed,
-			"resolution": input.resolution?.rawValue,
-		], files: [("data", input.data)])
-	}
-
 	// MARK: - Status / Result
 
 	public func status(jobId: String) async throws -> JobStatusResponse {
@@ -96,15 +84,6 @@ public struct QueueClient: Sendable {
 	public func submitAndPoll(
 		model: VideoModel,
 		input: VideoRestyleInput,
-		onStatusChange: ((JobStatusResponse) -> Void)? = nil
-	) async throws -> QueueJobResult {
-		let response = try await submit(model: model, input: input)
-		return try await poll(jobId: response.jobId, initialStatus: response.status, onStatusChange: onStatusChange)
-	}
-
-	public func submitAndPoll(
-		model: VideoModel,
-		input: MotionVideoInput,
 		onStatusChange: ((JobStatusResponse) -> Void)? = nil
 	) async throws -> QueueJobResult {
 		let response = try await submit(model: model, input: input)
