@@ -11,7 +11,6 @@ import WebRTC
 
 protocol RealtimeManagerProtocol {
 	var currentPrompt: Prompt { get set }
-	var shouldMirror: Bool { get set }
 
 	var connectionState: DecartRealtimeConnectionState { get }
 

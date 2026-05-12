@@ -22,8 +22,6 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		}
 	}
 
-	var shouldMirror: Bool
-
 	private(set) var connectionState: DecartRealtimeConnectionState = .idle
 	private(set) var localMediaStream: RealtimeMediaStream?
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
@@ -49,10 +47,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	// MARK: - Init
 
-	init(model: RealtimeModel, currentPrompt: Prompt, isMirroringEnabled: Bool = true) {
+	init(model: RealtimeModel, currentPrompt: Prompt) {
 		self.model = model
 		self.currentPrompt = currentPrompt
-		self.shouldMirror = isMirroringEnabled
 	}
 
 	// MARK: - Public API
@@ -98,9 +95,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		#if !targetEnvironment(simulator)
 		guard let capture else { return }
 		do {
-			// Toggle between front and back camera
+			// Toggle between front and back camera; input-side mirroring
+			// follows position automatically via `MirrorMode.auto`.
 			try await capture.switchCamera()
-			shouldMirror = capture.position == .front
 		} catch {
 			DecartLogger.log("Failed to switch camera", level: .error)
 		}
@@ -141,8 +138,11 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		// Create a video source that camera frames will be written to
 		let videoSource = realtimeManager.createVideoSource()
 
-		// Initialize camera capture with model-specific settings (resolution, fps)
-		capture = RealtimeCapture(model: model, videoSource: videoSource)
+		// Initialize camera capture with model-specific settings (resolution, fps).
+		// `mirror: .auto` pre-flips frames from the front camera so the server
+		// receives them in display orientation — keeps any server-baked content
+		// (e.g. watermarks) readable when the output is rendered as-is.
+		capture = RealtimeCapture(model: model, videoSource: videoSource, mirror: .auto)
 		try await capture?.startCapture()
 
 		// Wrap the video source in a track for WebRTC transmission

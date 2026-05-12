@@ -109,6 +109,25 @@ await capture.stopCapture()
 await realtimeManager.disconnect()
 ```
 
+#### Front-camera mirroring
+
+Pre-flip the input video so the server receives it in display orientation. This keeps any pixel-baked content in the output (e.g. watermarks) readable when you render the result as-is — no UI-side flip required.
+
+```swift
+let capture = RealtimeCapture(
+    model: modelConfig,
+    videoSource: videoSource,
+    mirror: .auto // or .on to always mirror
+)
+```
+
+Options on `MirrorMode`:
+- `.off` (default) — never mirror.
+- `.auto` — mirror when the active camera is the front (`.front`) device.
+- `.on` — always mirror.
+
+When mirroring is enabled, render both the local preview and the remote stream with `RTCMLVideoViewWrapper(track:)` (the default, no `mirror:` argument) — the frames are already in display orientation.
+
 ### 2. Image-to-Image Generation
 
 Transform images with AI:
