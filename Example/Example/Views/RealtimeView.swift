@@ -52,9 +52,10 @@ private struct RealtimeContentView: View {
 	var body: some View {
 		ZStack {
 			if realtimeManager.remoteMediaStreams != nil {
+				// Input is pre-flipped by RealtimeCapture (mirror: .auto), so the
+				// server returns frames in display orientation — render as-is.
 				RTCMLVideoViewWrapper(
-					track: realtimeManager.remoteMediaStreams?.videoTrack,
-					mirror: realtimeManager.shouldMirror
+					track: realtimeManager.remoteMediaStreams?.videoTrack
 				)
 				.background(Color.black)
 				.edgesIgnoringSafeArea(.all)
@@ -79,10 +80,7 @@ private struct RealtimeContentView: View {
 				if realtimeManager.connectionState.isInSession,
 				   let localStream = realtimeManager.localMediaStream
 				{
-					DraggableRTCVideoView(
-						track: localStream.videoTrack,
-						mirror: realtimeManager.shouldMirror
-					)
+					DraggableRTCVideoView(track: localStream.videoTrack)
 				}
 
 				RealtimeControlsView(
