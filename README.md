@@ -39,7 +39,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/decartai/decart-ios.git", from: "0.0.4")
+    .package(url: "https://github.com/decartai/decart-ios.git", from: "0.6.0")
 ]
 ```
 
