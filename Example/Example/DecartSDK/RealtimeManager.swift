@@ -135,7 +135,7 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	#if !targetEnvironment(simulator)
 	private func startCapture(model: ModelDefinition) {
-		let dimensions = Dimensions(width: Int32(model.height), height: Int32(model.width))
+		let dimensions = Dimensions(width: Int32(model.width), height: Int32(model.height))
 		let captureOptions = CameraCaptureOptions(
 			position: .front,
 			dimensions: dimensions,
