@@ -7,6 +7,7 @@
 import Combine
 import DecartSDK
 import Factory
+import AVFoundation
 @preconcurrency import LiveKit
 import SwiftUI
 
