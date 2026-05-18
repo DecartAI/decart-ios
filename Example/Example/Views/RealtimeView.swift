@@ -1,7 +1,6 @@
 import DecartSDK
 import Factory
 import SwiftUI
-import WebRTC
 
 struct RealtimeView: View {
 	private let realtimeAiModel: RealtimeModel
@@ -29,7 +28,7 @@ struct RealtimeView: View {
 				let defaultPrompt = presets.first?.prompt ?? ""
 				realtimeManager = RealtimeManager(
 					model: realtimeAiModel,
-					currentPrompt: Prompt(text: defaultPrompt, enrich: false)
+					currentPrompt: DecartPrompt(text: defaultPrompt, enrich: false)
 				)
 				Task {
 					await realtimeManager?.connect()
@@ -52,8 +51,6 @@ private struct RealtimeContentView: View {
 	var body: some View {
 		ZStack {
 			if realtimeManager.remoteMediaStreams != nil {
-				// Input is pre-flipped by RealtimeCapture (mirror: .auto), so the
-				// server returns frames in display orientation — render as-is.
 				RTCMLVideoViewWrapper(
 					track: realtimeManager.remoteMediaStreams?.videoTrack
 				)
@@ -87,7 +84,7 @@ private struct RealtimeContentView: View {
 					presets: presets,
 					connectionState: realtimeManager.connectionState,
 					onPresetSelected: { preset in
-						realtimeManager.currentPrompt = Prompt(text: preset.prompt, enrich: false)
+						realtimeManager.currentPrompt = DecartPrompt(text: preset.prompt, enrich: false)
 					},
 					onSwitchCamera: { Task { await realtimeManager.switchCamera() } },
 					onConnectToggle: {

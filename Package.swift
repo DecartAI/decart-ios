@@ -14,7 +14,7 @@ let package = Package(
 		)
 	],
 	dependencies: [
-		.package(url: "https://github.com/stasel/WebRTC.git", from: "140.0.0"),
+		.package(url: "https://github.com/livekit/client-sdk-swift.git", from: "2.5.0"),
 		.package(
 			url: "https://github.com/shareup/websocket-apple.git",
 			from: "4.1.0"
@@ -24,10 +24,15 @@ let package = Package(
 		.target(
 			name: "DecartSDK",
 			dependencies: [
-				.product(name: "WebRTC", package: "WebRTC"),
+				.product(name: "LiveKit", package: "client-sdk-swift"),
 				.product(name: "WebSocket", package: "websocket-apple")
 			],
 			path: "Sources/DecartSDK"
+		),
+		.testTarget(
+			name: "DecartSDKTests",
+			dependencies: ["DecartSDK"],
+			path: "Tests/DecartSDKTests"
 		)
 	]
 )

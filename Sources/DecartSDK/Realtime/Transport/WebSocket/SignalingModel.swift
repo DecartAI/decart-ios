@@ -6,7 +6,6 @@
 //
 
 import Foundation
-import WebRTC
 
 struct InitializeConnectionMessage: Codable, Sendable {
 	let type: String
@@ -16,42 +15,27 @@ struct InitializeConnectionMessage: Codable, Sendable {
 	let initialPrompt: String?
 }
 
-struct OfferMessage: Codable, Sendable {
+struct LiveKitJoinMessage: Codable, Sendable {
 	let type: String
-	let sdp: String
 
-	init(sdp: String) {
-		self.type = "offer"
-		self.sdp = sdp
+	init() {
+		self.type = "livekit_join"
 	}
 }
 
-struct AnswerMessage: Codable, Sendable {
+struct LiveKitRoomInfoMessage: Codable, Sendable {
 	let type: String
-	let sdp: String
-}
+	let liveKitURL: String
+	let token: String
+	let roomName: String
+	let sessionId: String
 
-struct IceCandidatePayload: Codable, Sendable {
-	let candidate: String
-	let sdpMLineIndex: Int32
-	let sdpMid: String
-}
-
-struct IceCandidateMessage: Codable, Sendable {
-	let type: String
-	let candidate: IceCandidatePayload
-
-	init(candidate: RTCIceCandidate) {
-		guard let sdpMid = candidate.sdpMid else {
-			fatalError("found invalid candidate without sdpMid")
-		}
-
-		self.type = "ice-candidate"
-		self.candidate = IceCandidatePayload(
-			candidate: candidate.sdp,
-			sdpMLineIndex: candidate.sdpMLineIndex,
-			sdpMid: sdpMid
-		)
+	private enum CodingKeys: String, CodingKey {
+		case type
+		case liveKitURL = "livekit_url"
+		case token
+		case roomName = "room_name"
+		case sessionId = "session_id"
 	}
 }
 
@@ -194,9 +178,7 @@ struct QueuePositionMessage: Codable, Sendable {
 }
 
 enum IncomingWebSocketMessage: Codable, Sendable {
-	case offer(OfferMessage)
-	case answer(AnswerMessage)
-	case iceCandidate(IceCandidateMessage)
+	case liveKitRoomInfo(LiveKitRoomInfoMessage)
 	case error(ServerErrorMessage)
 	case sessionId(SessionIdMessage)
 	case generationStarted(GenerationStartedMessage)
@@ -212,12 +194,8 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 		let type = try container.decode(String.self, forKey: .type)
 
 		switch type {
-		case "offer":
-			self = try .offer(OfferMessage(from: decoder))
-		case "answer":
-			self = try .answer(AnswerMessage(from: decoder))
-		case "ice-candidate":
-			self = try .iceCandidate(IceCandidateMessage(from: decoder))
+		case "livekit_room_info":
+			self = try .liveKitRoomInfo(LiveKitRoomInfoMessage(from: decoder))
 		case "error":
 			self = try .error(ServerErrorMessage(from: decoder))
 		case "session_id":
@@ -247,11 +225,7 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 
 	func encode(to encoder: Encoder) throws {
 		switch self {
-		case .offer(let msg):
-			try msg.encode(to: encoder)
-		case .answer(let msg):
-			try msg.encode(to: encoder)
-		case .iceCandidate(let msg):
+		case .liveKitRoomInfo(let msg):
 			try msg.encode(to: encoder)
 		case .error(let msg):
 			try msg.encode(to: encoder)
@@ -280,20 +254,14 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 }
 
 enum OutgoingWebSocketMessage: Encodable, Sendable {
-	case offer(OfferMessage)
-	case answer(AnswerMessage)
-	case iceCandidate(IceCandidateMessage)
+	case liveKitJoin
 	case prompt(PromptMessage)
 	case setImage(SetImageMessage)
 
 	func encode(to encoder: Encoder) throws {
 		switch self {
-		case .offer(let msg):
-			try msg.encode(to: encoder)
-		case .answer(let msg):
-			try msg.encode(to: encoder)
-		case .iceCandidate(let msg):
-			try msg.encode(to: encoder)
+		case .liveKitJoin:
+			try LiveKitJoinMessage().encode(to: encoder)
 		case .prompt(let msg):
 			try msg.encode(to: encoder)
 		case .setImage(let msg):

@@ -6,11 +6,11 @@
 //
 
 import DecartSDK
+@preconcurrency import LiveKit
 import SwiftUI
-import WebRTC
 
 struct DraggableRTCVideoView: View {
-	let track: RTCVideoTrack?
+	let track: VideoTrack?
 
 	@State private var offset: CGSize = .zero
 	@State private var lastOffset: CGSize = .zero
@@ -19,9 +19,7 @@ struct DraggableRTCVideoView: View {
 	let margin: CGFloat = 14
 	var body: some View {
 		GeometryReader { geo in
-			// Input is pre-flipped by RealtimeCapture (mirror: .auto), so the local
-			// preview already shows in natural selfie orientation — render as-is.
-			RTCMLVideoViewWrapper(track: track)
+			RTCMLVideoViewWrapper(track: track, mirror: true)
 			.frame(width: pipSize.width, height: pipSize.height)
 			.cornerRadius(12)
 			.shadow(radius: 8)

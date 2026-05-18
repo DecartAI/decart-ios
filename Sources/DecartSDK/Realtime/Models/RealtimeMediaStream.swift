@@ -1,4 +1,4 @@
-@preconcurrency import WebRTC
+@preconcurrency import LiveKit
 
 public struct RealtimeMediaStream: Sendable {
 	public enum StreamId {
@@ -14,13 +14,13 @@ public struct RealtimeMediaStream: Sendable {
 		}
 	}
 
-	public let videoTrack: RTCVideoTrack?
-	public let audioTrack: RTCAudioTrack?
+	public let videoTrack: VideoTrack?
+	public let audioTrack: AudioTrack?
 	public let id: String
 
 	public init(
-		videoTrack: RTCVideoTrack? = nil,
-		audioTrack: RTCAudioTrack? = nil,
+		videoTrack: VideoTrack? = nil,
+		audioTrack: AudioTrack? = nil,
 		id: StreamId
 	) {
 		self.videoTrack = videoTrack

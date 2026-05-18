@@ -16,7 +16,7 @@ private func warnDeprecated(_ oldName: String, canonical: String) {
 	}
 }
 
-public enum VideoCodec: String {
+public enum VideoCodec: String, Sendable {
 	case vp8 = "video/VP8"
 	case h264 = "video/H264"
 }
@@ -40,7 +40,7 @@ public enum RealtimeModel: String, CaseIterable {
 	}
 }
 
-public enum ImageModel: String, CaseIterable {
+public enum ImageModel: String, CaseIterable, Sendable {
 	// Canonical names
 	case lucyImage2 = "lucy-image-2"
 	// Latest alias (server-side resolution)
@@ -55,7 +55,7 @@ public enum ImageModel: String, CaseIterable {
 	}
 }
 
-public enum VideoModel: String, CaseIterable {
+public enum VideoModel: String, CaseIterable, Sendable {
 	// Canonical names
 	case lucyClip = "lucy-clip"
 	case lucy2_1 = "lucy-2.1"
