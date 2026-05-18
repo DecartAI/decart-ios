@@ -220,15 +220,11 @@ private extension DecartRealtimeManager {
 		setupMediaListeners(mediaChannel)
 
 		async let initialStateAck: Void = sendInitialState()
-		async let remoteStream: RealtimeMediaStream = mediaChannel.connect(
-			roomInfo: roomInfo,
-			localStream: localStream,
-			remoteTrackTimeout: options.connection.connectionTimeout
-		)
-		let connectedRemoteStream = try await remoteStream
+		try await mediaChannel.connect(roomInfo: roomInfo)
 		try await initialStateAck
+		try await mediaChannel.publishLocalTracks(from: localStream)
 		connectionState = .connected
-		return connectedRemoteStream
+		return mediaChannel.currentRemoteStream
 	}
 
 	func closeRealtimeClients() async {

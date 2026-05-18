@@ -60,20 +60,13 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		disconnectContinuation.finish()
 	}
 
-	func connect(
-		roomInfo: LiveKitRoomInfoMessage,
-		localStream: RealtimeMediaStream,
-		remoteTrackTimeout: TimeInterval
-	) async throws -> RealtimeMediaStream {
+	func connect(roomInfo: LiveKitRoomInfoMessage) async throws {
 		let room = Room(delegate: self, connectOptions: connectOptions, roomOptions: roomOptions)
 		self.room = room
 		remoteVideoTrack = nil
 		remoteAudioTrack = nil
 
 		try await room.connect(url: roomInfo.liveKitURL, token: roomInfo.token)
-		try await publishLocalTracks(from: localStream, in: room)
-
-		return try await waitForRemoteStream(timeout: remoteTrackTimeout)
 	}
 
 	func disconnect() async {
@@ -84,7 +77,11 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		await room?.disconnect()
 	}
 
-	private func publishLocalTracks(from stream: RealtimeMediaStream, in room: Room) async throws {
+	func publishLocalTracks(from stream: RealtimeMediaStream) async throws {
+		guard let room else {
+			throw DecartError.webRTCError("LiveKit room is not connected")
+		}
+
 		if let videoTrack = stream.videoTrack as? LocalVideoTrack {
 			try await room.localParticipant.publish(videoTrack: videoTrack, options: videoPublishOptions)
 		}
@@ -94,33 +91,17 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		}
 	}
 
-	private var currentRemoteStream: RealtimeMediaStream? {
-		guard remoteVideoTrack != nil else { return nil }
-		return RealtimeMediaStream(
+	var currentRemoteStream: RealtimeMediaStream {
+		RealtimeMediaStream(
 			videoTrack: remoteVideoTrack,
 			audioTrack: remoteAudioTrack,
 			id: .remoteStream
 		)
 	}
 
-	private func waitForRemoteStream(timeout: TimeInterval) async throws -> RealtimeMediaStream {
-		let startTime = Date()
-		while true {
-			if let stream = currentRemoteStream {
-				return stream
-			}
-
-			if Date().timeIntervalSince(startTime) > timeout {
-				throw DecartError.webRTCError("LiveKit remote track subscription timed out")
-			}
-
-			try await Task.sleep(nanoseconds: 100_000_000)
-		}
-	}
-
 	private func emitRemoteStreamIfAvailable() {
-		guard let stream = currentRemoteStream else { return }
-		remoteStreamContinuation.yield(stream)
+		guard remoteVideoTrack != nil else { return }
+		remoteStreamContinuation.yield(currentRemoteStream)
 	}
 
 	private func shouldAcceptTrack(from participant: RemoteParticipant) -> Bool {
