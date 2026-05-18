@@ -19,7 +19,7 @@ struct DraggableRTCVideoView: View {
 	let margin: CGFloat = 14
 	var body: some View {
 		GeometryReader { geo in
-			RTCMLVideoViewWrapper(track: track, mirror: true)
+			RTCMLVideoViewWrapper(track: track, mirror: true, layoutMode: .fill)
 			.frame(width: pipSize.width, height: pipSize.height)
 			.cornerRadius(12)
 			.shadow(radius: 8)

@@ -6,15 +6,17 @@ import SwiftUI
 public struct RTCMLVideoViewWrapper: UIViewRepresentable {
 	public weak var track: VideoTrack?
 	public var mirror: Bool
+	public var layoutMode: VideoView.LayoutMode
 
-	public init(track: VideoTrack?, mirror: Bool = false) {
+	public init(track: VideoTrack?, mirror: Bool = false, layoutMode: VideoView.LayoutMode = .fit) {
 		self.track = track
 		self.mirror = mirror
+		self.layoutMode = layoutMode
 	}
 
 	public func makeUIView(context: Context) -> VideoView {
 		let view = VideoView()
-		view.layoutMode = .fill
+		view.layoutMode = layoutMode
 		view.mirrorMode = mirror ? .mirror : .off
 		view.track = track
 		return view
@@ -22,6 +24,7 @@ public struct RTCMLVideoViewWrapper: UIViewRepresentable {
 
 	public func updateUIView(_ uiView: VideoView, context: Context) {
 		uiView.track = track
+		uiView.layoutMode = layoutMode
 		uiView.mirrorMode = mirror ? .mirror : .off
 	}
 
@@ -34,15 +37,17 @@ public struct RTCMLVideoViewWrapper: UIViewRepresentable {
 public struct RTCMLVideoViewWrapper: NSViewRepresentable {
 	public weak var track: VideoTrack?
 	public var mirror: Bool
+	public var layoutMode: VideoView.LayoutMode
 
-	public init(track: VideoTrack?, mirror: Bool = false) {
+	public init(track: VideoTrack?, mirror: Bool = false, layoutMode: VideoView.LayoutMode = .fit) {
 		self.track = track
 		self.mirror = mirror
+		self.layoutMode = layoutMode
 	}
 
 	public func makeNSView(context: Context) -> VideoView {
 		let view = VideoView()
-		view.layoutMode = .fill
+		view.layoutMode = layoutMode
 		view.mirrorMode = mirror ? .mirror : .off
 		view.track = track
 		return view
@@ -50,6 +55,7 @@ public struct RTCMLVideoViewWrapper: NSViewRepresentable {
 
 	public func updateNSView(_ nsView: VideoView, context: Context) {
 		nsView.track = track
+		nsView.layoutMode = layoutMode
 		nsView.mirrorMode = mirror ? .mirror : .off
 	}
 
