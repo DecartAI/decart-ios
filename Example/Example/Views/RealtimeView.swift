@@ -50,12 +50,15 @@ private struct RealtimeContentView: View {
 
 	var body: some View {
 		ZStack {
-			if realtimeManager.remoteMediaStreams != nil {
+			if let remoteVideoTrack = realtimeManager.remoteMediaStreams?.videoTrack {
 				RTCMLVideoViewWrapper(
-					track: realtimeManager.remoteMediaStreams?.videoTrack
+					track: remoteVideoTrack
 				)
 				.background(Color.black)
 				.edgesIgnoringSafeArea(.all)
+			} else {
+				Color.black
+					.edgesIgnoringSafeArea(.all)
 			}
 
 			VStack(spacing: 5) {

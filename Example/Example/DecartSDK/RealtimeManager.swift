@@ -42,6 +42,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	private var eventTask: Task<Void, Never>?
 
 	@ObservationIgnored
+	private var remoteStreamTask: Task<Void, Never>?
+
+	@ObservationIgnored
 	private var localVideoTrack: LocalVideoTrack?
 
 	// MARK: - Init
@@ -77,12 +80,16 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 			// Listen for connection state changes (connecting, connected, error, etc.)
 			startEventMonitoring()
+			startRemoteStreamMonitoring()
 
 			#if !targetEnvironment(simulator)
 			startCapture(model: modelConfig)
 
 			// Establish LiveKit connection - sends local video, receives AI-processed video.
-			remoteMediaStreams = try await realtimeManager.connect(localStream: localMediaStream!)
+			let initialRemoteStream = try await realtimeManager.connect(localStream: localMediaStream!)
+			if initialRemoteStream.videoTrack != nil {
+				remoteMediaStreams = initialRemoteStream
+			}
 			#endif
 		} catch {
 			DecartLogger.log("Connection failed: \(error.localizedDescription)", level: .error)
@@ -109,6 +116,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 		eventTask?.cancel()
 		eventTask = nil
+
+		remoteStreamTask?.cancel()
+		remoteStreamTask = nil
 
 		try? await localVideoTrack?.stop()
 		localVideoTrack = nil
@@ -152,6 +162,20 @@ final class RealtimeManager: RealtimeManagerProtocol {
 				} else {
 					self.connectionState = state.connectionState
 				}
+			}
+		}
+	}
+
+	private func startRemoteStreamMonitoring() {
+		remoteStreamTask?.cancel()
+
+		remoteStreamTask = Task { [weak self] in
+			guard let self, let stream = self.realtimeManager?.remoteStreamUpdates else { return }
+
+			for await remoteStream in stream {
+				if Task.isCancelled { return }
+				guard remoteStream.videoTrack != nil else { continue }
+				self.remoteMediaStreams = remoteStream
 			}
 		}
 	}
