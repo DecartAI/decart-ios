@@ -85,7 +85,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-restyle-2",
 				urlPath: "/v1/stream",
-				fps: 22,
+				fps: 30,
 				width: 1280,
 				height: 704
 			)
@@ -93,7 +93,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-2.1",
 				urlPath: "/v1/stream",
-				fps: 20,
+				fps: 30,
 				width: 1088,
 				height: 624,
 				hasReferenceImage: true
@@ -102,7 +102,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-2.1-vton",
 				urlPath: "/v1/stream",
-				fps: 20,
+				fps: 30,
 				width: 1088,
 				height: 624,
 				hasReferenceImage: true
@@ -111,7 +111,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-latest",
 				urlPath: "/v1/stream",
-				fps: 20,
+				fps: 30,
 				width: 1088,
 				height: 624,
 				hasReferenceImage: true
@@ -120,7 +120,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-vton-latest",
 				urlPath: "/v1/stream",
-				fps: 20,
+				fps: 30,
 				width: 1088,
 				height: 624,
 				hasReferenceImage: true
@@ -129,7 +129,7 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-restyle-latest",
 				urlPath: "/v1/stream",
-				fps: 22,
+				fps: 30,
 				width: 1280,
 				height: 704
 			)
