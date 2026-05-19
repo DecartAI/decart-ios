@@ -39,7 +39,7 @@ Add to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/decartai/decart-ios.git", from: "0.6.0")
+    .package(url: "https://github.com/decartai/decart-ios.git", from: "0.6.1")
 ]
 ```
 
@@ -122,6 +122,19 @@ Render the remote stream without mirroring:
 
 ```swift
 RTCMLVideoViewWrapper(track: remoteStream.videoTrack)
+```
+
+#### Output resolution
+
+Realtime models default to a 720p remote stream. Pass `resolution: .p1080` on the `RealtimeConfiguration` to request 1080p instead.
+
+```swift
+let realtimeManager = try client.createRealtimeManager(
+    options: RealtimeConfiguration(
+        model: modelConfig,
+        resolution: .p1080 // default: nil (server-side default of 720p)
+    )
+)
 ```
 
 ### 2. Image-to-Image Generation
@@ -363,10 +376,10 @@ MediaConfig(
 
 // Video config
 VideoConfig(
-    maxBitrate: Int,
-    maxFramerate: Int,
+    maxBitrate: Int,     // default: 3_500_000
+    maxFramerate: Int,   // default: 30
     preferredCodec: String, // "h264", "vp8", "vp9", or "av1"
-    simulcast: Bool
+    simulcast: Bool      // default: true
 )
 ```
 
