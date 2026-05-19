@@ -223,7 +223,6 @@ private extension DecartRealtimeManager {
 		try await mediaChannel.connect(roomInfo: roomInfo)
 		try await initialStateAck
 		try await mediaChannel.publishLocalTracks(from: localStream)
-		connectionState = .connected
 		return mediaChannel.currentRemoteStream
 	}
 
