@@ -7,15 +7,16 @@
 import Combine
 import DecartSDK
 import Factory
+import AVFoundation
+@preconcurrency import LiveKit
 import SwiftUI
-@preconcurrency import WebRTC
 
 @MainActor
 @Observable
 final class RealtimeManager: RealtimeManagerProtocol {
 	// MARK: - Public State
 
-	var currentPrompt: Prompt {
+	var currentPrompt: DecartPrompt {
 		didSet {
 			// Send updated prompt to the server for real-time style changes
 			realtimeManager?.setPrompt(currentPrompt)
@@ -40,14 +41,15 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	@ObservationIgnored
 	private var eventTask: Task<Void, Never>?
 
-	#if !targetEnvironment(simulator)
 	@ObservationIgnored
-	private var capture: RealtimeCapture?
-	#endif
+	private var remoteStreamTask: Task<Void, Never>?
+
+	@ObservationIgnored
+	private var localVideoTrack: LocalVideoTrack?
 
 	// MARK: - Init
 
-	init(model: RealtimeModel, currentPrompt: Prompt) {
+	init(model: RealtimeModel, currentPrompt: DecartPrompt) {
 		self.model = model
 		self.currentPrompt = currentPrompt
 	}
@@ -64,11 +66,11 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		do {
 			let modelConfig = Models.realtime(model)
 
-			// Initialize the WebRTC manager with model config and initial prompt
+			// Initialize the realtime manager with model config and initial prompt.
 			realtimeManager = try decartClient.createRealtimeManager(
 				options: RealtimeConfiguration(
 					model: modelConfig,
-					initialState: ModelState(prompt: currentPrompt)
+					initialPrompt: currentPrompt
 				)
 			)
 
@@ -78,12 +80,16 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 			// Listen for connection state changes (connecting, connected, error, etc.)
 			startEventMonitoring()
+			startRemoteStreamMonitoring()
 
 			#if !targetEnvironment(simulator)
-			try await startCapture(model: modelConfig)
+			startCapture(model: modelConfig)
 
-			// Establish WebRTC connection - sends local video, receives AI-processed video
-			remoteMediaStreams = try await realtimeManager.connect(localStream: localMediaStream!)
+			// Establish LiveKit connection - sends local video, receives AI-processed video.
+			let initialRemoteStream = try await realtimeManager.connect(localStream: localMediaStream!)
+			if initialRemoteStream.videoTrack != nil {
+				remoteMediaStreams = initialRemoteStream
+			}
 			#endif
 		} catch {
 			DecartLogger.log("Connection failed: \(error.localizedDescription)", level: .error)
@@ -93,11 +99,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	func switchCamera() async {
 		#if !targetEnvironment(simulator)
-		guard let capture else { return }
+		guard let cameraCapturer = localVideoTrack?.capturer as? CameraCapturer else { return }
 		do {
-			// Toggle between front and back camera; input-side mirroring
-			// follows position automatically via `MirrorMode.auto`.
-			try await capture.switchCamera()
+			try await cameraCapturer.switchCameraPosition()
 		} catch {
 			DecartLogger.log("Failed to switch camera", level: .error)
 		}
@@ -113,15 +117,13 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		eventTask?.cancel()
 		eventTask = nil
 
-		disableMediaTracks()
+		remoteStreamTask?.cancel()
+		remoteStreamTask = nil
 
-		#if !targetEnvironment(simulator)
-		// Release camera resources
-		await capture?.stopCapture()
-		capture = nil
-		#endif
+		try? await localVideoTrack?.stop()
+		localVideoTrack = nil
 
-		// Close WebRTC connection and release server resources
+		// Close LiveKit connection and release server resources.
 		await realtimeManager?.disconnect()
 		realtimeManager = nil
 
@@ -132,21 +134,15 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	// MARK: - Private Helpers
 
 	#if !targetEnvironment(simulator)
-	private func startCapture(model: ModelDefinition) async throws {
-		guard let realtimeManager else { return }
-
-		// Create a video source that camera frames will be written to
-		let videoSource = realtimeManager.createVideoSource()
-
-		// Initialize camera capture with model-specific settings (resolution, fps).
-		// `mirror: .auto` pre-flips frames from the front camera so the server
-		// receives them in display orientation — keeps any server-baked content
-		// (e.g. watermarks) readable when the output is rendered as-is.
-		capture = RealtimeCapture(model: model, videoSource: videoSource, mirror: .auto)
-		try await capture?.startCapture()
-
-		// Wrap the video source in a track for WebRTC transmission
-		let videoTrack = realtimeManager.createVideoTrack(source: videoSource, trackId: "video0")
+	private func startCapture(model: ModelDefinition) {
+		let dimensions = Dimensions(width: Int32(model.width), height: Int32(model.height))
+		let captureOptions = CameraCaptureOptions(
+			position: .front,
+			dimensions: dimensions,
+			fps: model.fps
+		)
+		let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions)
+		localVideoTrack = videoTrack
 		localMediaStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
 	}
 	#endif
@@ -160,20 +156,27 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 			for await state in stream {
 				if Task.isCancelled { return }
-				if state == .error {
+				if state.connectionState == .error {
 					// Treat signaling (WS) disconnects as disconnected in the example UI.
 					self.connectionState = .error
 				} else {
-					self.connectionState = state
+					self.connectionState = state.connectionState
 				}
 			}
 		}
 	}
 
-	private func disableMediaTracks() {
-		localMediaStream?.videoTrack.isEnabled = false
-		localMediaStream?.audioTrack?.isEnabled = false
-		remoteMediaStreams?.videoTrack.isEnabled = false
-		remoteMediaStreams?.audioTrack?.isEnabled = false
+	private func startRemoteStreamMonitoring() {
+		remoteStreamTask?.cancel()
+
+		remoteStreamTask = Task { [weak self] in
+			guard let self, let stream = self.realtimeManager?.remoteStreamUpdates else { return }
+
+			for await remoteStream in stream {
+				if Task.isCancelled { return }
+				guard remoteStream.videoTrack != nil else { continue }
+				self.remoteMediaStreams = remoteStream
+			}
+		}
 	}
 }

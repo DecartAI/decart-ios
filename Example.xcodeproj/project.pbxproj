@@ -116,7 +116,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				165B2B992ECE09E9004D848C /* XCRemoteSwiftPackageReference "Factory" */,
-				161F075C2F0E80B8001B6765 /* XCLocalSwiftPackageReference "../decart-ios" */,
+				161F075C2F0E80B8001B6765 /* XCLocalSwiftPackageReference "." */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 16D70B972EB8CA0C00455077 /* Products */;
@@ -374,9 +374,9 @@
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
-		161F075C2F0E80B8001B6765 /* XCLocalSwiftPackageReference "../decart-ios" */ = {
+		161F075C2F0E80B8001B6765 /* XCLocalSwiftPackageReference "." */ = {
 			isa = XCLocalSwiftPackageReference;
-			relativePath = "../decart-ios";
+			relativePath = ".";
 		};
 /* End XCLocalSwiftPackageReference section */
 
@@ -394,6 +394,7 @@
 /* Begin XCSwiftPackageProductDependency section */
 		161F075F2F0E80DC001B6765 /* DecartSDK */ = {
 			isa = XCSwiftPackageProductDependency;
+			package = 161F075C2F0E80B8001B6765 /* XCLocalSwiftPackageReference "." */;
 			productName = DecartSDK;
 		};
 		165B2B9A2ECE09E9004D848C /* Factory */ = {

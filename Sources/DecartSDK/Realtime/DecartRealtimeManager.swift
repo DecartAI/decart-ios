@@ -1,5 +1,4 @@
 import Foundation
-@preconcurrency import WebRTC
 
 public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
@@ -36,17 +35,20 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		}
 	}
 
-	private var webRTCClient: WebRTCClient?
+	private var liveKitMediaChannel: LiveKitMediaChannel?
 	private var webSocketClient: WebSocketClient?
 
 	private let signalingServerURL: URL
 	private let stateContinuation: AsyncStream<DecartRealtimeState>.Continuation
 	private let remoteStreamContinuation: AsyncStream<RealtimeMediaStream>.Continuation
 	private var webSocketListenerTask: Task<Void, Never>?
-	private var connectionStateListenerTask: Task<Void, Never>?
+	private var mediaListenerTask: Task<Void, Never>?
+	private var mediaConnectionStateTask: Task<Void, Never>?
+	private var mediaDisconnectTask: Task<Void, Never>?
 	private var reconnectTask: Task<Void, Never>?
 	private let initialStateAckTimeout: TimeInterval = 30
 	private var isWaitingForInitialStateAck = false
+	private var pendingLiveKitRoomInfo: LiveKitRoomInfoMessage?
 	private var pendingPromptAck: PromptAckMessage?
 	private var pendingSetImageAck: SetImageAckMessage?
 	private var pendingInitialStateError: Error?
@@ -107,9 +109,16 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 
 	deinit {
 		webSocketListenerTask?.cancel()
-		connectionStateListenerTask?.cancel()
+		mediaListenerTask?.cancel()
+		mediaConnectionStateTask?.cancel()
+		mediaDisconnectTask?.cancel()
 		reconnectTask?.cancel()
-		webRTCClient?.close()
+		let liveKitMediaChannel = liveKitMediaChannel
+		let webSocketClient = webSocketClient
+		Task {
+			await liveKitMediaChannel?.disconnect()
+			await webSocketClient?.disconnect()
+		}
 		stateContinuation.finish()
 		remoteStreamContinuation.finish()
 		DecartLogger.log("RealtimeManager (SDK) deinitialized", level: .info)
@@ -147,15 +156,6 @@ public extension DecartRealtimeManager {
 		queuePosition = nil
 		queueSize = nil
 		await closeRealtimeClients()
-
-		#if canImport(WebRTC) && os(iOS)
-		let audioSession = RTCAudioSession.sharedInstance()
-		if audioSession.isActive {
-			audioSession.lockForConfiguration()
-			try? audioSession.setActive(false)
-			audioSession.unlockForConfiguration()
-		}
-		#endif
 	}
 
 	func setPrompt(_ prompt: DecartPrompt) {
@@ -209,69 +209,36 @@ private extension DecartRealtimeManager {
 			try await waitForServiceReady()
 		}
 
-		try await sendInitialState()
+		try await sendMessageThrowing(.liveKitJoin)
+		let roomInfo = try await waitForLiveKitRoomInfo(timeout: options.connection.connectionTimeout)
 
-		let rtcClient = WebRTCClient(
-			config: options.connection.rtcConfiguration,
-			constraints: options.media.connectionConstraints,
-			videoConfig: options.media.video,
-			sendMessage: { [weak self] in self?.sendMessage($0) },
-			withAudio: localStream.audioTrack != nil
+		let mediaChannel = LiveKitMediaChannel(
+			videoPublishOptions: options.media.video.publishOptions,
+			connectOptions: options.connection.connectOptions
 		)
-		webRTCClient = rtcClient
-		setupConnectionStateListener(rtcClient)
+		liveKitMediaChannel = mediaChannel
+		setupMediaListeners(mediaChannel)
 
-		rtcClient.startLocalStreaming(
-			videoTrack: localStream.videoTrack,
-			audioTrack: localStream.audioTrack
-		)
-
-		let offer = try await rtcClient.createOffer(constraints: options.media.offerConstraints)
-		try await rtcClient.setLocalDescription(offer)
-		try await sendMessageThrowing(.offer(OfferMessage(sdp: offer.sdp)))
-
-		try await waitForConnection(timeout: options.connection.connectionTimeout)
-
-		guard let remoteStream = rtcClient.getRemoteRealtimeStream() else {
-			throw DecartError.webRTCError("couldn't get remote stream, check video transceiver")
-		}
-
-		return remoteStream
+		async let initialStateAck: Void = sendInitialState()
+		try await mediaChannel.connect(roomInfo: roomInfo)
+		try await initialStateAck
+		try await mediaChannel.publishLocalTracks(from: localStream)
+		return mediaChannel.currentRemoteStream
 	}
 
 	func closeRealtimeClients() async {
 		webSocketListenerTask?.cancel()
 		webSocketListenerTask = nil
-		connectionStateListenerTask?.cancel()
-		connectionStateListenerTask = nil
-		webRTCClient?.close()
-		webRTCClient = nil
+		mediaListenerTask?.cancel()
+		mediaListenerTask = nil
+		mediaConnectionStateTask?.cancel()
+		mediaConnectionStateTask = nil
+		mediaDisconnectTask?.cancel()
+		mediaDisconnectTask = nil
+		await liveKitMediaChannel?.disconnect()
+		liveKitMediaChannel = nil
 		await webSocketClient?.disconnect()
 		webSocketClient = nil
-	}
-}
-
-// MARK: - Connection
-
-public extension DecartRealtimeManager {
-	func createVideoSource() -> RTCVideoSource {
-		WebRTCClient.createVideoSource()
-	}
-
-	func replaceVideoTrack(with newTrack: RTCVideoTrack) {
-		webRTCClient?.replaceVideoTrack(with: newTrack)
-	}
-
-	func createVideoTrack(source: RTCVideoSource, trackId: String) -> RTCVideoTrack {
-		WebRTCClient.createVideoTrack(source: source, trackId: trackId)
-	}
-
-	func createAudioSource(constraints: RTCMediaConstraints? = nil) -> RTCAudioSource {
-		WebRTCClient.createAudioSource(constraints: constraints)
-	}
-
-	func createAudioTrack(source: RTCAudioSource, trackId: String) -> RTCAudioTrack {
-		WebRTCClient.createAudioTrack(source: source, trackId: trackId)
 	}
 }
 
@@ -281,79 +248,79 @@ private extension DecartRealtimeManager {
 	func setupWebSocketListener(_ wsClient: WebSocketClient) {
 		webSocketListenerTask?.cancel()
 		webSocketListenerTask = Task { [weak self] in
-			do {
-				for try await message in wsClient.websocketEventStream {
-					guard !Task.isCancelled, let self else { return }
-					switch message {
-					case .status(let status):
-						self.serviceStatus = RealtimeServiceStatus.fromStatusString(status.status)
-					case .queuePosition(let queue):
-						self.queuePosition = queue.queuePosition
-						self.queueSize = queue.queueSize
-					case .promptAck(let ack):
-						self.recordPromptAck(ack)
-					case .setImageAck(let ack):
-						self.recordSetImageAck(ack)
-					case .sessionId(let message):
-						self.sessionId = message.id
-					case .generationStarted:
-						self.connectionState = .generating
-					case .generationTick(let tick):
-						self.generationTick = tick.seconds
-					case .generationEnded(let ended):
-						if let seconds = ended.seconds {
-							self.generationTick = seconds
-						}
-						if self.connectionState != .disconnected && self.connectionState != .error {
-							self.connectionState = .connected
-						}
-					case .error(let errorMessage):
-						let errorText = errorMessage.message ?? errorMessage.error ?? "Unknown server error"
-						let error = DecartError.serverError(errorText)
-						if DecartRealtimeManager.isPermanentErrorMessage(errorText) {
-							self.isPermanentError = true
-						}
-						self.recordInitialStateError(error)
-						if let webRTCClient = self.webRTCClient {
-							try await webRTCClient.handleSignalingMessage(message)
-						} else {
-							self.connectionState = .error
-						}
-					default:
-						guard let webRTCClient = self.webRTCClient else { break }
-						try await webRTCClient.handleSignalingMessage(message)
+			for await message in wsClient.websocketEventStream {
+				guard !Task.isCancelled, let self else { return }
+				switch message {
+				case .status(let status):
+					self.serviceStatus = RealtimeServiceStatus.fromStatusString(status.status)
+				case .queuePosition(let queue):
+					self.queuePosition = queue.queuePosition
+					self.queueSize = queue.queueSize
+				case .liveKitRoomInfo(let roomInfo):
+					self.pendingLiveKitRoomInfo = roomInfo
+					self.sessionId = roomInfo.sessionId
+				case .promptAck(let ack):
+					self.recordPromptAck(ack)
+				case .setImageAck(let ack):
+					self.recordSetImageAck(ack)
+				case .sessionId(let message):
+					self.sessionId = message.id
+				case .generationStarted:
+					self.connectionState = .generating
+				case .generationTick(let tick):
+					self.generationTick = tick.seconds
+				case .generationEnded(let ended):
+					if let seconds = ended.seconds {
+						self.generationTick = seconds
 					}
+					if self.connectionState != .disconnected && self.connectionState != .error {
+						self.connectionState = .connected
+					}
+				case .error(let errorMessage):
+					let errorText = errorMessage.message ?? errorMessage.error ?? "Unknown server error"
+					let error = DecartError.serverError(errorText)
+					if DecartRealtimeManager.isPermanentErrorMessage(errorText) {
+						self.isPermanentError = true
+					}
+					self.recordInitialStateError(error)
+					self.connectionState = .error
 				}
-				guard !Task.isCancelled else { return }
-				self?.recordInitialStateError(DecartError.websocketError("WebSocket disconnected"))
-				self?.connectionState = .disconnected
-				self?.handleUnexpectedDisconnect()
-			} catch {
-				guard !Task.isCancelled else { return }
-				self?.recordInitialStateError(error)
-				self?.connectionState = .error
 			}
+			guard !Task.isCancelled else { return }
+			self?.recordInitialStateError(DecartError.websocketError("WebSocket disconnected"))
+			self?.connectionState = .disconnected
+			self?.handleUnexpectedDisconnect()
 		}
 	}
 
-	func setupConnectionStateListener(_ rtcClient: WebRTCClient) {
-		connectionStateListenerTask?.cancel()
-		connectionStateListenerTask = Task { [weak self] in
-			for await rtcState in rtcClient.connectionStateStream {
+	func setupMediaListeners(_ mediaChannel: LiveKitMediaChannel) {
+		mediaListenerTask?.cancel()
+		mediaListenerTask = Task { [weak self] in
+			for await stream in mediaChannel.remoteStreamUpdates {
 				guard !Task.isCancelled, let self else { return }
-				switch rtcState {
-				case .connected:
-					self.connectionState = .connected
+				self.remoteStreamContinuation.yield(stream)
+			}
+		}
+
+		mediaConnectionStateTask?.cancel()
+		mediaConnectionStateTask = Task { [weak self] in
+			for await state in mediaChannel.connectionStateUpdates {
+				guard !Task.isCancelled, let self else { return }
+				self.connectionState = state
+				if state == .connected {
 					self.reconnectAttempts = 0
 					self.isReconnecting = false
-				case .disconnected, .failed:
-					self.connectionState = .disconnected
-					self.handleUnexpectedDisconnect()
-				case .closed:
-					self.connectionState = .disconnected
-				case .connecting: self.connectionState = .connecting
-				default: break
 				}
+			}
+		}
+
+		mediaDisconnectTask?.cancel()
+		mediaDisconnectTask = Task { [weak self] in
+			for await disconnect in mediaChannel.disconnectUpdates {
+				guard !Task.isCancelled, let self else { return }
+				DecartLogger.log("LiveKit room disconnected: \(disconnect.reason ?? "unknown")", level: .warning)
+				self.connectionState = .disconnected
+				self.handleUnexpectedDisconnect()
 			}
 		}
 	}
@@ -457,6 +424,32 @@ private extension DecartRealtimeManager {
 			try await sendInitialPromptAndWait(initialPrompt)
 		} else {
 			try await sendPassthroughAndWait()
+		}
+	}
+
+	func waitForLiveKitRoomInfo(timeout: TimeInterval) async throws -> LiveKitRoomInfoMessage {
+		let startTime = Date()
+		while true {
+			if let pendingLiveKitRoomInfo {
+				self.pendingLiveKitRoomInfo = nil
+				return pendingLiveKitRoomInfo
+			}
+
+			if connectionState == .disconnected {
+				throw DecartError.websocketError("Disconnected while waiting for LiveKit room info")
+			}
+
+			if let error = pendingInitialStateError {
+				connectionState = .error
+				throw error
+			}
+
+			if Date().timeIntervalSince(startTime) > timeout {
+				connectionState = .error
+				throw DecartError.websocketError("LiveKit room info timed out")
+			}
+
+			try await Task.sleep(nanoseconds: 100_000_000)
 		}
 	}
 

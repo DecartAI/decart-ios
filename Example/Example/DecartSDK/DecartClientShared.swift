@@ -7,10 +7,9 @@
 
 import DecartSDK
 import Factory
-import WebRTC
 
 protocol RealtimeManagerProtocol {
-	var currentPrompt: Prompt { get set }
+	var currentPrompt: DecartPrompt { get set }
 
 	var connectionState: DecartRealtimeConnectionState { get }
 

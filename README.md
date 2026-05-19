@@ -12,7 +12,7 @@ Native Swift SDK for [Decart AI](https://decart.ai) - Real-time video processing
 
 Decart iOS SDK provides three primary APIs:
 
-- **RealtimeManager** - Real-time video processing with WebRTC streaming, automatic reconnection, and generation tracking
+- **RealtimeManager** - Real-time video processing with LiveKit streaming, automatic reconnection, and generation tracking
 - **QueueClient** - Async video generation via the Queue API (`/v1/jobs/*`) with submit, poll, and download
 - **ProcessClient** - Synchronous image generation
 
@@ -20,7 +20,7 @@ All APIs leverage modern Swift concurrency (async/await) with type-safe interfac
 
 ## Features
 
-- Real-time video processing with WebRTC
+- Real-time video processing with LiveKit
 - Automatic reconnection with exponential backoff
 - Generation tick events for billing/usage tracking
 - Async Queue API for video generation (submit → poll → download)
@@ -52,10 +52,11 @@ Or in Xcode:
 
 ### 1. Real-time Video Processing
 
-Stream video with real-time AI processing using WebRTC:
+Stream video with real-time AI processing using LiveKit:
 
 ```swift
 import DecartSDK
+import LiveKit
 
 let config = DecartConfiguration(apiKey: "your-api-key")
 let client = DecartClient(decartConfiguration: config)
@@ -66,7 +67,7 @@ let modelConfig = Models.realtime(model)
 let realtimeManager = try client.createRealtimeManager(
     options: RealtimeConfiguration(
         model: modelConfig,
-        initialState: ModelState(prompt: Prompt(text: "Lego World"))
+        initialPrompt: DecartPrompt(text: "Lego World")
     )
 )
 
@@ -91,42 +92,37 @@ Task {
     }
 }
 
-// Create video source and camera capture
-let videoSource = realtimeManager.createVideoSource()
-let capture = RealtimeCapture(model: modelConfig, videoSource: videoSource)
-try await capture.startCapture()
-
-// Create local stream and connect
-let videoTrack = realtimeManager.createVideoTrack(source: videoSource, trackId: "video0")
+// Create a LiveKit camera track and connect
+let captureOptions = CameraCaptureOptions(
+    position: .front,
+    dimensions: Dimensions(width: Int32(modelConfig.height), height: Int32(modelConfig.width)),
+    fps: modelConfig.fps
+)
+let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions)
 let localStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
 let remoteStream = try await realtimeManager.connect(localStream: localStream)
 
 // Update prompt in real-time
-realtimeManager.setPrompt(Prompt(text: "Anime World"))
+realtimeManager.setPrompt(DecartPrompt(text: "Anime World"))
 
 // Cleanup
-await capture.stopCapture()
+try? await videoTrack.stop()
 await realtimeManager.disconnect()
 ```
 
 #### Front-camera mirroring
 
-Pre-flip the input video so the server receives it in display orientation. This keeps any pixel-baked content in the output (e.g. watermarks) readable when you render the result as-is — no UI-side flip required.
+LiveKit's `VideoView` can mirror the local preview without changing the encoded video sent to the server:
 
 ```swift
-let capture = RealtimeCapture(
-    model: modelConfig,
-    videoSource: videoSource,
-    mirror: .auto // or .on to always mirror
-)
+RTCMLVideoViewWrapper(track: localStream.videoTrack, mirror: true)
 ```
 
-Options on `MirrorMode`:
-- `.off` (default) — never mirror.
-- `.auto` — mirror when the active camera is the front (`.front`) device.
-- `.on` — always mirror.
+Render the remote stream without mirroring:
 
-When mirroring is enabled, render both the local preview and the remote stream with `RTCMLVideoViewWrapper(track:)` (the default, no `mirror:` argument) — the frames are already in display orientation.
+```swift
+RTCMLVideoViewWrapper(track: remoteStream.videoTrack)
+```
 
 #### Output resolution
 
@@ -362,16 +358,15 @@ enum QueueJobResult {
 ```swift
 RealtimeConfiguration(
     model: ModelDefinition,
-    initialState: ModelState,
+    initialPrompt: DecartPrompt,
     connection: ConnectionConfig,  // Optional
     media: MediaConfig             // Optional
 )
 
 // Connection config
 ConnectionConfig(
-    iceServers: [String],
-    connectionTimeout: Int32,
-    pingInterval: Int32
+    connectionTimeout: TimeInterval,
+    reconnectAttempts: Int
 )
 
 // Media config
@@ -381,10 +376,10 @@ MediaConfig(
 
 // Video config
 VideoConfig(
-    maxBitrate: Int,     // default: 2_500_000
-    minBitrate: Int,     // default: 300_000
+    maxBitrate: Int,     // default: 3_500_000
     maxFramerate: Int,   // default: 30
-    preferredCodec: String  // "VP8" or "H264"
+    preferredCodec: String, // "h264", "vp8", "vp9", or "av1"
+    simulcast: Bool      // default: true
 )
 ```
 
@@ -406,7 +401,7 @@ Configure these in your Xcode scheme (Edit Scheme → Run → Environment Variab
 
 ## Dependencies
 
-- [WebRTC](https://github.com/nickkjordan/WebRTC) - WebRTC framework for iOS/macOS
+- [LiveKit Swift SDK](https://github.com/livekit/client-sdk-swift) - Realtime media transport for iOS/macOS
 
 ## License
 
