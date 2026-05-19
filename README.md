@@ -128,6 +128,19 @@ Options on `MirrorMode`:
 
 When mirroring is enabled, render both the local preview and the remote stream with `RTCMLVideoViewWrapper(track:)` (the default, no `mirror:` argument) — the frames are already in display orientation.
 
+#### Output resolution
+
+Realtime models default to a 720p remote stream. Pass `resolution: .p1080` on the `RealtimeConfiguration` to request 1080p instead.
+
+```swift
+let realtimeManager = try client.createRealtimeManager(
+    options: RealtimeConfiguration(
+        model: modelConfig,
+        resolution: .p1080 // default: nil (server-side default of 720p)
+    )
+)
+```
+
 ### 2. Image-to-Image Generation
 
 Transform images with AI:
@@ -368,9 +381,9 @@ MediaConfig(
 
 // Video config
 VideoConfig(
-    maxBitrate: Int,
-    minBitrate: Int,
-    maxFramerate: Int,
+    maxBitrate: Int,     // default: 2_500_000
+    minBitrate: Int,     // default: 300_000
+    maxFramerate: Int,   // default: 30
     preferredCodec: String  // "VP8" or "H264"
 )
 ```

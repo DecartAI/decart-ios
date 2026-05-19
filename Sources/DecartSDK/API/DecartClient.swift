@@ -8,8 +8,12 @@ public struct DecartClient {
 	}
 
 	public func createRealtimeManager(options: RealtimeConfiguration) throws -> DecartRealtimeManager {
-		let urlString =
+		var urlString =
 			"\(decartConfiguration.signalingServerUrl)\(options.model.urlPath)?api_key=\(decartConfiguration.apiKey)&model=\(options.model.name)"
+
+		if let resolution = options.resolution {
+			urlString += "&resolution=\(resolution.rawValue)"
+		}
 
 		guard let signalingServerURL = URL(string: urlString) else {
 			DecartLogger.log("Unable to generate signaling server URL from: \(urlString)", level: .error)

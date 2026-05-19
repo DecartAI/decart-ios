@@ -8,20 +8,29 @@
 import Foundation
 @preconcurrency import WebRTC
 
+/// Output resolution requested from the realtime server.
+public enum Resolution: String, Sendable {
+	case p720 = "720p"
+	case p1080 = "1080p"
+}
+
 public struct RealtimeConfiguration: Sendable {
 	public let model: ModelDefinition
 	public let initialPrompt: DecartPrompt
+	public let resolution: Resolution?
 	public let connection: ConnectionConfig
 	public let media: MediaConfig
 
 	public init(
 		model: ModelDefinition,
 		initialPrompt: DecartPrompt = .init(text: ""),
+		resolution: Resolution? = nil,
 		connection: ConnectionConfig = .init(),
 		media: MediaConfig = .init()
 	) {
 		self.model = model
 		self.initialPrompt = initialPrompt
+		self.resolution = resolution
 		self.connection = connection
 		self.media = media
 	}
@@ -84,7 +93,7 @@ public struct RealtimeConfiguration: Sendable {
 		public init(
 			maxBitrate: Int = 2_500_000,
 			minBitrate: Int = 300_000,
-			maxFramerate: Int = 26,
+			maxFramerate: Int = 30,
 			preferredCodec: String = "VP8"
 		) {
 			self.maxBitrate = maxBitrate
