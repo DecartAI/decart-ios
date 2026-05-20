@@ -123,6 +123,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	}
 
 	deinit {
+		failAllPendingRuntimeWaiters(DecartError.websocketError("WebSocket disconnected"))
 		webSocketListenerTask?.cancel()
 		mediaListenerTask?.cancel()
 		mediaConnectionStateTask?.cancel()
