@@ -18,8 +18,14 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	var currentPrompt: DecartPrompt {
 		didSet {
-			// Send updated prompt to the server for real-time style changes
-			realtimeManager?.setPrompt(currentPrompt)
+			let prompt = currentPrompt
+			Task { [weak self] in
+				do {
+					try await self?.realtimeManager?.setPrompt(prompt)
+				} catch {
+					DecartLogger.log("setPrompt failed: \(error.localizedDescription)", level: .error)
+				}
+			}
 		}
 	}
 

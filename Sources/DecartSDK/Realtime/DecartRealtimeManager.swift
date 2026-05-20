@@ -47,11 +47,20 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private var mediaDisconnectTask: Task<Void, Never>?
 	private var reconnectTask: Task<Void, Never>?
 	private let initialStateAckTimeout: TimeInterval = 30
+	private let promptAckTimeout: TimeInterval = 15
+	private let imageAckTimeout: TimeInterval = 30
 	private var isWaitingForInitialStateAck = false
 	private var pendingLiveKitRoomInfo: LiveKitRoomInfoMessage?
 	private var pendingPromptAck: PromptAckMessage?
 	private var pendingSetImageAck: SetImageAckMessage?
 	private var pendingInitialStateError: Error?
+
+	// Serial queue around runtime ack waiters: CheckedContinuation forbids
+	// double-resume, so ack delivery, timeout, and failure-propagation must
+	// not race.
+	private let ackQueue = DispatchQueue(label: "ai.decart.realtime.ack")
+	private var pendingRuntimePromptWaiters: [String: CheckedContinuation<Void, Error>] = [:]
+	private var pendingRuntimeSetImageWaiter: CheckedContinuation<Void, Error>?
 	private var reconnectAttempts: Int = 0
 	private let maxReconnectAttempts: Int = 5
 	private var isReconnecting = false
@@ -150,6 +159,7 @@ public extension DecartRealtimeManager {
 		connectionState = .disconnected
 		isWaitingForInitialStateAck = false
 		clearPendingInitialState()
+		failAllPendingRuntimeWaiters(DecartError.websocketError("WebSocket disconnected"))
 		generationTick = nil
 		sessionId = nil
 		serviceStatus = .unknown
@@ -158,18 +168,39 @@ public extension DecartRealtimeManager {
 		await closeRealtimeClients()
 	}
 
-	func setPrompt(_ prompt: DecartPrompt) {
-		guard options.model.hasReferenceImage else {
-			sendMessage(.prompt(PromptMessage(prompt: prompt.text, enhancePrompt: prompt.enrich)))
-			return
+	/// Updates the prompt and suspends until the server acks. Throws on ack
+	/// failure, timeout, or websocket disconnect.
+	///
+	/// Reference-image models are single-flight: a pending call is failed
+	/// with "superseded" before the new one is installed.
+	func setPrompt(_ prompt: DecartPrompt) async throws {
+		guard let webSocketClient else {
+			throw DecartError.websocketError("WebSocket not connected")
 		}
 
-		let base64Image = prompt.referenceImageData?.base64EncodedString()
-		sendImageWithPrompt(
-			base64Image,
-			prompt: prompt.text,
-			enhance: prompt.enrich
-		)
+		if options.model.hasReferenceImage {
+			let base64Image = prompt.referenceImageData?.base64EncodedString()
+			let setImageMessage = SetImageMessage(
+				imageData: base64Image,
+				prompt: prompt.text,
+				enhancePrompt: prompt.enrich
+			)
+			let outgoing: OutgoingWebSocketMessage = .setImage(setImageMessage)
+			try await webSocketClient.send(outgoing)
+			try await awaitRuntimeSetImageAck(
+				timeout: imageAckTimeout,
+				failureMessage: "Failed to set image"
+			)
+		} else {
+			let outgoing: OutgoingWebSocketMessage = .prompt(
+				PromptMessage(prompt: prompt.text, enhancePrompt: prompt.enrich)
+			)
+			try await webSocketClient.send(outgoing)
+			try await awaitRuntimePromptAck(
+				prompt: prompt.text,
+				timeout: promptAckTimeout
+			)
+		}
 	}
 
 	func waitForConnection(timeout: TimeInterval) async throws {
@@ -227,6 +258,9 @@ private extension DecartRealtimeManager {
 	}
 
 	func closeRealtimeClients() async {
+		// Cancelling the listener below skips its iterator-exit cleanup, so
+		// fail runtime waiters here.
+		failAllPendingRuntimeWaiters(DecartError.websocketError("WebSocket disconnected"))
 		webSocketListenerTask?.cancel()
 		webSocketListenerTask = nil
 		mediaListenerTask?.cancel()
@@ -283,11 +317,14 @@ private extension DecartRealtimeManager {
 						self.isPermanentError = true
 					}
 					self.recordInitialStateError(error)
+					self.failAllPendingRuntimeWaiters(error)
 					self.connectionState = .error
 				}
 			}
 			guard !Task.isCancelled else { return }
-			self?.recordInitialStateError(DecartError.websocketError("WebSocket disconnected"))
+			let disconnectError = DecartError.websocketError("WebSocket disconnected")
+			self?.recordInitialStateError(disconnectError)
+			self?.failAllPendingRuntimeWaiters(disconnectError)
 			self?.connectionState = .disconnected
 			self?.handleUnexpectedDisconnect()
 		}
@@ -591,11 +628,40 @@ private extension DecartRealtimeManager {
 	}
 
 	func recordPromptAck(_ ack: PromptAckMessage) {
+		var runtimeWaiter: CheckedContinuation<Void, Error>?
+		ackQueue.sync {
+			if let promptText = ack.prompt {
+				runtimeWaiter = pendingRuntimePromptWaiters.removeValue(forKey: promptText)
+			} else if let key = pendingRuntimePromptWaiters.keys.first {
+				runtimeWaiter = pendingRuntimePromptWaiters.removeValue(forKey: key)
+			}
+		}
+		if let waiter = runtimeWaiter {
+			if ack.success == true {
+				waiter.resume()
+			} else {
+				waiter.resume(throwing: DecartError.serverError(ack.error ?? "Failed to send prompt"))
+			}
+			return
+		}
 		guard isWaitingForInitialStateAck else { return }
 		pendingPromptAck = ack
 	}
 
 	func recordSetImageAck(_ ack: SetImageAckMessage) {
+		var runtimeWaiter: CheckedContinuation<Void, Error>?
+		ackQueue.sync {
+			runtimeWaiter = pendingRuntimeSetImageWaiter
+			pendingRuntimeSetImageWaiter = nil
+		}
+		if let waiter = runtimeWaiter {
+			if ack.success == true {
+				waiter.resume()
+			} else {
+				waiter.resume(throwing: DecartError.serverError(ack.error ?? "Failed to set image"))
+			}
+			return
+		}
 		guard isWaitingForInitialStateAck else { return }
 		pendingSetImageAck = ack
 	}
@@ -605,10 +671,73 @@ private extension DecartRealtimeManager {
 		pendingInitialStateError = error
 	}
 
+	func failAllPendingRuntimeWaiters(_ error: Error) {
+		var waiters: [CheckedContinuation<Void, Error>] = []
+		ackQueue.sync {
+			waiters.append(contentsOf: pendingRuntimePromptWaiters.values)
+			pendingRuntimePromptWaiters.removeAll()
+			if let setImage = pendingRuntimeSetImageWaiter {
+				waiters.append(setImage)
+				pendingRuntimeSetImageWaiter = nil
+			}
+		}
+		for waiter in waiters {
+			waiter.resume(throwing: error)
+		}
+	}
+
 	func clearPendingInitialState() {
 		pendingPromptAck = nil
 		pendingSetImageAck = nil
 		pendingInitialStateError = nil
+	}
+
+	func awaitRuntimePromptAck(prompt: String, timeout: TimeInterval) async throws {
+		let timeoutTask = Task { [weak self] in
+			try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+			guard !Task.isCancelled, let self else { return }
+			var waiterToFail: CheckedContinuation<Void, Error>?
+			self.ackQueue.sync {
+				waiterToFail = self.pendingRuntimePromptWaiters.removeValue(forKey: prompt)
+			}
+			waiterToFail?.resume(throwing: DecartError.websocketError("Prompt acknowledgment timed out"))
+		}
+		defer { timeoutTask.cancel() }
+
+		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+			var priorWaiter: CheckedContinuation<Void, Error>?
+			ackQueue.sync {
+				priorWaiter = pendingRuntimePromptWaiters.removeValue(forKey: prompt)
+				pendingRuntimePromptWaiters[prompt] = continuation
+			}
+			priorWaiter?.resume(throwing: DecartError.serverError("superseded"))
+		}
+	}
+
+	func awaitRuntimeSetImageAck(
+		timeout: TimeInterval,
+		failureMessage: String
+	) async throws {
+		let timeoutTask = Task { [weak self] in
+			try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+			guard !Task.isCancelled, let self else { return }
+			var waiterToFail: CheckedContinuation<Void, Error>?
+			self.ackQueue.sync {
+				waiterToFail = self.pendingRuntimeSetImageWaiter
+				self.pendingRuntimeSetImageWaiter = nil
+			}
+			waiterToFail?.resume(throwing: DecartError.websocketError("Image send timed out"))
+		}
+		defer { timeoutTask.cancel() }
+
+		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+			var priorWaiter: CheckedContinuation<Void, Error>?
+			ackQueue.sync {
+				priorWaiter = pendingRuntimeSetImageWaiter
+				pendingRuntimeSetImageWaiter = continuation
+			}
+			priorWaiter?.resume(throwing: DecartError.serverError("superseded"))
+		}
 	}
 
 	func sendImageWithPrompt(
@@ -622,5 +751,21 @@ private extension DecartRealtimeManager {
 			enhancePrompt: enhance
 		)
 		sendMessage(.setImage(message))
+	}
+}
+
+// MARK: - Test hooks (@testable)
+
+extension DecartRealtimeManager {
+	internal func test_awaitRuntimePromptAck(prompt: String, timeout: TimeInterval) async throws {
+		try await awaitRuntimePromptAck(prompt: prompt, timeout: timeout)
+	}
+	internal func test_awaitRuntimeSetImageAck(timeout: TimeInterval, failureMessage: String) async throws {
+		try await awaitRuntimeSetImageAck(timeout: timeout, failureMessage: failureMessage)
+	}
+	internal func test_recordPromptAck(_ ack: PromptAckMessage) { recordPromptAck(ack) }
+	internal func test_recordSetImageAck(_ ack: SetImageAckMessage) { recordSetImageAck(ack) }
+	internal func test_failAllPendingRuntimeWaiters(_ error: Error) {
+		failAllPendingRuntimeWaiters(error)
 	}
 }
