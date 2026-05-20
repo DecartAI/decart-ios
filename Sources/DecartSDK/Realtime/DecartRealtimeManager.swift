@@ -59,8 +59,14 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	// double-resume, so ack delivery, timeout, and failure-propagation must
 	// not race.
 	private let ackQueue = DispatchQueue(label: "ai.decart.realtime.ack")
-	private var pendingRuntimePromptWaiters: [String: CheckedContinuation<Void, Error>] = [:]
-	private var pendingRuntimeSetImageWaiter: CheckedContinuation<Void, Error>?
+	// UUID-tagged waiters so a superseded call's send-task error handler can
+	// detect it no longer owns the slot and avoid failing a newer waiter.
+	private struct RuntimeWaiter {
+		let id: UUID
+		let cont: CheckedContinuation<Void, Error>
+	}
+	private var pendingRuntimePromptWaiters: [String: RuntimeWaiter] = [:]
+	private var pendingRuntimeSetImageWaiter: RuntimeWaiter?
 	private var reconnectAttempts: Int = 0
 	private let maxReconnectAttempts: Int = 5
 	private var isReconnecting = false
@@ -628,7 +634,7 @@ private extension DecartRealtimeManager {
 		// prompt field can't be routed to a specific runtime waiter (Swift
 		// dict ordering is non-deterministic) and fall through to the
 		// initial-state path.
-		var runtimeWaiter: CheckedContinuation<Void, Error>?
+		var runtimeWaiter: RuntimeWaiter?
 		if let promptText = ack.prompt {
 			ackQueue.sync {
 				runtimeWaiter = pendingRuntimePromptWaiters.removeValue(forKey: promptText)
@@ -636,9 +642,9 @@ private extension DecartRealtimeManager {
 		}
 		if let waiter = runtimeWaiter {
 			if ack.success == true {
-				waiter.resume()
+				waiter.cont.resume()
 			} else {
-				waiter.resume(throwing: DecartError.serverError(ack.error ?? "Failed to send prompt"))
+				waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to send prompt"))
 			}
 			return
 		}
@@ -647,16 +653,16 @@ private extension DecartRealtimeManager {
 	}
 
 	func recordSetImageAck(_ ack: SetImageAckMessage) {
-		var runtimeWaiter: CheckedContinuation<Void, Error>?
+		var runtimeWaiter: RuntimeWaiter?
 		ackQueue.sync {
 			runtimeWaiter = pendingRuntimeSetImageWaiter
 			pendingRuntimeSetImageWaiter = nil
 		}
 		if let waiter = runtimeWaiter {
 			if ack.success == true {
-				waiter.resume()
+				waiter.cont.resume()
 			} else {
-				waiter.resume(throwing: DecartError.serverError(ack.error ?? "Failed to set image"))
+				waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to set image"))
 			}
 			return
 		}
@@ -670,17 +676,17 @@ private extension DecartRealtimeManager {
 	}
 
 	func failAllPendingRuntimeWaiters(_ error: Error) {
-		var waiters: [CheckedContinuation<Void, Error>] = []
+		var conts: [CheckedContinuation<Void, Error>] = []
 		ackQueue.sync {
-			waiters.append(contentsOf: pendingRuntimePromptWaiters.values)
+			conts.append(contentsOf: pendingRuntimePromptWaiters.values.map { $0.cont })
 			pendingRuntimePromptWaiters.removeAll()
 			if let setImage = pendingRuntimeSetImageWaiter {
-				waiters.append(setImage)
+				conts.append(setImage.cont)
 				pendingRuntimeSetImageWaiter = nil
 			}
 		}
-		for waiter in waiters {
-			waiter.resume(throwing: error)
+		for cont in conts {
+			cont.resume(throwing: error)
 		}
 	}
 
@@ -692,40 +698,47 @@ private extension DecartRealtimeManager {
 
 	// Install the waiter BEFORE invoking `send`, so a fast ack that arrives
 	// while the send is still in flight is delivered to a registered waiter
-	// instead of being dropped.
+	// instead of being dropped. The waiter's UUID is captured by the send
+	// task's error handler so a stale (superseded) send can't fail a newer
+	// waiter that happens to occupy the same key.
 	func awaitRuntimePromptAck(
 		prompt: String,
 		timeout: TimeInterval,
 		send: @escaping @Sendable () async throws -> Void
 	) async throws {
+		let id = UUID()
 		let timeoutTask = Task { [weak self] in
 			try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
 			guard !Task.isCancelled, let self else { return }
-			var waiterToFail: CheckedContinuation<Void, Error>?
+			var waiterToFail: RuntimeWaiter?
 			self.ackQueue.sync {
-				waiterToFail = self.pendingRuntimePromptWaiters.removeValue(forKey: prompt)
+				if self.pendingRuntimePromptWaiters[prompt]?.id == id {
+					waiterToFail = self.pendingRuntimePromptWaiters.removeValue(forKey: prompt)
+				}
 			}
-			waiterToFail?.resume(throwing: DecartError.websocketError("Prompt acknowledgment timed out"))
+			waiterToFail?.cont.resume(throwing: DecartError.websocketError("Prompt acknowledgment timed out"))
 		}
 		defer { timeoutTask.cancel() }
 
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-			var priorWaiter: CheckedContinuation<Void, Error>?
+			var priorWaiter: RuntimeWaiter?
 			ackQueue.sync {
 				priorWaiter = pendingRuntimePromptWaiters.removeValue(forKey: prompt)
-				pendingRuntimePromptWaiters[prompt] = continuation
+				pendingRuntimePromptWaiters[prompt] = RuntimeWaiter(id: id, cont: continuation)
 			}
-			priorWaiter?.resume(throwing: DecartError.serverError("superseded"))
+			priorWaiter?.cont.resume(throwing: DecartError.serverError("superseded"))
 
 			Task { [weak self] in
 				do {
 					try await send()
 				} catch {
-					var waiterToFail: CheckedContinuation<Void, Error>?
+					var waiterToFail: RuntimeWaiter?
 					self?.ackQueue.sync {
-						waiterToFail = self?.pendingRuntimePromptWaiters.removeValue(forKey: prompt)
+						if self?.pendingRuntimePromptWaiters[prompt]?.id == id {
+							waiterToFail = self?.pendingRuntimePromptWaiters.removeValue(forKey: prompt)
+						}
 					}
-					waiterToFail?.resume(throwing: error)
+					waiterToFail?.cont.resume(throwing: error)
 				}
 			}
 		}
@@ -735,52 +748,44 @@ private extension DecartRealtimeManager {
 		timeout: TimeInterval,
 		send: @escaping @Sendable () async throws -> Void
 	) async throws {
+		let id = UUID()
 		let timeoutTask = Task { [weak self] in
 			try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
 			guard !Task.isCancelled, let self else { return }
-			var waiterToFail: CheckedContinuation<Void, Error>?
+			var waiterToFail: RuntimeWaiter?
 			self.ackQueue.sync {
-				waiterToFail = self.pendingRuntimeSetImageWaiter
-				self.pendingRuntimeSetImageWaiter = nil
+				if self.pendingRuntimeSetImageWaiter?.id == id {
+					waiterToFail = self.pendingRuntimeSetImageWaiter
+					self.pendingRuntimeSetImageWaiter = nil
+				}
 			}
-			waiterToFail?.resume(throwing: DecartError.websocketError("Image send timed out"))
+			waiterToFail?.cont.resume(throwing: DecartError.websocketError("Image send timed out"))
 		}
 		defer { timeoutTask.cancel() }
 
 		try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-			var priorWaiter: CheckedContinuation<Void, Error>?
+			var priorWaiter: RuntimeWaiter?
 			ackQueue.sync {
 				priorWaiter = pendingRuntimeSetImageWaiter
-				pendingRuntimeSetImageWaiter = continuation
+				pendingRuntimeSetImageWaiter = RuntimeWaiter(id: id, cont: continuation)
 			}
-			priorWaiter?.resume(throwing: DecartError.serverError("superseded"))
+			priorWaiter?.cont.resume(throwing: DecartError.serverError("superseded"))
 
 			Task { [weak self] in
 				do {
 					try await send()
 				} catch {
-					var waiterToFail: CheckedContinuation<Void, Error>?
+					var waiterToFail: RuntimeWaiter?
 					self?.ackQueue.sync {
-						waiterToFail = self?.pendingRuntimeSetImageWaiter
-						self?.pendingRuntimeSetImageWaiter = nil
+						if self?.pendingRuntimeSetImageWaiter?.id == id {
+							waiterToFail = self?.pendingRuntimeSetImageWaiter
+							self?.pendingRuntimeSetImageWaiter = nil
+						}
 					}
-					waiterToFail?.resume(throwing: error)
+					waiterToFail?.cont.resume(throwing: error)
 				}
 			}
 		}
-	}
-
-	func sendImageWithPrompt(
-		_ imageBase64: String?,
-		prompt: String,
-		enhance: Bool
-	) {
-		let message = SetImageMessage(
-			imageData: imageBase64,
-			prompt: prompt,
-			enhancePrompt: enhance
-		)
-		sendMessage(.setImage(message))
 	}
 }
 
