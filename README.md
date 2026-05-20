@@ -102,8 +102,12 @@ let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: capt
 let localStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
 let remoteStream = try await realtimeManager.connect(localStream: localStream)
 
-// Update prompt in real-time
-realtimeManager.setPrompt(DecartPrompt(text: "Anime World"))
+// Update prompt in real-time (suspends until the server acks)
+do {
+    try await realtimeManager.setPrompt(DecartPrompt(text: "Anime World"))
+} catch {
+    // ack failure, timeout, or websocket disconnect while the call was pending
+}
 
 // Cleanup
 try? await videoTrack.stop()
@@ -289,7 +293,11 @@ func submitAndPoll(model: VideoModel, input: ..., onStatusChange: ((JobStatusRes
 ```swift
 func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream
 func disconnect() async
-func setPrompt(_ prompt: DecartPrompt)
+// Suspends until the server acks. Throws on ack failure, timeout (15s for
+// prompts, 30s for reference-image set_image), or websocket disconnect
+// while the call is pending. Wrap in `do/try await/catch` to surface
+// per-call failures.
+func setPrompt(_ prompt: DecartPrompt) async throws
 
 // State events (connection, queue position, generation ticks, session ID)
 let events: AsyncStream<DecartRealtimeState>
