@@ -11,8 +11,8 @@ jobs:
     name: Build and Test (Swift 6.2.1)
     runs-on: macos-latest
     env:
-      IOS_DEVICE_NAME: "iPhone 16 Pro"
-      IOS_OS_VERSION: "18.5"
+      IOS_DEVICE_NAME: "iPhone 17 Pro"
+      IOS_OS_VERSION: "26.1"
 
     steps:
       - name: Checkout
