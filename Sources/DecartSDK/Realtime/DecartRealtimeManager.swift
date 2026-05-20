@@ -629,45 +629,46 @@ private extension DecartRealtimeManager {
 		}
 	}
 
+	// Initial state takes priority. If a user-initiated setPrompt installs a
+	// runtime waiter while connect is still inside sendInitialState, the next
+	// ack belongs to the initial-state flow — routing it through the runtime
+	// waiter would hang the connect path.
 	func recordPromptAck(_ ack: PromptAckMessage) {
-		// Match by exact prompt text only — same as JS/Python. Acks without a
-		// prompt field can't be routed to a specific runtime waiter (Swift
-		// dict ordering is non-deterministic) and fall through to the
-		// initial-state path.
+		if isWaitingForInitialStateAck {
+			pendingPromptAck = ack
+			return
+		}
+		// Runtime path: match by exact prompt text only (same as JS/Python).
 		var runtimeWaiter: RuntimeWaiter?
 		if let promptText = ack.prompt {
 			ackQueue.sync {
 				runtimeWaiter = pendingRuntimePromptWaiters.removeValue(forKey: promptText)
 			}
 		}
-		if let waiter = runtimeWaiter {
-			if ack.success == true {
-				waiter.cont.resume()
-			} else {
-				waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to send prompt"))
-			}
-			return
+		guard let waiter = runtimeWaiter else { return }
+		if ack.success == true {
+			waiter.cont.resume()
+		} else {
+			waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to send prompt"))
 		}
-		guard isWaitingForInitialStateAck else { return }
-		pendingPromptAck = ack
 	}
 
 	func recordSetImageAck(_ ack: SetImageAckMessage) {
+		if isWaitingForInitialStateAck {
+			pendingSetImageAck = ack
+			return
+		}
 		var runtimeWaiter: RuntimeWaiter?
 		ackQueue.sync {
 			runtimeWaiter = pendingRuntimeSetImageWaiter
 			pendingRuntimeSetImageWaiter = nil
 		}
-		if let waiter = runtimeWaiter {
-			if ack.success == true {
-				waiter.cont.resume()
-			} else {
-				waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to set image"))
-			}
-			return
+		guard let waiter = runtimeWaiter else { return }
+		if ack.success == true {
+			waiter.cont.resume()
+		} else {
+			waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to set image"))
 		}
-		guard isWaitingForInitialStateAck else { return }
-		pendingSetImageAck = ack
 	}
 
 	func recordInitialStateError(_ error: Error) {
