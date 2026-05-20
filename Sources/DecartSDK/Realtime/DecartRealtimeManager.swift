@@ -185,10 +185,7 @@ public extension DecartRealtimeManager {
 				prompt: prompt.text,
 				enhancePrompt: prompt.enrich
 			)
-			try await awaitRuntimeSetImageAck(
-				timeout: imageAckTimeout,
-				failureMessage: "Failed to set image"
-			) {
+			try await awaitRuntimeSetImageAck(timeout: imageAckTimeout) {
 				try await webSocketClient.send(.setImage(setImageMessage) as OutgoingWebSocketMessage)
 			}
 		} else {
@@ -627,12 +624,14 @@ private extension DecartRealtimeManager {
 	}
 
 	func recordPromptAck(_ ack: PromptAckMessage) {
+		// Match by exact prompt text only — same as JS/Python. Acks without a
+		// prompt field can't be routed to a specific runtime waiter (Swift
+		// dict ordering is non-deterministic) and fall through to the
+		// initial-state path.
 		var runtimeWaiter: CheckedContinuation<Void, Error>?
-		ackQueue.sync {
-			if let promptText = ack.prompt {
+		if let promptText = ack.prompt {
+			ackQueue.sync {
 				runtimeWaiter = pendingRuntimePromptWaiters.removeValue(forKey: promptText)
-			} else if let key = pendingRuntimePromptWaiters.keys.first {
-				runtimeWaiter = pendingRuntimePromptWaiters.removeValue(forKey: key)
 			}
 		}
 		if let waiter = runtimeWaiter {
@@ -734,7 +733,6 @@ private extension DecartRealtimeManager {
 
 	func awaitRuntimeSetImageAck(
 		timeout: TimeInterval,
-		failureMessage: String,
 		send: @escaping @Sendable () async throws -> Void
 	) async throws {
 		let timeoutTask = Task { [weak self] in
@@ -792,8 +790,8 @@ extension DecartRealtimeManager {
 	internal func test_awaitRuntimePromptAck(prompt: String, timeout: TimeInterval) async throws {
 		try await awaitRuntimePromptAck(prompt: prompt, timeout: timeout) { /* no-op send */ }
 	}
-	internal func test_awaitRuntimeSetImageAck(timeout: TimeInterval, failureMessage: String) async throws {
-		try await awaitRuntimeSetImageAck(timeout: timeout, failureMessage: failureMessage) { /* no-op send */ }
+	internal func test_awaitRuntimeSetImageAck(timeout: TimeInterval) async throws {
+		try await awaitRuntimeSetImageAck(timeout: timeout) { /* no-op send */ }
 	}
 	internal func test_recordPromptAck(_ ack: PromptAckMessage) { recordPromptAck(ack) }
 	internal func test_recordSetImageAck(_ ack: SetImageAckMessage) { recordSetImageAck(ack) }

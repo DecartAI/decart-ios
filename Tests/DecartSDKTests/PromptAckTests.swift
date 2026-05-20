@@ -149,7 +149,7 @@ final class PromptAckTests: XCTestCase {
 	func testSetImageAckSuccessResolvesWaiter() async throws {
 		let manager = makeManager()
 
-		async let wait: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5, failureMessage: "fail")
+		async let wait: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5)
 		await waitForRegistration()
 
 		manager.test_recordSetImageAck(SetImageAckMessage(
@@ -163,7 +163,7 @@ final class PromptAckTests: XCTestCase {
 	func testSetImageAckFailureThrowsServerError() async throws {
 		let manager = makeManager()
 
-		async let wait: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5, failureMessage: "fail")
+		async let wait: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5)
 		await waitForRegistration()
 
 		manager.test_recordSetImageAck(SetImageAckMessage(
@@ -186,7 +186,7 @@ final class PromptAckTests: XCTestCase {
 		let manager = makeManager()
 
 		do {
-			try await manager.test_awaitRuntimeSetImageAck(timeout: 0.1, failureMessage: "fail")
+			try await manager.test_awaitRuntimeSetImageAck(timeout: 0.1)
 			XCTFail("expected timeout")
 		} catch let DecartError.websocketError(message) {
 			XCTAssertEqual(message, "Image send timed out")
@@ -199,13 +199,13 @@ final class PromptAckTests: XCTestCase {
 		let manager = makeManager()
 
 		let first: Task<Void, Error> = Task {
-			try await manager.test_awaitRuntimeSetImageAck(timeout: 5, failureMessage: "fail")
+			try await manager.test_awaitRuntimeSetImageAck(timeout: 5)
 		}
 		await waitForRegistration()
 
 		// Second call supersedes the first.
 		let second: Task<Void, Error> = Task {
-			try await manager.test_awaitRuntimeSetImageAck(timeout: 5, failureMessage: "fail")
+			try await manager.test_awaitRuntimeSetImageAck(timeout: 5)
 		}
 		await waitForRegistration()
 
@@ -231,7 +231,7 @@ final class PromptAckTests: XCTestCase {
 	func testFailAllPendingRuntimeWaitersFailsSetImageWaiter() async throws {
 		let manager = makeManager()
 
-		async let wait: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5, failureMessage: "fail")
+		async let wait: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5)
 		await waitForRegistration()
 
 		manager.test_failAllPendingRuntimeWaiters(
