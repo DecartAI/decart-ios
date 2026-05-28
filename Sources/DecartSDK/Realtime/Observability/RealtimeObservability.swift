@@ -22,6 +22,8 @@ actor RealtimeObservability {
 	private var logsBuffer: [DecartRealtimeLogEvent] = []
 	private var videoStalled = false
 	private var stallStartMs: Int64 = 0
+	private var lastIcePairStates: [String: Int]?
+	private var pathObserver: NetworkPathObserver?
 
 	init(
 		apiKey: String,
@@ -48,6 +50,30 @@ actor RealtimeObservability {
 		)
 		self.statsUpdates = statsStream.stream
 		self.statsContinuation = statsStream.continuation
+
+		if telemetryEnabled {
+			Task { [weak self] in await self?.startPathMonitoring() }
+		}
+	}
+
+	private func startPathMonitoring() {
+		guard pathObserver == nil else { return }
+		let observer = NetworkPathObserver { [weak self] snapshot, previous in
+			Task { await self?.recordPathChange(snapshot: snapshot, previous: previous) }
+		}
+		pathObserver = observer
+		observer.start()
+	}
+
+	private func recordPathChange(snapshot: NetworkPathSnapshot, previous: NetworkPathSnapshot?) {
+		diagnostic("networkPathChange", data: [
+			"status": .string(snapshot.status),
+			"interfaces": .array(snapshot.interfaces.map(DecartRealtimeJSONValue.string)),
+			"isExpensive": .bool(snapshot.isExpensive),
+			"isConstrained": .bool(snapshot.isConstrained),
+			"previousStatus": previous.map { .string($0.status) } ?? .null,
+			"previousInterfaces": previous.map { .array($0.interfaces.map(DecartRealtimeJSONValue.string)) } ?? .null
+		])
 	}
 
 	nonisolated func emitLog(
@@ -132,9 +158,12 @@ actor RealtimeObservability {
 		logsBuffer.removeAll()
 		videoStalled = false
 		stallStartMs = 0
+		lastIcePairStates = nil
 	}
 
 	func finish() async {
+		pathObserver?.stop()
+		pathObserver = nil
 		await stopTelemetry()
 		diagnosticContinuation.finish()
 		statsContinuation.finish()
@@ -232,6 +261,18 @@ actor RealtimeObservability {
 	}
 
 	private func emitIceDiagnostic(from stats: DecartRealtimeWebRTCStats) {
+		let pairStates = stats.connection.candidatePairStates
+		if !pairStates.isEmpty, pairStates != lastIcePairStates {
+			lastIcePairStates = pairStates
+			let stateData = pairStates.reduce(into: [String: DecartRealtimeJSONValue]()) { result, entry in
+				result[entry.key] = .int(entry.value)
+			}
+			diagnostic("iceCandidatePairsState", data: [
+				"states": .object(stateData),
+				"selectedPairPresent": .bool(stats.connection.selectedCandidatePairs.first != nil)
+			], timestamp: stats.timestamp)
+		}
+
 		guard let pair = stats.connection.selectedCandidatePairs.first else { return }
 		diagnostic("iceCandidatePair", data: [
 			"localCandidateType": .string(pair.local.candidateType),

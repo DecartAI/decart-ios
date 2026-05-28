@@ -186,6 +186,7 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 		public let currentRoundTripTime: Double?
 		public let availableOutgoingBitrate: Double?
 		public let selectedCandidatePairs: [IceCandidatePair]
+		public let candidatePairStates: [String: Int]
 	}
 
 	public let timestamp: Int64
@@ -336,10 +337,18 @@ extension DecartRealtimeWebRTCStats {
 			}
 
 		let candidatePair = statistics.iceCandidatePair.first(where: { $0.state == .succeeded || $0.nominated == true })
+
+		var pairStates: [String: Int] = [:]
+		for pair in statistics.iceCandidatePair {
+			let stateName = pair.state?.rawValue ?? "unknown"
+			pairStates[stateName, default: 0] += 1
+		}
+
 		return Connection(
 			currentRoundTripTime: candidatePair?.currentRoundTripTime,
 			availableOutgoingBitrate: candidatePair?.availableOutgoingBitrate,
-			selectedCandidatePairs: pairs
+			selectedCandidatePairs: pairs,
+			candidatePairStates: pairStates
 		)
 	}
 
