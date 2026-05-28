@@ -66,6 +66,21 @@ actor RealtimeObservability {
 		Task { [weak self] in await self?.appendLog(event) }
 	}
 
+	func recordLog(
+		_ message: String,
+		level: DecartRealtimeLogLevel = .debug,
+		category: String,
+		metadata: [String: String] = [:]
+	) {
+		guard telemetryEnabled else { return }
+		appendLog(DecartRealtimeLogEvent(
+			level: level,
+			category: category,
+			message: message,
+			metadata: metadata
+		))
+	}
+
 	private func appendLog(_ event: DecartRealtimeLogEvent) {
 		let backpressureLimit = maxItemsPerReport * 4
 		if logsBuffer.count >= backpressureLimit {
@@ -125,14 +140,27 @@ actor RealtimeObservability {
 		statsContinuation.finish()
 	}
 
+	func flushPendingIfNeeded() async {
+		guard telemetryEnabled else { return }
+		let hasPending = !statsBuffer.isEmpty || !diagnosticsBuffer.isEmpty || !logsBuffer.isEmpty
+		guard hasPending else { return }
+		let effectiveSessionId = sessionId ?? "pre-session-\(UUID().uuidString)"
+		await flushReports(sessionId: effectiveSessionId)
+	}
+
 	private func flush() async {
 		guard telemetryEnabled, let sessionId else { return }
+		await flushReports(sessionId: sessionId)
+	}
+
+	private func flushReports(sessionId: String) async {
 		while let report = makeReport(sessionId: sessionId) {
 			var request = URLRequest(url: telemetryURL)
 			request.httpMethod = "POST"
 			request.setValue(apiKey, forHTTPHeaderField: "X-API-KEY")
 			request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
 			request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+			request.timeoutInterval = 5
 
 			do {
 				request.httpBody = try JSONEncoder().encode(report)

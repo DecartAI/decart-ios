@@ -178,6 +178,7 @@ public extension DecartRealtimeManager {
 		queuePosition = nil
 		queueSize = nil
 		await closeRealtimeClients()
+		await observability.flushPendingIfNeeded()
 		await observability.stopTelemetry()
 	}
 
@@ -251,12 +252,13 @@ private extension DecartRealtimeManager {
 
 				if isPermanentError || Self.isPermanentErrorMessage(error.localizedDescription) || attempt >= maxAttempts {
 					connectionState = isPermanentError ? .error : .disconnected
-					observability.emitLog(
+					await observability.recordLog(
 						"realtime connect failed permanently",
 						level: .error,
 						category: "realtime.connection",
 						metadata: ["error": error.localizedDescription]
 					)
+					await observability.flushPendingIfNeeded()
 					throw error
 				}
 
@@ -544,12 +546,13 @@ private extension DecartRealtimeManager {
 				self.reconnectAttempts = self.maxReconnectAttempts
 				self.isReconnecting = false
 				self.connectionState = .error
-				self.observability.emitLog(
+				await self.observability.recordLog(
 					"realtime reconnect failed",
 					level: .error,
 					category: "realtime.connection",
 					metadata: ["error": error.localizedDescription]
 				)
+				await self.observability.flushPendingIfNeeded()
 			}
 		}
 	}
