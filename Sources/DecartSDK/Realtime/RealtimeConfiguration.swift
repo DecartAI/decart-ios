@@ -55,7 +55,8 @@ public struct RealtimeConfiguration: Sendable {
 				reconnectAttempts: reconnectAttempts,
 				socketConnectTimeoutInterval: connectionTimeout,
 				primaryTransportConnectTimeout: connectionTimeout,
-				publisherTransportConnectTimeout: connectionTimeout
+				publisherTransportConnectTimeout: connectionTimeout,
+				enableMicrophone: false
 			)
 		}
 	}

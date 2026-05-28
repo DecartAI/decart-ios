@@ -4,6 +4,9 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
 	public let events: AsyncStream<DecartRealtimeState>
 	public let remoteStreamUpdates: AsyncStream<RealtimeMediaStream>
+	public let diagnosticUpdates: AsyncStream<DecartRealtimeDiagnosticEvent>
+	public let statsUpdates: AsyncStream<DecartRealtimeWebRTCStats>
+	public let logUpdates: AsyncStream<DecartRealtimeLogEvent>
 	public private(set) var serviceStatus: RealtimeServiceStatus = .unknown {
 		didSet {
 			guard oldValue != serviceStatus else { return }
@@ -45,6 +48,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private var mediaListenerTask: Task<Void, Never>?
 	private var mediaConnectionStateTask: Task<Void, Never>?
 	private var mediaDisconnectTask: Task<Void, Never>?
+	private var mediaStatsTask: Task<Void, Never>?
 	private var reconnectTask: Task<Void, Never>?
 	private let initialStateAckTimeout: TimeInterval = 30
 	private let promptAckTimeout: TimeInterval = 15
@@ -73,6 +77,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private var isUserInitiatedDisconnect = false
 	private var isPermanentError = false
 	private var lastLocalStream: RealtimeMediaStream?
+	private let observability = RealtimeObservability()
 
 	private var connectionState: DecartRealtimeConnectionState = .idle {
 		didSet {
@@ -110,7 +115,11 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		)
 		self.remoteStreamUpdates = remoteStream
 		self.remoteStreamContinuation = remoteContinuation
+		self.diagnosticUpdates = observability.diagnosticUpdates
+		self.statsUpdates = observability.statsUpdates
+		self.logUpdates = observability.logUpdates
 
+		DecartLiveKitLogging.install(observability: observability)
 		emitStateIfChanged()
 	}
 
@@ -128,12 +137,15 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		mediaListenerTask?.cancel()
 		mediaConnectionStateTask?.cancel()
 		mediaDisconnectTask?.cancel()
+		mediaStatsTask?.cancel()
 		reconnectTask?.cancel()
 		let liveKitMediaChannel = liveKitMediaChannel
 		let webSocketClient = webSocketClient
+		let observability = observability
 		Task {
 			await liveKitMediaChannel?.disconnect()
 			await webSocketClient?.disconnect()
+			await observability.finish()
 		}
 		stateContinuation.finish()
 		remoteStreamContinuation.finish()
@@ -145,6 +157,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 
 public extension DecartRealtimeManager {
 	func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream {
+		observability.emitLog("realtime connect requested", level: .info, category: "realtime.connection")
 		isUserInitiatedDisconnect = false
 		isPermanentError = false
 		reconnectTask?.cancel()
@@ -156,6 +169,7 @@ public extension DecartRealtimeManager {
 	}
 
 	func disconnect() async {
+		observability.emitLog("realtime disconnect requested", level: .info, category: "realtime.connection")
 		isUserInitiatedDisconnect = true
 		isPermanentError = false
 		isReconnecting = false
@@ -173,6 +187,7 @@ public extension DecartRealtimeManager {
 		queuePosition = nil
 		queueSize = nil
 		await closeRealtimeClients()
+		await observability.reset()
 	}
 
 	/// Updates the prompt and suspends until the server acks. Throws on ack
@@ -235,6 +250,7 @@ private extension DecartRealtimeManager {
 
 		await closeRealtimeClients()
 
+		observability.emitLog("opening signaling websocket", level: .debug, category: "realtime.signaling")
 		let wsClient = await WebSocketClient(url: signalingServerURL)
 		webSocketClient = wsClient
 		setupWebSocketListener(wsClient)
@@ -243,12 +259,20 @@ private extension DecartRealtimeManager {
 			try await waitForServiceReady()
 		}
 
+		observability.emitLog("requesting LiveKit room info", level: .debug, category: "realtime.signaling")
 		try await sendMessageThrowing(.liveKitJoin)
 		let roomInfo = try await waitForLiveKitRoomInfo(timeout: options.connection.connectionTimeout)
+		observability.emitLog(
+			"LiveKit room info received",
+			level: .info,
+			category: "realtime.signaling",
+			metadata: ["sessionId": roomInfo.sessionId, "roomName": roomInfo.roomName]
+		)
 
 		let mediaChannel = LiveKitMediaChannel(
 			videoPublishOptions: options.media.video.publishOptions,
-			connectOptions: options.connection.connectOptions
+			connectOptions: options.connection.connectOptions,
+			observability: observability
 		)
 		liveKitMediaChannel = mediaChannel
 		setupMediaListeners(mediaChannel)
@@ -257,6 +281,7 @@ private extension DecartRealtimeManager {
 		try await mediaChannel.connect(roomInfo: roomInfo)
 		try await initialStateAck
 		try await mediaChannel.publishLocalTracks(from: localStream)
+		observability.emitLog("realtime connect completed", level: .info, category: "realtime.connection")
 		return mediaChannel.currentRemoteStream
 	}
 
@@ -272,6 +297,8 @@ private extension DecartRealtimeManager {
 		mediaConnectionStateTask = nil
 		mediaDisconnectTask?.cancel()
 		mediaDisconnectTask = nil
+		mediaStatsTask?.cancel()
+		mediaStatsTask = nil
 		await liveKitMediaChannel?.disconnect()
 		liveKitMediaChannel = nil
 		await webSocketClient?.disconnect()
@@ -290,6 +317,12 @@ private extension DecartRealtimeManager {
 				switch message {
 				case .status(let status):
 					self.serviceStatus = RealtimeServiceStatus.fromStatusString(status.status)
+					self.observability.emitLog(
+						"signaling status update",
+						level: .debug,
+						category: "realtime.signaling",
+						metadata: ["status": status.status]
+					)
 				case .queuePosition(let queue):
 					self.queuePosition = queue.queuePosition
 					self.queueSize = queue.queueSize
@@ -304,6 +337,7 @@ private extension DecartRealtimeManager {
 					self.sessionId = message.id
 				case .generationStarted:
 					self.connectionState = .generating
+					await self.observability.diagnostic("generationStarted", data: [:])
 				case .generationTick(let tick):
 					self.generationTick = tick.seconds
 				case .generationEnded(let ended):
@@ -321,6 +355,12 @@ private extension DecartRealtimeManager {
 					}
 					self.recordInitialStateError(error)
 					self.failAllPendingRuntimeWaiters(error)
+					self.observability.emitLog(
+						"server error received",
+						level: .error,
+						category: "realtime.signaling",
+						metadata: ["error": errorText]
+					)
 					self.connectionState = .error
 				}
 			}
@@ -328,6 +368,11 @@ private extension DecartRealtimeManager {
 			let disconnectError = DecartError.websocketError("WebSocket disconnected")
 			self?.recordInitialStateError(disconnectError)
 			self?.failAllPendingRuntimeWaiters(disconnectError)
+			self?.observability.emitLog(
+				"signaling websocket disconnected",
+				level: .warning,
+				category: "realtime.signaling"
+			)
 			self?.connectionState = .disconnected
 			self?.handleUnexpectedDisconnect()
 		}
@@ -346,6 +391,12 @@ private extension DecartRealtimeManager {
 		mediaConnectionStateTask = Task { [weak self] in
 			for await state in mediaChannel.connectionStateUpdates {
 				guard !Task.isCancelled, let self else { return }
+				self.observability.emitLog(
+					"LiveKit connection state changed",
+					level: .debug,
+					category: "livekit.room",
+					metadata: ["state": state.rawValue]
+				)
 				self.connectionState = state
 				if state == .connected {
 					self.reconnectAttempts = 0
@@ -359,8 +410,22 @@ private extension DecartRealtimeManager {
 			for await disconnect in mediaChannel.disconnectUpdates {
 				guard !Task.isCancelled, let self else { return }
 				DecartLogger.log("LiveKit room disconnected: \(disconnect.reason ?? "unknown")", level: .warning)
+				self.observability.emitLog(
+					"LiveKit room disconnected",
+					level: .warning,
+					category: "livekit.room",
+					metadata: ["reason": disconnect.reason ?? "unknown"]
+				)
 				self.connectionState = .disconnected
 				self.handleUnexpectedDisconnect()
+			}
+		}
+
+		mediaStatsTask?.cancel()
+		mediaStatsTask = Task { [weak self] in
+			for await stats in mediaChannel.statsUpdates {
+				guard !Task.isCancelled, let self else { return }
+				await self.observability.recordStats(stats)
 			}
 		}
 	}
@@ -398,6 +463,7 @@ private extension DecartRealtimeManager {
 
 		isReconnecting = true
 		connectionState = .reconnecting
+		observability.emitLog("realtime reconnect scheduled", level: .warning, category: "realtime.connection")
 		reconnectTask?.cancel()
 		reconnectTask = Task { [weak self] in
 			guard let self else { return }
@@ -415,6 +481,12 @@ private extension DecartRealtimeManager {
 					return
 				} catch {
 					self.reconnectAttempts += 1
+					self.observability.emitLog(
+						"realtime reconnect attempt failed",
+						level: .warning,
+						category: "realtime.connection",
+						metadata: ["attempt": "\(self.reconnectAttempts)", "error": error.localizedDescription]
+					)
 					if self.reconnectAttempts >= self.maxReconnectAttempts {
 						self.isReconnecting = false
 						self.connectionState = .error
