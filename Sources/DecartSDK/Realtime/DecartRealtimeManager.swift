@@ -256,18 +256,28 @@ private extension DecartRealtimeManager {
 						"realtime connect failed permanently",
 						level: .error,
 						category: "realtime.connection",
-						metadata: ["error": error.localizedDescription]
+						metadata: connectionLogMetadata(
+							attempt: attempt + 1,
+							isReconnectAttempt: isReconnectAttempt,
+							error: error
+						)
 					)
 					await observability.flushPendingIfNeeded()
 					throw error
 				}
 
 				let delay = min(pow(2.0, Double(attempt)), 10.0)
+				var retryMetadata = connectionLogMetadata(
+					attempt: attempt + 1,
+					isReconnectAttempt: isReconnectAttempt,
+					error: error
+				)
+				retryMetadata["delaySeconds"] = "\(delay)"
 				observability.emitLog(
 					"realtime connect attempt failed; retrying",
 					level: .warning,
 					category: "realtime.connection",
-					metadata: ["attempt": "\(attempt + 1)", "delay": "\(delay)", "error": error.localizedDescription]
+					metadata: retryMetadata
 				)
 				attempt += 1
 				connectionState = isReconnectAttempt ? .reconnecting : .connecting
@@ -292,43 +302,56 @@ private extension DecartRealtimeManager {
 
 		await closeRealtimeClients()
 
-		let websocketStart = Date()
 		let wsClient: WebSocketClient
+		let websocketStart = Date()
 		do {
 			wsClient = try await WebSocketClient(
 				url: signalingServerURL,
 				timeout: options.connection.signalingConnectTimeout
 			)
-			await observability.diagnostic(
-				"client-session-connection-breakdown",
-				data: [
-					"attempt": .int(attempt),
-					"phase": .string("websocket-open"),
-					"durationMs": .int(Int(Date().timeIntervalSince(websocketStart) * 1000)),
-					"success": .bool(true)
-				]
-			)
+			await recordConnectionPhase("websocket-open", startedAt: websocketStart, success: true)
 		} catch {
-			await observability.diagnostic(
-				"client-session-connection-breakdown",
-				data: [
-					"attempt": .int(attempt),
-					"phase": .string("websocket-open"),
-					"durationMs": .int(Int(Date().timeIntervalSince(websocketStart) * 1000)),
-					"success": .bool(false),
-					"errorType": .string(String(describing: type(of: error)))
-				]
+			await recordConnectionPhase("websocket-open", startedAt: websocketStart, success: false)
+			await observability.recordLog(
+				"connection phase failed",
+				level: .error,
+				category: "realtime.connection",
+				metadata: connectionLogMetadata(
+					attempt: attempt,
+					isReconnectAttempt: isReconnectAttempt,
+					phase: "websocket-open",
+					error: error
+				)
 			)
 			throw error
 		}
 		webSocketClient = wsClient
 		setupWebSocketListener(wsClient)
 
-		try await wsClient.send(OutgoingWebSocketMessage.liveKitJoin)
-		let roomInfo = try await roomInfoRequest.wait(
-			timeout: options.connection.roomInfoTimeout,
-			timeoutError: DecartError.websocketError("LiveKit room info timed out")
-		)
+		let roomInfo: LiveKitRoomInfoMessage
+		let roomInfoStart = Date()
+		do {
+			try await wsClient.send(OutgoingWebSocketMessage.liveKitJoin)
+			roomInfo = try await roomInfoRequest.wait(
+				timeout: options.connection.roomInfoTimeout,
+				timeoutError: DecartError.websocketError("LiveKit room info timed out")
+			)
+			await recordConnectionPhase("room-info", startedAt: roomInfoStart, success: true)
+		} catch {
+			await recordConnectionPhase("room-info", startedAt: roomInfoStart, success: false)
+			await observability.recordLog(
+				"connection phase failed",
+				level: .error,
+				category: "realtime.connection",
+				metadata: connectionLogMetadata(
+					attempt: attempt,
+					isReconnectAttempt: isReconnectAttempt,
+					phase: "room-info",
+					error: error
+				)
+			)
+			throw error
+		}
 
 		let mediaChannel = LiveKitMediaChannel(
 			videoPublishOptions: options.media.video.publishOptions,
@@ -342,7 +365,25 @@ private extension DecartRealtimeManager {
 		let shouldWaitForInitialState = hasCallerProvidedInitialState()
 		suppressMediaConnectedState = true
 		async let initialStateAck: Void = sendInitialState()
-		try await mediaChannel.connect(roomInfo: roomInfo)
+		let liveKitConnectStart = Date()
+		do {
+			try await mediaChannel.connect(roomInfo: roomInfo)
+			await recordConnectionPhase("livekit-connect", startedAt: liveKitConnectStart, success: true)
+		} catch {
+			await recordConnectionPhase("livekit-connect", startedAt: liveKitConnectStart, success: false)
+			await observability.recordLog(
+				"connection phase failed",
+				level: .error,
+				category: "realtime.connection",
+				metadata: connectionLogMetadata(
+					attempt: attempt,
+					isReconnectAttempt: isReconnectAttempt,
+					phase: "livekit-connect",
+					error: error
+				)
+			)
+			throw error
+		}
 		if shouldWaitForInitialState {
 			try await initialStateAck
 		} else {
@@ -352,14 +393,38 @@ private extension DecartRealtimeManager {
 		suppressMediaConnectedState = false
 		connectionState = .connected
 		await observability.sessionStarted(roomInfo.sessionId)
+		return mediaChannel.currentRemoteStream
+	}
+
+	func recordConnectionPhase(_ phase: String, startedAt: Date, success: Bool) async {
 		await observability.diagnostic(
-			"client-session-connection-breakdown",
+			"phaseTiming",
 			data: [
-				"attempt": .int(attempt),
-				"success": .bool(true)
+				"phase": .string(phase),
+				"durationMs": .int(max(Int(Date().timeIntervalSince(startedAt) * 1000), 0)),
+				"success": .bool(success)
 			]
 		)
-		return mediaChannel.currentRemoteStream
+	}
+
+	func connectionLogMetadata(
+		attempt: Int,
+		isReconnectAttempt: Bool,
+		phase: String? = nil,
+		error: Error? = nil
+	) -> [String: String] {
+		var metadata = [
+			"attempt": "\(attempt)",
+			"isReconnectAttempt": "\(isReconnectAttempt)"
+		]
+		if let phase {
+			metadata["phase"] = phase
+		}
+		if let error {
+			metadata["error"] = error.localizedDescription
+			metadata["errorType"] = String(describing: type(of: error))
+		}
+		return metadata
 	}
 
 	func closeRealtimeClients() async {
@@ -418,7 +483,6 @@ private extension DecartRealtimeManager {
 					self.sessionId = message.id
 				case .generationStarted:
 					self.connectionState = .generating
-					await self.observability.diagnostic("generationStarted", data: [:])
 				case .generationTick(let tick):
 					self.generationTick = tick.seconds
 				case .generationEnded(let ended):

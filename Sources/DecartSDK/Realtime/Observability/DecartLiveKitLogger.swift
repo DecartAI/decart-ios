@@ -81,8 +81,8 @@ private extension String {
 private extension LogLevel {
 	var telemetryLevel: DecartRealtimeLogLevel? {
 		switch self {
-		case .warning: return .warning
 		case .error: return .error
+		case .warning: return .warning
 		case .debug, .info: return nil
 		}
 	}

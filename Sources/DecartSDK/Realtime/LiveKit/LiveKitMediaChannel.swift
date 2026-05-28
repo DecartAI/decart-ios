@@ -139,15 +139,8 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	}
 
 	private func pollTrackState() {
-		let tracks: [Track] = [
-			localVideoTrack,
-			remoteVideoTrack
-		].compactMap { $0 }
-
-		for track in tracks {
-			guard let statistics = track.statistics else { continue }
-			statsContinuation.yield(DecartRealtimeWebRTCStats.make(from: statistics))
-		}
+		guard let statistics = (localVideoTrack ?? remoteVideoTrack)?.statistics else { return }
+		statsContinuation.yield(DecartRealtimeWebRTCStats.make(from: statistics))
 	}
 
 	private func shouldAcceptTrack(from participant: RemoteParticipant) -> Bool {
@@ -227,12 +220,6 @@ extension LiveKitMediaChannel: RoomDelegate {
 	}
 
 	func room(_ room: Room, didCompleteReconnectWithMode reconnectMode: ReconnectMode) {
-		observability.emitLog(
-			"LiveKit reconnect completed",
-			level: .info,
-			category: "livekit.room",
-			metadata: ["mode": "\(reconnectMode)"]
-		)
 		connectionStateContinuation.yield(.connected)
 	}
 

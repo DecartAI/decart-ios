@@ -22,7 +22,6 @@ actor RealtimeObservability {
 	private var logsBuffer: [DecartRealtimeLogEvent] = []
 	private var videoStalled = false
 	private var stallStartMs: Int64 = 0
-	private var lastIcePairStates: [String: Int]?
 	private var pathObserver: NetworkPathObserver?
 
 	init(
@@ -66,14 +65,19 @@ actor RealtimeObservability {
 	}
 
 	private func recordPathChange(snapshot: NetworkPathSnapshot, previous: NetworkPathSnapshot?) {
-		diagnostic("networkPathChange", data: [
-			"status": .string(snapshot.status),
-			"interfaces": .array(snapshot.interfaces.map(DecartRealtimeJSONValue.string)),
-			"isExpensive": .bool(snapshot.isExpensive),
-			"isConstrained": .bool(snapshot.isConstrained),
-			"previousStatus": previous.map { .string($0.status) } ?? .null,
-			"previousInterfaces": previous.map { .array($0.interfaces.map(DecartRealtimeJSONValue.string)) } ?? .null
-		])
+		guard snapshot.status == "unsatisfied" else { return }
+		recordLog(
+			"network path became unsatisfied",
+			level: .error,
+			category: "network.path",
+			metadata: [
+				"interfaces": snapshot.interfaces.joined(separator: ","),
+				"previousStatus": previous?.status ?? "none",
+				"previousInterfaces": previous?.interfaces.joined(separator: ",") ?? "none",
+				"isExpensive": "\(snapshot.isExpensive)",
+				"isConstrained": "\(snapshot.isConstrained)"
+			]
+		)
 	}
 
 	nonisolated func emitLog(
@@ -133,7 +137,6 @@ actor RealtimeObservability {
 			statsBuffer.append(stats)
 		}
 		detectVideoStall(stats)
-		emitIceDiagnostic(from: stats)
 	}
 
 	func sessionStarted(_ sessionId: String) {
@@ -158,7 +161,6 @@ actor RealtimeObservability {
 		logsBuffer.removeAll()
 		videoStalled = false
 		stallStartMs = 0
-		lastIcePairStates = nil
 	}
 
 	func finish() async {
@@ -260,29 +262,6 @@ actor RealtimeObservability {
 		}
 	}
 
-	private func emitIceDiagnostic(from stats: DecartRealtimeWebRTCStats) {
-		let pairStates = stats.connection.candidatePairStates
-		if !pairStates.isEmpty, pairStates != lastIcePairStates {
-			lastIcePairStates = pairStates
-			let stateData = pairStates.reduce(into: [String: DecartRealtimeJSONValue]()) { result, entry in
-				result[entry.key] = .int(entry.value)
-			}
-			diagnostic("iceCandidatePairsState", data: [
-				"states": .object(stateData),
-				"selectedPairPresent": .bool(stats.connection.selectedCandidatePairs.first != nil)
-			], timestamp: stats.timestamp)
-		}
-
-		guard let pair = stats.connection.selectedCandidatePairs.first else { return }
-		diagnostic("iceCandidatePair", data: [
-			"localCandidateType": .string(pair.local.candidateType),
-			"localProtocol": .string(pair.local.protocol),
-			"remoteCandidateType": .string(pair.remote.candidateType),
-			"remoteProtocol": .string(pair.remote.protocol),
-			"currentRoundTripTime": stats.connection.currentRoundTripTime.map(DecartRealtimeJSONValue.double) ?? .null,
-			"availableOutgoingBitrate": stats.connection.availableOutgoingBitrate.map(DecartRealtimeJSONValue.double) ?? .null
-		], timestamp: stats.timestamp)
-	}
 }
 
 private struct TelemetryReport: Encodable {
@@ -312,14 +291,14 @@ private struct TelemetryLog: Encodable {
 	let timestamp: Int64
 	let status: DecartRealtimeLogLevel
 	let message: String
+	let data: [String: String]?
 	let tags: [String: String]
 
 	init(_ event: DecartRealtimeLogEvent) {
 		self.timestamp = event.timestamp
 		self.status = event.level
 		self.message = event.message
-		var tags = event.metadata
-		tags["category"] = event.category
-		self.tags = tags
+		self.data = event.metadata.isEmpty ? nil : event.metadata
+		self.tags = ["category": event.category]
 	}
 }
