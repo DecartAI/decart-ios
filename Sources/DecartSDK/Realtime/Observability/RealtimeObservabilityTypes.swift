@@ -55,21 +55,21 @@ public enum DecartRealtimeJSONValue: Codable, Equatable, Sendable {
 	}
 }
 
-public enum DecartRealtimeLogLevel: String, Codable, Sendable {
+enum DecartRealtimeLogLevel: String, Codable, Sendable {
 	case debug
 	case info
 	case warning
 	case error
 }
 
-public struct DecartRealtimeLogEvent: Codable, Sendable {
-	public let timestamp: Int64
-	public let level: DecartRealtimeLogLevel
-	public let category: String
-	public let message: String
-	public let metadata: [String: String]
+struct DecartRealtimeLogEvent: Sendable {
+	let timestamp: Int64
+	let level: DecartRealtimeLogLevel
+	let category: String
+	let message: String
+	let metadata: [String: String]
 
-	public init(
+	init(
 		timestamp: Int64 = DecartRealtimeClock.nowMilliseconds(),
 		level: DecartRealtimeLogLevel,
 		category: String,

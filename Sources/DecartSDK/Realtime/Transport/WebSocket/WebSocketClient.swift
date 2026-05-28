@@ -10,25 +10,31 @@ actor WebSocketClient {
 	private let eventStreamContinuation: AsyncStream<IncomingWebSocketMessage>.Continuation
 	nonisolated let websocketEventStream: AsyncStream<IncomingWebSocketMessage>
 
-	init(url: URL) async {
+	init(url: URL, timeout: TimeInterval) async throws {
 		let (websocketEventStream, eventStreamContinuation) =
 			AsyncStream.makeStream(of: IncomingWebSocketMessage.self)
 		self.eventStreamContinuation = eventStreamContinuation
 		self.websocketEventStream = websocketEventStream
 
-		do {
-			let newSocket = try await WebSocket.system(url: url)
-			socket = newSocket
-			try await newSocket.open()
-			mountListener(socket: newSocket)
-		} catch {
-			socket = nil
-			eventStreamContinuation.finish()
-			DecartLogger.log(
-				"unable to open websocket: \(error)",
-				level: .error
-			)
+		let newSocket = try await withThrowingTaskGroup(of: WebSocket.self) { group in
+			group.addTask {
+				let socket = try await WebSocket.system(url: url)
+				try await socket.open()
+				return socket
+			}
+			group.addTask {
+				try await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+				throw DecartError.websocketError("WebSocket open timeout")
+			}
+
+			guard let socket = try await group.next() else {
+				throw DecartError.websocketError("WebSocket open failed")
+			}
+			group.cancelAll()
+			return socket
 		}
+		self.socket = newSocket
+		mountListener(socket: newSocket)
 	}
 
 	private func mountListener(socket: WebSocket) {

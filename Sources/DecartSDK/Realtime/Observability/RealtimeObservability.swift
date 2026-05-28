@@ -3,15 +3,38 @@ import Foundation
 actor RealtimeObservability {
 	nonisolated let diagnosticUpdates: AsyncStream<DecartRealtimeDiagnosticEvent>
 	nonisolated let statsUpdates: AsyncStream<DecartRealtimeWebRTCStats>
-	nonisolated let logUpdates: AsyncStream<DecartRealtimeLogEvent>
+
+	private let apiKey: String
+	private let model: String
+	private let integration: String?
+	private let telemetryEnabled: Bool
+	private let userAgent: String
+	private let telemetryURL = URL(string: "https://platform.decart.ai/api/v1/telemetry")!
+	private let reportIntervalNanoseconds: UInt64 = 10_000_000_000
+	private let maxItemsPerReport = 120
 
 	private let diagnosticContinuation: AsyncStream<DecartRealtimeDiagnosticEvent>.Continuation
 	private let statsContinuation: AsyncStream<DecartRealtimeWebRTCStats>.Continuation
-	private nonisolated let logContinuation: AsyncStream<DecartRealtimeLogEvent>.Continuation
+	private var telemetryTask: Task<Void, Never>?
+	private var sessionId: String?
+	private var statsBuffer: [DecartRealtimeWebRTCStats] = []
+	private var diagnosticsBuffer: [DecartRealtimeDiagnosticEvent] = []
+	private var logsBuffer: [DecartRealtimeLogEvent] = []
 	private var videoStalled = false
 	private var stallStartMs: Int64 = 0
 
-	init() {
+	init(
+		apiKey: String,
+		model: String,
+		integration: String?,
+		telemetryEnabled: Bool
+	) {
+		self.apiKey = apiKey
+		self.model = model
+		self.integration = integration
+		self.telemetryEnabled = telemetryEnabled
+		self.userAgent = DecartUserAgent.build(integration: integration)
+
 		let diagnosticStream = AsyncStream.makeStream(
 			of: DecartRealtimeDiagnosticEvent.self,
 			bufferingPolicy: .bufferingNewest(100)
@@ -25,13 +48,6 @@ actor RealtimeObservability {
 		)
 		self.statsUpdates = statsStream.stream
 		self.statsContinuation = statsStream.continuation
-
-		let logStream = AsyncStream.makeStream(
-			of: DecartRealtimeLogEvent.self,
-			bufferingPolicy: .bufferingNewest(200)
-		)
-		self.logUpdates = logStream.stream
-		self.logContinuation = logStream.continuation
 	}
 
 	nonisolated func emitLog(
@@ -40,13 +56,22 @@ actor RealtimeObservability {
 		category: String,
 		metadata: [String: String] = [:]
 	) {
+		guard telemetryEnabled else { return }
 		let event = DecartRealtimeLogEvent(
 			level: level,
 			category: category,
 			message: message,
 			metadata: metadata
 		)
-		logContinuation.yield(event)
+		Task { [weak self] in await self?.appendLog(event) }
+	}
+
+	private func appendLog(_ event: DecartRealtimeLogEvent) {
+		let backpressureLimit = maxItemsPerReport * 4
+		if logsBuffer.count >= backpressureLimit {
+			logsBuffer.removeFirst(logsBuffer.count - backpressureLimit + 1)
+		}
+		logsBuffer.append(event)
 	}
 
 	func diagnostic(
@@ -56,24 +81,107 @@ actor RealtimeObservability {
 	) {
 		let event = DecartRealtimeDiagnosticEvent(name: name, data: data, timestamp: timestamp)
 		diagnosticContinuation.yield(event)
+		if telemetryEnabled {
+			diagnosticsBuffer.append(event)
+		}
 	}
 
 	func recordStats(_ stats: DecartRealtimeWebRTCStats) {
 		statsContinuation.yield(stats)
+		if telemetryEnabled, sessionId != nil {
+			statsBuffer.append(stats)
+		}
 		detectVideoStall(stats)
 		emitIceDiagnostic(from: stats)
 	}
 
-	func reset() {
+	func sessionStarted(_ sessionId: String) {
+		guard telemetryEnabled else { return }
+		self.sessionId = sessionId
+		telemetryTask?.cancel()
+		let reportIntervalNanoseconds = reportIntervalNanoseconds
+		telemetryTask = Task { [weak self] in
+			while !Task.isCancelled {
+				try? await Task.sleep(nanoseconds: reportIntervalNanoseconds)
+				await self?.flush()
+			}
+		}
+	}
+
+	func stopTelemetry() async {
+		telemetryTask?.cancel()
+		telemetryTask = nil
+		sessionId = nil
+		statsBuffer.removeAll()
+		diagnosticsBuffer.removeAll()
+		logsBuffer.removeAll()
 		videoStalled = false
 		stallStartMs = 0
 	}
 
 	func finish() async {
-		reset()
+		await stopTelemetry()
 		diagnosticContinuation.finish()
 		statsContinuation.finish()
-		logContinuation.finish()
+	}
+
+	private func flush() async {
+		guard telemetryEnabled, let sessionId else { return }
+		while let report = makeReport(sessionId: sessionId) {
+			var request = URLRequest(url: telemetryURL)
+			request.httpMethod = "POST"
+			request.setValue(apiKey, forHTTPHeaderField: "X-API-KEY")
+			request.setValue(userAgent, forHTTPHeaderField: "User-Agent")
+			request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+			do {
+				request.httpBody = try JSONEncoder().encode(report)
+				_ = try? await URLSession.shared.data(for: request)
+			} catch {
+				// Telemetry is best effort and should never affect SDK behavior.
+			}
+		}
+	}
+
+	private func makeReport(sessionId: String) -> TelemetryReport? {
+		let logsChunk = drainLogs(limit: maxItemsPerReport)
+		guard !statsBuffer.isEmpty || !diagnosticsBuffer.isEmpty || !logsChunk.isEmpty else {
+			return nil
+		}
+
+		let stats = Array(statsBuffer.prefix(maxItemsPerReport))
+		statsBuffer.removeFirst(stats.count)
+
+		let diagnostics = Array(diagnosticsBuffer.prefix(maxItemsPerReport))
+		diagnosticsBuffer.removeFirst(diagnostics.count)
+
+		var tags = [
+			"session_id": sessionId,
+			"sdk_version": DecartUserAgent.sdkVersion,
+			"model": model
+		]
+		if let integration, !integration.isEmpty {
+			tags["integration"] = integration
+		}
+
+		return TelemetryReport(
+			sessionId: sessionId,
+			timestamp: DecartRealtimeClock.nowMilliseconds(),
+			sdkVersion: DecartUserAgent.sdkVersion,
+			model: model,
+			tags: tags,
+			stats: stats,
+			diagnostics: diagnostics.map(TelemetryDiagnostic.init),
+			logs: logsChunk.map(TelemetryLog.init)
+		)
+	}
+
+	private func drainLogs(limit: Int) -> [DecartRealtimeLogEvent] {
+		let count = min(limit, logsBuffer.count)
+		guard count > 0 else { return [] }
+		let chunk = Array(logsBuffer.prefix(count))
+		logsBuffer.removeFirst(count)
+		return chunk
 	}
 
 	private func detectVideoStall(_ stats: DecartRealtimeWebRTCStats) {
@@ -105,5 +213,44 @@ actor RealtimeObservability {
 			"currentRoundTripTime": stats.connection.currentRoundTripTime.map(DecartRealtimeJSONValue.double) ?? .null,
 			"availableOutgoingBitrate": stats.connection.availableOutgoingBitrate.map(DecartRealtimeJSONValue.double) ?? .null
 		], timestamp: stats.timestamp)
+	}
+}
+
+private struct TelemetryReport: Encodable {
+	let sessionId: String
+	let timestamp: Int64
+	let sdkVersion: String
+	let model: String
+	let tags: [String: String]
+	let stats: [DecartRealtimeWebRTCStats]
+	let diagnostics: [TelemetryDiagnostic]
+	let logs: [TelemetryLog]
+}
+
+private struct TelemetryDiagnostic: Encodable {
+	let name: String
+	let data: [String: DecartRealtimeJSONValue]
+	let timestamp: Int64
+
+	init(_ event: DecartRealtimeDiagnosticEvent) {
+		self.name = event.name
+		self.data = event.data
+		self.timestamp = event.timestamp
+	}
+}
+
+private struct TelemetryLog: Encodable {
+	let timestamp: Int64
+	let status: DecartRealtimeLogLevel
+	let message: String
+	let tags: [String: String]
+
+	init(_ event: DecartRealtimeLogEvent) {
+		self.timestamp = event.timestamp
+		self.status = event.level
+		self.message = event.message
+		var tags = event.metadata
+		tags["category"] = event.category
+		self.tags = tags
 	}
 }

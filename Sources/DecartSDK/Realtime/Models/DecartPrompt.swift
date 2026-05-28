@@ -6,7 +6,7 @@ public struct DecartPrompt: Sendable {
 	// for lucy 14b we must send a ref image with text prompt
 	public let referenceImageData: Data?
 
-	public init(text: String, referenceImageData: Data? = nil, enrich: Bool = false) {
+	public init(text: String, referenceImageData: Data? = nil, enrich: Bool = true) {
 		self.text = text
 		self.referenceImageData = referenceImageData
 		self.enrich = enrich

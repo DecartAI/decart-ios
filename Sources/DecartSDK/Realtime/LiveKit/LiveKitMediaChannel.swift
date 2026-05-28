@@ -27,6 +27,7 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	#if os(iOS) || os(visionOS) || os(tvOS)
 	private var previousAudioEngineAvailability: AudioEngineAvailability?
 	private var previousAudioSessionAutomaticConfiguration: Bool?
+	private var previousVoiceProcessingEnabled: Bool?
 	#endif
 
 	init(
@@ -72,7 +73,6 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	deinit {
 		let room = room
 		statsPollingTask?.cancel()
-		restoreLiveKitAudioEngine()
 		Task { await room?.disconnect() }
 		remoteStreamContinuation.finish()
 		connectionStateContinuation.finish()
@@ -88,25 +88,7 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		statsPollingTask?.cancel()
 		statsPollingTask = nil
 
-		observability.emitLog(
-			"LiveKit room connect starting",
-			level: .info,
-			category: "livekit.room",
-			metadata: ["roomName": roomInfo.roomName]
-		)
-
-		do {
-			try await room.connect(url: roomInfo.liveKitURL, token: roomInfo.token)
-		} catch {
-			restoreLiveKitAudioEngine()
-			throw error
-		}
-		observability.emitLog(
-			"LiveKit room connect completed",
-			level: .info,
-			category: "livekit.room",
-			metadata: ["roomName": roomInfo.roomName]
-		)
+		try await room.connect(url: roomInfo.liveKitURL, token: roomInfo.token)
 	}
 
 	func disconnect() async {
@@ -129,7 +111,6 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 			localVideoTrack = videoTrack
 			await videoTrack.set(reportStatistics: true)
 			startStatsPollingIfNeeded()
-			observability.emitLog("publishing local video track", level: .debug, category: "livekit.publish")
 			try await room.localParticipant.publish(videoTrack: videoTrack, options: videoPublishOptions)
 		}
 	}
@@ -145,10 +126,6 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	private func emitRemoteStreamIfAvailable() {
 		guard remoteVideoTrack != nil else { return }
 		remoteStreamContinuation.yield(currentRemoteStream)
-	}
-
-	private func shouldAcceptTrack(from participant: RemoteParticipant) -> Bool {
-		participant.identity?.stringValue.hasPrefix("inference-server-") == true
 	}
 
 	private func startStatsPollingIfNeeded() {
@@ -173,15 +150,21 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		}
 	}
 
+	private func shouldAcceptTrack(from participant: RemoteParticipant) -> Bool {
+		participant.identity?.stringValue.hasPrefix("inference-server-") == true
+	}
+
 	private func disableLiveKitAudioEngine() {
 		#if os(iOS) || os(visionOS) || os(tvOS)
 		let audioManager = AudioManager.shared
 		if previousAudioEngineAvailability == nil {
 			previousAudioEngineAvailability = audioManager.engineAvailability
 			previousAudioSessionAutomaticConfiguration = audioManager.audioSession.isAutomaticConfigurationEnabled
+			previousVoiceProcessingEnabled = audioManager.isVoiceProcessingEnabled
 		}
 		audioManager.audioSession.isAutomaticConfigurationEnabled = false
 		do {
+			try audioManager.setVoiceProcessingEnabled(false)
 			try audioManager.setEngineAvailability(.none)
 		} catch {
 			observability.emitLog(
@@ -191,7 +174,6 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 				metadata: ["error": error.localizedDescription]
 			)
 		}
-		observability.emitLog("LiveKit audio engine disabled for video-only realtime session", level: .debug, category: "livekit.audio")
 		#endif
 	}
 
@@ -201,32 +183,21 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		if let previousAudioSessionAutomaticConfiguration {
 			audioManager.audioSession.isAutomaticConfigurationEnabled = previousAudioSessionAutomaticConfiguration
 		}
-		if let previousAudioEngineAvailability {
-			do {
-				try audioManager.setEngineAvailability(previousAudioEngineAvailability)
-			} catch {
-				observability.emitLog(
-					"failed to restore LiveKit audio engine",
-					level: .warning,
-					category: "livekit.audio",
-					metadata: ["error": error.localizedDescription]
-				)
-			}
+		if let previousVoiceProcessingEnabled {
+			try? audioManager.setVoiceProcessingEnabled(previousVoiceProcessingEnabled)
 		}
-		previousAudioSessionAutomaticConfiguration = nil
+		if let previousAudioEngineAvailability {
+			try? audioManager.setEngineAvailability(previousAudioEngineAvailability)
+		}
 		previousAudioEngineAvailability = nil
+		previousAudioSessionAutomaticConfiguration = nil
+		previousVoiceProcessingEnabled = nil
 		#endif
 	}
 }
 
 extension LiveKitMediaChannel: RoomDelegate {
 	func room(_ room: Room, didUpdateConnectionState connectionState: ConnectionState, from oldConnectionState: ConnectionState) {
-		observability.emitLog(
-			"LiveKit room connection state update",
-			level: .debug,
-			category: "livekit.room",
-			metadata: ["from": "\(oldConnectionState)", "to": "\(connectionState)"]
-		)
 		switch connectionState {
 		case .connected:
 			connectionStateContinuation.yield(.connected)
@@ -242,18 +213,12 @@ extension LiveKitMediaChannel: RoomDelegate {
 	}
 
 	func room(_ room: Room, didDisconnectWithError error: LiveKitError?) {
-		observability.emitLog(
-			"LiveKit room disconnected",
-			level: .warning,
-			category: "livekit.room",
-			metadata: ["error": error?.localizedDescription ?? "none"]
-		)
 		disconnectContinuation.yield(DisconnectInfo(reason: error?.localizedDescription))
 	}
 
 	func room(_ room: Room, didStartReconnectWithMode reconnectMode: ReconnectMode) {
 		observability.emitLog(
-			"LiveKit room reconnect starting",
+			"LiveKit reconnect started",
 			level: .warning,
 			category: "livekit.room",
 			metadata: ["mode": "\(reconnectMode)"]
@@ -263,7 +228,7 @@ extension LiveKitMediaChannel: RoomDelegate {
 
 	func room(_ room: Room, didCompleteReconnectWithMode reconnectMode: ReconnectMode) {
 		observability.emitLog(
-			"LiveKit room reconnect completed",
+			"LiveKit reconnect completed",
 			level: .info,
 			category: "livekit.room",
 			metadata: ["mode": "\(reconnectMode)"]
@@ -271,21 +236,22 @@ extension LiveKitMediaChannel: RoomDelegate {
 		connectionStateContinuation.yield(.connected)
 	}
 
+	func room(_ room: Room, didFailToConnectWithError error: LiveKitError?) {
+		observability.emitLog(
+			"LiveKit room failed to connect",
+			level: .error,
+			category: "livekit.room",
+			metadata: ["error": error?.localizedDescription ?? "unknown"]
+		)
+	}
+
 	func room(_ room: Room, participant: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {
 		guard shouldAcceptTrack(from: participant) else { return }
-		switch publication.track {
-		case let videoTrack as VideoTrack:
-			remoteVideoTrack = videoTrack
+		if let videoTrack = publication.track as? VideoTrack {
+			Task { await videoTrack.set(reportStatistics: true) }
 			startStatsPollingIfNeeded()
-			observability.emitLog(
-				"remote video track received",
-				level: .debug,
-				category: "livekit.track",
-				metadata: ["participant": participant.identity?.stringValue ?? ""]
-			)
+			remoteVideoTrack = videoTrack
 			emitRemoteStreamIfAvailable()
-		default:
-			break
 		}
 	}
 }

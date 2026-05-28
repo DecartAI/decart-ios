@@ -6,13 +6,8 @@ enum DecartLiveKitLogging {
 		LiveKitSDK.setLogger(
 			DecartLiveKitLogger(
 				observability: observability,
-				forwardedLogger: OSLogger(minLevel: .debug, rtc: true, ffi: true)
+				forwardedLogger: OSLogger(minLevel: .warning, rtc: false, ffi: false)
 			)
-		)
-		observability.emitLog(
-			"LiveKit logger installed with WebRTC and FFI forwarding",
-			level: .debug,
-			category: "livekit"
 		)
 	}
 }
@@ -37,8 +32,6 @@ private final class DecartLiveKitLogger: LiveKit.Logger, @unchecked Sendable {
 		metaData: ScopedMetadataContainer
 	) {
 		let resolvedMessage = message()
-		let messageText = resolvedMessage.description.sanitizedLiveKitLogValue
-		let decartLevel = level.decartLevel
 		forwardedLogger.log(
 			resolvedMessage,
 			level,
@@ -50,6 +43,9 @@ private final class DecartLiveKitLogger: LiveKit.Logger, @unchecked Sendable {
 			metaData: metaData
 		)
 
+		guard let decartLevel = level.telemetryLevel else { return }
+
+		let messageText = resolvedMessage.description.sanitizedLiveKitLogValue
 		let category = "livekit.\(String(describing: type))"
 		let metadata = metaData.reduce(into: [String: String]()) { result, pair in
 			result[pair.key] = pair.value.description.sanitizedLiveKitLogValue
@@ -83,16 +79,11 @@ private extension String {
 }
 
 private extension LogLevel {
-	var decartLevel: DecartRealtimeLogLevel {
+	var telemetryLevel: DecartRealtimeLogLevel? {
 		switch self {
-		case .debug:
-			return .debug
-		case .info:
-			return .info
-		case .warning:
-			return .warning
-		case .error:
-			return .error
+		case .warning: return .warning
+		case .error: return .error
+		case .debug, .info: return nil
 		}
 	}
 }

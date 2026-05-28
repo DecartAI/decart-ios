@@ -31,4 +31,37 @@ final class SignalingModelTests: XCTestCase {
 		XCTAssertEqual(roomInfo.roomName, "room-123")
 		XCTAssertEqual(roomInfo.sessionId, "session-123")
 	}
+
+	func testEncodesSetImageMessage() throws {
+		let message = SetImageMessage(
+			imageData: "base64-image",
+			prompt: "fit the jacket",
+			enhancePrompt: true
+		)
+		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.setImage(message))
+		let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+		XCTAssertEqual(json["type"] as? String, "set_image")
+		XCTAssertEqual(json["image_data"] as? String, "base64-image")
+		XCTAssertEqual(json["prompt"] as? String, "fit the jacket")
+		XCTAssertEqual(json["enhance_prompt"] as? Bool, true)
+	}
+
+	func testEncodesPassthroughInitialStateWithNullPromptAndImage() throws {
+		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.setImage(.passthrough()))
+		let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+		XCTAssertEqual(json["type"] as? String, "set_image")
+		XCTAssertTrue(json["prompt"] is NSNull)
+		XCTAssertTrue(json["image_data"] is NSNull)
+	}
+
+	func testUserAgentIncludesSwiftRuntimeAndIntegration() {
+		let userAgent = DecartUserAgent.build(integration: "test-suite")
+
+		XCTAssertTrue(userAgent.contains("decart-swift-sdk/"))
+		XCTAssertTrue(userAgent.contains("lang/swift"))
+		XCTAssertTrue(userAgent.contains("runtime/"))
+		XCTAssertTrue(userAgent.contains("integration/test-suite"))
+	}
 }

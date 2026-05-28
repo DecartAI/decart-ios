@@ -8,21 +8,32 @@ public struct DecartClient {
 	}
 
 	public func createRealtimeManager(options: RealtimeConfiguration) throws -> DecartRealtimeManager {
-		var urlString =
-			"\(decartConfiguration.signalingServerUrl)\(options.model.urlPath)?api_key=\(decartConfiguration.apiKey)&model=\(options.model.name)"
-
-		if let resolution = options.resolution {
-			urlString += "&resolution=\(resolution.rawValue)"
+		let urlString = "\(decartConfiguration.signalingServerUrl)\(options.model.urlPath)"
+		guard var components = URLComponents(string: urlString) else {
+			DecartLogger.log("Unable to generate signaling server URL from: \(urlString)", level: .error)
+			throw DecartError.invalidBaseURL(urlString)
 		}
 
-		guard let signalingServerURL = URL(string: urlString) else {
+		var queryItems = components.queryItems ?? []
+		queryItems.append(URLQueryItem(name: "api_key", value: decartConfiguration.apiKey))
+		queryItems.append(URLQueryItem(name: "model", value: options.model.name))
+		queryItems.append(URLQueryItem(name: "user_agent", value: DecartUserAgent.build(integration: decartConfiguration.integration)))
+		if let resolution = options.resolution {
+			queryItems.append(URLQueryItem(name: "resolution", value: resolution.rawValue))
+		}
+		components.queryItems = queryItems
+
+		guard let signalingServerURL = components.url else {
 			DecartLogger.log("Unable to generate signaling server URL from: \(urlString)", level: .error)
 			throw DecartError.invalidBaseURL(urlString)
 		}
 
 		return DecartRealtimeManager(
 			signalingServerURL: signalingServerURL,
-			options: options
+			options: options,
+			apiKey: decartConfiguration.apiKey,
+			integration: decartConfiguration.integration,
+			telemetryEnabled: decartConfiguration.telemetryEnabled
 		)
 	}
 

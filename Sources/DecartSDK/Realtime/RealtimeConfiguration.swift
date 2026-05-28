@@ -39,13 +39,25 @@ public struct RealtimeConfiguration: Sendable {
 
 	public struct ConnectionConfig: Sendable {
 		public let connectionTimeout: TimeInterval
+		public let signalingConnectTimeout: TimeInterval
+		public let roomInfoTimeout: TimeInterval
+		public let requestTimeout: TimeInterval
+		public let sessionRetryAttempts: Int
 		public let reconnectAttempts: Int
 
 		public init(
 			connectionTimeout: TimeInterval = 15,
+			signalingConnectTimeout: TimeInterval = 60,
+			roomInfoTimeout: TimeInterval = 15,
+			requestTimeout: TimeInterval = 30,
+			sessionRetryAttempts: Int = 5,
 			reconnectAttempts: Int = 10
 		) {
 			self.connectionTimeout = connectionTimeout
+			self.signalingConnectTimeout = signalingConnectTimeout
+			self.roomInfoTimeout = roomInfoTimeout
+			self.requestTimeout = requestTimeout
+			self.sessionRetryAttempts = sessionRetryAttempts
 			self.reconnectAttempts = reconnectAttempts
 		}
 
@@ -57,6 +69,14 @@ public struct RealtimeConfiguration: Sendable {
 				primaryTransportConnectTimeout: connectionTimeout,
 				publisherTransportConnectTimeout: connectionTimeout,
 				enableMicrophone: false
+			)
+		}
+
+		var roomOptions: RoomOptions {
+			RoomOptions(
+				adaptiveStream: false,
+				dynacast: false,
+				reportRemoteTrackStatistics: true
 			)
 		}
 	}
