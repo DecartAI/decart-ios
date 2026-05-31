@@ -225,6 +225,8 @@ final class RealtimeObservabilityTests: XCTestCase {
 		}
 		XCTAssertEqual(local["type"], .string("host"))
 		XCTAssertEqual(local["address"], .string("10.0.0.1"))
+		XCTAssertEqual(local["protocol"], .string("tcp"))
+		XCTAssertEqual(local["tcpType"], .string("active"))
 		XCTAssertEqual(data["currentRoundTripTimeMs"], .double(40))
 	}
 
@@ -271,13 +273,22 @@ final class RealtimeObservabilityTests: XCTestCase {
 		XCTAssertEqual(failedData["transportId"], .string("transport-1"))
 		XCTAssertEqual(failedData["localCandidateId"], .string("local-1"))
 		XCTAssertEqual(failedData["remoteCandidateId"], .string("remote-1"))
+		guard case .object(let localCandidate)? = failedData["local"],
+			case .object(let remoteCandidate)? = failedData["remote"]
+		else {
+			return XCTFail("missing candidate metadata")
+		}
+		XCTAssertEqual(localCandidate["protocol"], .string("tcp"))
+		XCTAssertEqual(localCandidate["tcpType"], .string("active"))
+		XCTAssertEqual(remoteCandidate["type"], .string("relay"))
+		XCTAssertEqual(remoteCandidate["relayProtocol"], .string("tcp"))
 		XCTAssertEqual(failedData["requestsSent"], .int(5))
 		XCTAssertEqual(failedData["responsesReceived"], .int(0))
 		XCTAssertEqual(failedData["consentRequestsSent"], .int(2))
 		XCTAssertEqual(failedData["lastPacketSentTimestamp"], .double(1234.5))
 	}
 
-	func testConnectionDiagnosticsCanBeDisabledDuringGeneration() async throws {
+	func testConnectionDiagnosticsDisableDefersUntilSelectedPairEmits() async throws {
 		let telemetry = TelemetryRequestRecorder()
 		let websocket = ObservabilityPayloadRecorder()
 		let observability = makeObservability(telemetry: telemetry)
@@ -287,15 +298,18 @@ final class RealtimeObservabilityTests: XCTestCase {
 		}
 		await observability.setConnectionDiagnosticsEnabled(false)
 		await observability.recordStats(Self.makeStatsWithIce())
+		await observability.recordStats(Self.makeStatsWithSelectedPair())
+		await observability.recordStats(Self.makeStatsWithIce(iceState: "connected"))
 
 		let objects = await websocket.objects()
 		let names = objects.compactMap { object -> String? in
 			if case .string(let name)? = object["name"] { return name }
 			return nil
 		}
-		XCTAssertFalse(names.contains("ice-connection-state"))
-		XCTAssertFalse(names.contains("ice-candidate-pair"))
-		XCTAssertFalse(names.contains("selected-candidate-pair"))
+		XCTAssertTrue(names.contains("ice-connection-state"))
+		XCTAssertTrue(names.contains("ice-candidate-pair"))
+		XCTAssertTrue(names.contains("selected-candidate-pair"))
+		XCTAssertEqual(names.filter { $0 == "ice-connection-state" }.count, 1)
 	}
 
 	func testLiveKitConnectionLogForwardedOverWebSocketOnly() async throws {
@@ -388,7 +402,7 @@ final class RealtimeObservabilityTests: XCTestCase {
 		XCTAssertEqual(requestCount, 0, "logs must never be POSTed as telemetry")
 	}
 
-	private static func makeStatsWithIce() -> DecartRealtimeWebRTCStats {
+	private static func makeStatsWithIce(iceState: String = "checking") -> DecartRealtimeWebRTCStats {
 		DecartRealtimeWebRTCStats(
 			timestamp: 3_000,
 			video: nil,
@@ -402,7 +416,7 @@ final class RealtimeObservabilityTests: XCTestCase {
 				selectedCandidatePairId: "pair-active",
 				iceRole: "controlling",
 				iceLocalUsernameFragment: "ufrag",
-				iceState: "checking",
+				iceState: iceState,
 				dtlsState: "connecting",
 				selectedCandidatePairChanges: 0,
 				candidatePairs: [
@@ -416,7 +430,21 @@ final class RealtimeObservabilityTests: XCTestCase {
 						requestsSent: 5,
 						responsesReceived: 0,
 						consentRequestsSent: 2,
-						lastPacketSentTimestamp: 1234.5
+						lastPacketSentTimestamp: 1234.5,
+						local: .init(
+							candidateType: "host",
+							address: "10.0.0.1",
+							port: 5000,
+							protocol: "tcp",
+							tcpType: "active"
+						),
+						remote: .init(
+							candidateType: "relay",
+							address: "203.0.113.7",
+							port: 7000,
+							protocol: "tcp",
+							relayProtocol: "tcp"
+						)
 					),
 					.init(
 						id: "pair-active",
@@ -442,8 +470,8 @@ final class RealtimeObservabilityTests: XCTestCase {
 				availableOutgoingBitrate: 800_000,
 				selectedCandidatePairs: [
 					.init(
-						local: .init(candidateType: "host", address: "10.0.0.1", port: 5000, protocol: "udp"),
-						remote: .init(candidateType: "srflx", address: "203.0.113.7", port: 7000, protocol: "udp")
+						local: .init(candidateType: "host", address: "10.0.0.1", port: 5000, protocol: "tcp", tcpType: "active"),
+						remote: .init(candidateType: "relay", address: "203.0.113.7", port: 7000, protocol: "tcp", relayProtocol: "tcp")
 					)
 				],
 				candidatePairStates: ["succeeded": 1]

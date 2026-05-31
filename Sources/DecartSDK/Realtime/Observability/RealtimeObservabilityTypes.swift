@@ -177,6 +177,24 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 		public let address: String
 		public let port: Int
 		public let `protocol`: String
+		public let relayProtocol: String?
+		public let tcpType: String?
+
+		public init(
+			candidateType: String,
+			address: String,
+			port: Int,
+			protocol protocolValue: String,
+			relayProtocol: String? = nil,
+			tcpType: String? = nil
+		) {
+			self.candidateType = candidateType
+			self.address = address
+			self.port = port
+			self.protocol = protocolValue
+			self.relayProtocol = relayProtocol
+			self.tcpType = tcpType
+		}
 	}
 
 	public struct IceCandidatePair: Codable, Sendable {
@@ -207,6 +225,8 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 		public let bytesReceived: UInt64?
 		public let packetsDiscardedOnSend: Int?
 		public let bytesDiscardedOnSend: UInt64?
+		public let local: IceCandidateInfo?
+		public let remote: IceCandidateInfo?
 
 		public init(
 			id: String,
@@ -227,7 +247,9 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 			bytesSent: UInt64? = nil,
 			bytesReceived: UInt64? = nil,
 			packetsDiscardedOnSend: Int? = nil,
-			bytesDiscardedOnSend: UInt64? = nil
+			bytesDiscardedOnSend: UInt64? = nil,
+			local: IceCandidateInfo? = nil,
+			remote: IceCandidateInfo? = nil
 		) {
 			self.id = id
 			self.transportId = transportId
@@ -248,6 +270,8 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 			self.bytesReceived = bytesReceived
 			self.packetsDiscardedOnSend = packetsDiscardedOnSend
 			self.bytesDiscardedOnSend = bytesDiscardedOnSend
+			self.local = local
+			self.remote = remote
 		}
 	}
 
@@ -411,18 +435,8 @@ extension DecartRealtimeWebRTCStats {
 					let remote = statistics.remoteIceCandidate?.id == remoteId ? statistics.remoteIceCandidate : nil
 				else { return nil }
 				return IceCandidatePair(
-					local: IceCandidateInfo(
-						candidateType: local.candidateType?.rawValue ?? "",
-						address: local.address ?? "",
-						port: local.port ?? 0,
-						protocol: local.protocol ?? ""
-					),
-					remote: IceCandidateInfo(
-						candidateType: remote.candidateType?.rawValue ?? "",
-						address: remote.address ?? "",
-						port: remote.port ?? 0,
-						protocol: remote.protocol ?? ""
-					)
+					local: iceCandidateInfo(local),
+					remote: iceCandidateInfo(remote)
 				)
 			}
 
@@ -454,7 +468,15 @@ extension DecartRealtimeWebRTCStats {
 				bytesSent: pair.bytesSent,
 				bytesReceived: pair.bytesReceived,
 				packetsDiscardedOnSend: pair.packetsDiscardedOnSend.map { Int($0) },
-				bytesDiscardedOnSend: pair.bytesDiscardedOnSend
+				bytesDiscardedOnSend: pair.bytesDiscardedOnSend,
+				local: matchingCandidateInfo(
+					id: pair.localCandidateId,
+					candidate: statistics.localIceCandidate
+				),
+				remote: matchingCandidateInfo(
+					id: pair.remoteCandidateId,
+					candidate: statistics.remoteIceCandidate
+				)
 			)
 		}
 
@@ -472,6 +494,25 @@ extension DecartRealtimeWebRTCStats {
 			dtlsState: transport?.dtlsState?.rawValue,
 			selectedCandidatePairChanges: transport?.selectedCandidatePairChanges.map { Int($0) },
 			candidatePairs: candidatePairs
+		)
+	}
+
+	private static func matchingCandidateInfo(
+		id: String?,
+		candidate: IceCandidateStatistics?
+	) -> IceCandidateInfo? {
+		guard let id, let candidate, candidate.id == id else { return nil }
+		return iceCandidateInfo(candidate)
+	}
+
+	private static func iceCandidateInfo(_ candidate: IceCandidateStatistics) -> IceCandidateInfo {
+		IceCandidateInfo(
+			candidateType: candidate.candidateType?.rawValue ?? "",
+			address: candidate.address ?? "",
+			port: candidate.port ?? 0,
+			protocol: candidate.protocol ?? "",
+			relayProtocol: candidate.relayProtocol?.rawValue,
+			tcpType: candidate.tcpType?.rawValue
 		)
 	}
 

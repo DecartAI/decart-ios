@@ -31,6 +31,7 @@ actor RealtimeObservability {
 	private var lastIceState: String?
 	private var lastCandidatePairStates: [String: String] = [:]
 	private var connectionDiagnosticsEnabled = true
+	private var connectionDiagnosticsDisablePending = false
 
 	init(
 		apiKey: String?,
@@ -121,6 +122,7 @@ actor RealtimeObservability {
 			lastIceState = nil
 			lastCandidatePairStates.removeAll()
 			connectionDiagnosticsEnabled = true
+			connectionDiagnosticsDisablePending = false
 			DecartLiveKitLogging.setActiveObservability(self)
 		} else {
 			DecartLiveKitLogging.setActiveObservability(nil)
@@ -128,11 +130,21 @@ actor RealtimeObservability {
 	}
 
 	func setConnectionDiagnosticsEnabled(_ enabled: Bool) {
-		connectionDiagnosticsEnabled = enabled
 		if enabled {
+			connectionDiagnosticsEnabled = true
+			connectionDiagnosticsDisablePending = false
 			lastSelectedPairSignature = nil
 			lastIceState = nil
 			lastCandidatePairStates.removeAll()
+		} else if lastSelectedPairSignature == nil {
+			// Generation can start before the first stats snapshot that includes
+			// the selected ICE pair. Keep the low-volume connection diagnostics
+			// alive until that pair is emitted so protocol/type remain visible.
+			connectionDiagnosticsEnabled = true
+			connectionDiagnosticsDisablePending = true
+		} else {
+			connectionDiagnosticsEnabled = false
+			connectionDiagnosticsDisablePending = false
 		}
 	}
 
@@ -277,7 +289,12 @@ actor RealtimeObservability {
 	// ones, with the STUN connectivity-check counts.
 	private func detectCandidatePairChanges(_ stats: DecartRealtimeWebRTCStats) async {
 		for pair in stats.connection.candidatePairs {
-			let signature = "\(pair.state)|\(pair.nominated)"
+			let signature = [
+				pair.state,
+				"\(pair.nominated)",
+				Self.candidateSignature(pair.local),
+				Self.candidateSignature(pair.remote)
+			].joined(separator: "|")
 			if lastCandidatePairStates[pair.id] == signature { continue }
 			lastCandidatePairStates[pair.id] = signature
 
@@ -331,6 +348,12 @@ actor RealtimeObservability {
 			if let bytesDiscardedOnSend = pair.bytesDiscardedOnSend {
 				data["bytesDiscardedOnSend"] = .int(Int(bytesDiscardedOnSend))
 			}
+			if let local = pair.local {
+				data["local"] = Self.candidateData(local)
+			}
+			if let remote = pair.remote {
+				data["remote"] = Self.candidateData(remote)
+			}
 			await emitInstrumentationEvent("ice-candidate-pair", data: data)
 		}
 	}
@@ -347,18 +370,8 @@ actor RealtimeObservability {
 		lastSelectedPairSignature = signature
 
 		var data: [String: DecartRealtimeJSONValue] = [
-			"local": .object([
-				"type": .string(pair.local.candidateType),
-				"protocol": .string(pair.local.protocol),
-				"address": .string(pair.local.address),
-				"port": .int(pair.local.port)
-			]),
-			"remote": .object([
-				"type": .string(pair.remote.candidateType),
-				"protocol": .string(pair.remote.protocol),
-				"address": .string(pair.remote.address),
-				"port": .int(pair.remote.port)
-			])
+			"local": Self.candidateData(pair.local),
+			"remote": Self.candidateData(pair.remote)
 		]
 		if let rtt = stats.connection.currentRoundTripTime {
 			data["currentRoundTripTimeMs"] = .double(rtt * 1000)
@@ -367,6 +380,38 @@ actor RealtimeObservability {
 			data["availableOutgoingBitrate"] = .double(availableOutgoingBitrate)
 		}
 		await emitInstrumentationEvent("selected-candidate-pair", data: data)
+		if connectionDiagnosticsDisablePending {
+			connectionDiagnosticsEnabled = false
+			connectionDiagnosticsDisablePending = false
+		}
+	}
+
+	private static func candidateData(_ candidate: DecartRealtimeWebRTCStats.IceCandidateInfo) -> DecartRealtimeJSONValue {
+		var data: [String: DecartRealtimeJSONValue] = [
+			"type": .string(candidate.candidateType),
+			"protocol": .string(candidate.protocol),
+			"address": .string(candidate.address),
+			"port": .int(candidate.port)
+		]
+		if let relayProtocol = candidate.relayProtocol {
+			data["relayProtocol"] = .string(relayProtocol)
+		}
+		if let tcpType = candidate.tcpType {
+			data["tcpType"] = .string(tcpType)
+		}
+		return .object(data)
+	}
+
+	private static func candidateSignature(_ candidate: DecartRealtimeWebRTCStats.IceCandidateInfo?) -> String {
+		guard let candidate else { return "" }
+		return [
+			candidate.candidateType,
+			candidate.protocol,
+			candidate.address,
+			"\(candidate.port)",
+			candidate.relayProtocol ?? "",
+			candidate.tcpType ?? ""
+		].joined(separator: ":")
 	}
 
 	private func detectVideoStall(_ stats: DecartRealtimeWebRTCStats) async {
@@ -508,6 +553,7 @@ actor RealtimeObservability {
 		lastIceState = nil
 		lastCandidatePairStates.removeAll()
 		connectionDiagnosticsEnabled = true
+		connectionDiagnosticsDisablePending = false
 		connectionBreakdown = nil
 	}
 
