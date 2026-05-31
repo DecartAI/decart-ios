@@ -52,7 +52,8 @@ private struct RealtimeContentView: View {
 		ZStack {
 			if let remoteVideoTrack = realtimeManager.remoteMediaStreams?.videoTrack {
 				RTCMLVideoViewWrapper(
-					track: remoteVideoTrack
+					track: remoteVideoTrack,
+					mirror: realtimeManager.isVideoMirrored
 				)
 				.background(Color.black)
 				.edgesIgnoringSafeArea(.all)
@@ -80,7 +81,10 @@ private struct RealtimeContentView: View {
 				if realtimeManager.connectionState.isInSession,
 				   let localStream = realtimeManager.localMediaStream
 				{
-					DraggableRTCVideoView(track: localStream.videoTrack)
+					DraggableRTCVideoView(
+						track: localStream.videoTrack,
+						mirror: realtimeManager.isVideoMirrored
+					)
 				}
 
 				RealtimeControlsView(

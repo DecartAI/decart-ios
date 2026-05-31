@@ -11,6 +11,7 @@ import SwiftUI
 
 struct DraggableRTCVideoView: View {
 	let track: VideoTrack?
+	let mirror: Bool
 
 	@State private var offset: CGSize = .zero
 	@State private var lastOffset: CGSize = .zero
@@ -19,7 +20,7 @@ struct DraggableRTCVideoView: View {
 	let margin: CGFloat = 14
 	var body: some View {
 		GeometryReader { geo in
-			RTCMLVideoViewWrapper(track: track, mirror: true, layoutMode: .fill)
+			RTCMLVideoViewWrapper(track: track, mirror: mirror, layoutMode: .fill)
 			.frame(width: pipSize.width, height: pipSize.height)
 			.cornerRadius(12)
 			.shadow(radius: 8)

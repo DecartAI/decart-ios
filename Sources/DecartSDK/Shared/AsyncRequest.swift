@@ -1,7 +1,14 @@
 import Foundation
 
 final class AsyncRequest<Value: Sendable>: @unchecked Sendable {
-	private var continuation: CheckedContinuation<Value, Error>?
+	private struct Waiter {
+		let id: UUID
+		let continuation: CheckedContinuation<Value, Error>
+		let timeoutTask: Task<Void, Never>
+	}
+
+	private let lock = NSLock()
+	private var waiter: Waiter?
 	private var bufferedResult: Result<Value, Error>?
 
 	func fulfill(_ value: Value) {
@@ -13,54 +20,89 @@ final class AsyncRequest<Value: Sendable>: @unchecked Sendable {
 	}
 
 	func reset() {
+		let pending: Waiter?
+		lock.lock()
 		bufferedResult = nil
-		if let pending = continuation {
-			continuation = nil
-			pending.resume(throwing: CancellationError())
-		}
+		pending = waiter
+		waiter = nil
+		lock.unlock()
+
+		pending?.timeoutTask.cancel()
+		pending?.continuation.resume(throwing: CancellationError())
 	}
 
 	func wait(
 		timeout: TimeInterval,
 		timeoutError: @Sendable @autoclosure () -> Error
 	) async throws -> Value {
-		if let buffered = bufferedResult {
-			bufferedResult = nil
-			return try buffered.get()
-		}
-
-		let timeoutNs = UInt64(timeout * 1_000_000_000)
+		let id = UUID()
 		let timeoutErr = timeoutError()
+		let timeoutNs = UInt64(max(timeout, 0) * 1_000_000_000)
 
-		do {
-			return try await withThrowingTaskGroup(of: Value.self) { group in
-				group.addTask {
-					try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Value, Error>) in
-						self.continuation = cont
-					}
+		return try await withTaskCancellationHandler {
+			try await withCheckedThrowingContinuation { continuation in
+				let timeoutTask = Task { [weak self] in
+					try? await Task.sleep(nanoseconds: timeoutNs)
+					guard !Task.isCancelled else { return }
+					self?.completeWaiter(id: id, result: .failure(timeoutErr))
 				}
-				group.addTask { [timeoutErr] in
-					try await Task.sleep(nanoseconds: timeoutNs)
-					throw timeoutErr
+
+				let buffered: Result<Value, Error>?
+				let replaced: Waiter?
+				lock.lock()
+				buffered = bufferedResult
+				bufferedResult = nil
+				if buffered == nil {
+					replaced = waiter
+					waiter = Waiter(id: id, continuation: continuation, timeoutTask: timeoutTask)
+				} else {
+					replaced = nil
 				}
-				defer { group.cancelAll() }
-				return try await group.next()!
+				lock.unlock()
+
+				if let buffered {
+					timeoutTask.cancel()
+					continuation.resume(with: buffered)
+				}
+
+				if let replaced {
+					replaced.timeoutTask.cancel()
+					replaced.continuation.resume(throwing: CancellationError())
+				}
 			}
-		} catch {
-			if let pending = continuation {
-				continuation = nil
-				pending.resume(throwing: error)
-			}
-			throw error
+		} onCancel: {
+			completeWaiter(id: id, result: .failure(CancellationError()))
 		}
 	}
 
 	private func resume(_ result: Result<Value, Error>) {
-		if let pending = continuation {
-			continuation = nil
-			pending.resume(with: result)
+		let pending: Waiter?
+		lock.lock()
+		if let activeWaiter = waiter {
+			pending = activeWaiter
+			waiter = nil
 		} else {
+			pending = nil
 			bufferedResult = result
 		}
+		lock.unlock()
+
+		pending?.timeoutTask.cancel()
+		pending?.continuation.resume(with: result)
+	}
+
+	private func completeWaiter(id: UUID, result: Result<Value, Error>) {
+		let pending: Waiter?
+		lock.lock()
+		if waiter?.id == id {
+			pending = waiter
+			waiter = nil
+		} else {
+			pending = nil
+		}
+		lock.unlock()
+
+		pending?.timeoutTask.cancel()
+		pending?.continuation.resume(with: result)
 	}
 }

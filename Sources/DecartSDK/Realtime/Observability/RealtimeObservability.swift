@@ -186,6 +186,7 @@ actor RealtimeObservability {
 
 	private func flushReports(sessionId: String) async {
 		while let report = makeReport(sessionId: sessionId) {
+			let containsLogs = !report.logs.isEmpty
 			var request = URLRequest(url: telemetryURL)
 			request.httpMethod = "POST"
 			request.setValue(apiKey, forHTTPHeaderField: "X-API-KEY")
@@ -195,11 +196,61 @@ actor RealtimeObservability {
 
 			do {
 				request.httpBody = try JSONEncoder().encode(report)
-				_ = try? await URLSession.shared.data(for: request)
+				if containsLogs {
+					print("[Decart telemetry] INFO sending logs to platform.decart.ai session=\(sessionId) logs=\(report.logs.count) stats=\(report.stats.count) diagnostics=\(report.diagnostics.count)")
+					print("[Decart telemetry] DEBUG payload: \(debugRequestBody(request.httpBody))")
+				}
+
+				do {
+					let (data, response) = try await URLSession.shared.data(for: request)
+					if containsLogs {
+						printTelemetryLogResult(response: response, data: data, logCount: report.logs.count)
+					}
+				} catch {
+					if containsLogs {
+						print("[Decart telemetry] ERROR logs POST request failed: \(error)")
+					}
+				}
 			} catch {
-				// Telemetry is best effort and should never affect SDK behavior.
+				if containsLogs {
+					print("[Decart telemetry] ERROR logs payload encode failed: \(error)")
+				}
 			}
 		}
+	}
+
+	private func printTelemetryLogResult(response: URLResponse, data: Data, logCount: Int) {
+		guard let httpResponse = response as? HTTPURLResponse else {
+			print("[Decart telemetry] INFO logs POST completed logs=\(logCount) responseType=\(String(describing: type(of: response)))")
+			return
+		}
+
+		if (200...299).contains(httpResponse.statusCode) {
+			print("[Decart telemetry] INFO logs POST completed status=\(httpResponse.statusCode) logs=\(logCount)")
+		} else {
+			print("[Decart telemetry] ERROR logs POST failed status=\(httpResponse.statusCode) logs=\(logCount) body=\(debugResponseBody(data))")
+		}
+	}
+
+	private func debugResponseBody(_ data: Data) -> String {
+		guard !data.isEmpty else { return "<empty>" }
+		let body = String(data: data, encoding: .utf8) ?? "<non-utf8 body: \(data.count) bytes>"
+		let limit = 1_000
+		guard body.count > limit else { return body }
+		return "\(body.prefix(limit))...<truncated>"
+	}
+
+	private func debugRequestBody(_ data: Data?) -> String {
+		guard let data, !data.isEmpty else { return "<empty>" }
+		if let object = try? JSONSerialization.jsonObject(with: data),
+		   let prettyData = try? JSONSerialization.data(
+		   	withJSONObject: object,
+		   	options: [.prettyPrinted, .sortedKeys]
+		   ),
+		   let prettyBody = String(data: prettyData, encoding: .utf8) {
+			return prettyBody
+		}
+		return String(data: data, encoding: .utf8) ?? "<non-utf8 body: \(data.count) bytes>"
 	}
 
 	private func makeReport(sessionId: String) -> TelemetryReport? {

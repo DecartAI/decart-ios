@@ -356,7 +356,6 @@ private extension DecartRealtimeManager {
 		let mediaChannel = LiveKitMediaChannel(
 			videoPublishOptions: options.media.video.publishOptions,
 			connectOptions: options.connection.connectOptions,
-			roomOptions: options.connection.roomOptions,
 			observability: observability
 		)
 		liveKitMediaChannel = mediaChannel
@@ -393,6 +392,20 @@ private extension DecartRealtimeManager {
 		suppressMediaConnectedState = false
 		connectionState = .connected
 		await observability.sessionStarted(roomInfo.sessionId)
+		await observability.recordLog(
+			"realtime connection successful",
+			level: .info,
+			category: "realtime.connection",
+			metadata: [
+				"sessionId": roomInfo.sessionId,
+				"roomName": roomInfo.roomName,
+				"attempt": "\(attempt)",
+				"isReconnectAttempt": "\(isReconnectAttempt)"
+			]
+		)
+		Task { [observability] in
+			await observability.flushPendingIfNeeded()
+		}
 		return mediaChannel.currentRemoteStream
 	}
 

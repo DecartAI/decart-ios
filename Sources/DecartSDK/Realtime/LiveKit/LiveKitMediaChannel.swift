@@ -24,16 +24,11 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	private var remoteVideoTrack: VideoTrack?
 	private var localVideoTrack: LocalVideoTrack?
 	private var statsPollingTask: Task<Void, Never>?
-	#if os(iOS) || os(visionOS) || os(tvOS)
-	private var previousAudioEngineAvailability: AudioEngineAvailability?
-	private var previousAudioSessionAutomaticConfiguration: Bool?
-	private var previousVoiceProcessingEnabled: Bool?
-	#endif
 
 	init(
 		videoPublishOptions: VideoPublishOptions,
 		connectOptions: ConnectOptions,
-		roomOptions: RoomOptions = RoomOptions(adaptiveStream: false, dynacast: false, reportRemoteTrackStatistics: true),
+		roomOptions: RoomOptions = RoomOptions(adaptiveStream: false, dynacast: false),
 		observability: RealtimeObservability
 	) {
 		self.videoPublishOptions = videoPublishOptions
@@ -81,7 +76,6 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	}
 
 	func connect(roomInfo: LiveKitRoomInfoMessage) async throws {
-		disableLiveKitAudioEngine()
 		let room = Room(delegate: self, connectOptions: connectOptions, roomOptions: roomOptions)
 		self.room = room
 		remoteVideoTrack = nil
@@ -99,7 +93,6 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		localVideoTrack = nil
 		remoteVideoTrack = nil
 		await room?.disconnect()
-		restoreLiveKitAudioEngine()
 	}
 
 	func publishLocalTracks(from stream: RealtimeMediaStream) async throws {
@@ -139,53 +132,12 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	}
 
 	private func pollTrackState() {
-		guard let statistics = (localVideoTrack ?? remoteVideoTrack)?.statistics else { return }
+		guard let statistics = localVideoTrack?.statistics else { return }
 		statsContinuation.yield(DecartRealtimeWebRTCStats.make(from: statistics))
 	}
 
 	private func shouldAcceptTrack(from participant: RemoteParticipant) -> Bool {
 		participant.identity?.stringValue.hasPrefix("inference-server-") == true
-	}
-
-	private func disableLiveKitAudioEngine() {
-		#if os(iOS) || os(visionOS) || os(tvOS)
-		let audioManager = AudioManager.shared
-		if previousAudioEngineAvailability == nil {
-			previousAudioEngineAvailability = audioManager.engineAvailability
-			previousAudioSessionAutomaticConfiguration = audioManager.audioSession.isAutomaticConfigurationEnabled
-			previousVoiceProcessingEnabled = audioManager.isVoiceProcessingEnabled
-		}
-		audioManager.audioSession.isAutomaticConfigurationEnabled = false
-		do {
-			try audioManager.setVoiceProcessingEnabled(false)
-			try audioManager.setEngineAvailability(.none)
-		} catch {
-			observability.emitLog(
-				"failed to disable LiveKit audio engine",
-				level: .warning,
-				category: "livekit.audio",
-				metadata: ["error": error.localizedDescription]
-			)
-		}
-		#endif
-	}
-
-	private func restoreLiveKitAudioEngine() {
-		#if os(iOS) || os(visionOS) || os(tvOS)
-		let audioManager = AudioManager.shared
-		if let previousAudioSessionAutomaticConfiguration {
-			audioManager.audioSession.isAutomaticConfigurationEnabled = previousAudioSessionAutomaticConfiguration
-		}
-		if let previousVoiceProcessingEnabled {
-			try? audioManager.setVoiceProcessingEnabled(previousVoiceProcessingEnabled)
-		}
-		if let previousAudioEngineAvailability {
-			try? audioManager.setEngineAvailability(previousAudioEngineAvailability)
-		}
-		previousAudioEngineAvailability = nil
-		previousAudioSessionAutomaticConfiguration = nil
-		previousVoiceProcessingEnabled = nil
-		#endif
 	}
 }
 
@@ -235,8 +187,6 @@ extension LiveKitMediaChannel: RoomDelegate {
 	func room(_ room: Room, participant: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {
 		guard shouldAcceptTrack(from: participant) else { return }
 		if let videoTrack = publication.track as? VideoTrack {
-			Task { await videoTrack.set(reportStatistics: true) }
-			startStatsPollingIfNeeded()
 			remoteVideoTrack = videoTrack
 			emitRemoteStreamIfAvailable()
 		}

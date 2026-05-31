@@ -134,15 +134,6 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 		public let decoderImplementation: String
 	}
 
-	public struct Audio: Codable, Sendable {
-		public let bytesReceived: UInt64
-		public let packetsReceived: UInt64
-		public let packetsLost: Int64
-		public let jitter: Double
-		public let bitrate: Double
-		public let packetsLostDelta: Int64
-	}
-
 	public struct OutboundVideo: Codable, Sendable {
 		public let qualityLimitationReason: String
 		public let qualityLimitationDurations: [String: Double]
@@ -191,7 +182,6 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 
 	public let timestamp: Int64
 	public let video: Video?
-	public let audio: Audio?
 	public let outboundVideo: OutboundVideo?
 	public let remoteInbound: RemoteInbound?
 	public let connection: Connection
@@ -206,7 +196,6 @@ public enum DecartRealtimeClock {
 extension DecartRealtimeWebRTCStats {
 	static func make(from statistics: TrackStatistics) -> DecartRealtimeWebRTCStats {
 		let videoInbound = statistics.inboundRtpStream.first(where: { $0.kind == "video" || $0.framesDecoded != nil })
-		let audioInbound = statistics.inboundRtpStream.first(where: { $0.kind == "audio" && $0.framesDecoded == nil })
 		let outbound = statistics.outboundRtpStream.first(where: { $0.kind == "video" || $0.framesSent != nil })
 		let remoteInbound = statistics.remoteInboundRtpStream.first
 		let connection = connectionStats(from: statistics)
@@ -214,7 +203,6 @@ extension DecartRealtimeWebRTCStats {
 		return DecartRealtimeWebRTCStats(
 			timestamp: DecartRealtimeClock.nowMilliseconds(),
 			video: videoInbound.map(videoStats),
-			audio: audioInbound.map(audioStats),
 			outboundVideo: outbound.map(outboundVideoStats),
 			remoteInbound: remoteInbound.map {
 				RemoteInbound(
@@ -264,18 +252,6 @@ extension DecartRealtimeWebRTCStats {
 			jitterBufferTargetDelayMs: inbound.jitterBufferTargetDelay.map { $0 * 1000 },
 			jitterBufferMinimumDelayMs: inbound.jitterBufferMinimumDelay.map { $0 * 1000 },
 			decoderImplementation: inbound.decoderImplementation ?? ""
-		)
-	}
-
-	private static func audioStats(_ inbound: InboundRtpStreamStatistics) -> Audio {
-		let previous = inbound.previous
-		return Audio(
-			bytesReceived: inbound.bytesReceived ?? 0,
-			packetsReceived: inbound.packetsReceived ?? 0,
-			packetsLost: inbound.packetsLost ?? 0,
-			jitter: inbound.jitter ?? 0,
-			bitrate: bitrate(currentBytes: inbound.bytesReceived, previousBytes: previous?.bytesReceived, currentTimestamp: inbound.timestamp, previousTimestamp: previous?.timestamp),
-			packetsLostDelta: (inbound.packetsLost ?? 0) - (previous?.packetsLost ?? 0)
 		)
 	}
 

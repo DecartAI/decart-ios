@@ -71,14 +71,6 @@ public struct RealtimeConfiguration: Sendable {
 				enableMicrophone: false
 			)
 		}
-
-		var roomOptions: RoomOptions {
-			RoomOptions(
-				adaptiveStream: false,
-				dynacast: false,
-				reportRemoteTrackStatistics: true
-			)
-		}
 	}
 
 	public struct MediaConfig: Sendable {
