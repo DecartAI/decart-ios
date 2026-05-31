@@ -82,21 +82,29 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		)
 	}
 
-	public init(
+	public convenience init(
+		signalingServerURL: URL,
+		options: RealtimeConfiguration
+	) {
+		self.init(
+			signalingServerURL: signalingServerURL,
+			options: options,
+			observability: RealtimeObservability(
+				apiKey: nil,
+				model: options.model.name,
+				telemetryEnabled: false
+			)
+		)
+	}
+
+	init(
 		signalingServerURL: URL,
 		options: RealtimeConfiguration,
-		apiKey: String = "",
-		integration: String? = nil,
-		telemetryEnabled: Bool = true
+		observability: RealtimeObservability
 	) {
 		self.signalingServerURL = signalingServerURL
 		self.options = options
-		self.observability = RealtimeObservability(
-			apiKey: apiKey,
-			model: options.model.name,
-			integration: integration,
-			telemetryEnabled: telemetryEnabled
-		)
+		self.observability = observability
 		self.diagnosticUpdates = observability.diagnosticUpdates
 		self.statsUpdates = observability.statsUpdates
 

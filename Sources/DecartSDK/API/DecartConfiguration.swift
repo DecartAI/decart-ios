@@ -3,15 +3,9 @@ import Foundation
 public struct DecartConfiguration {
 	public let baseURL: URL
 	public let apiKey: String
-	public let integration: String?
 	public let telemetryEnabled: Bool
 
-	var headers: [String: String] {
-		[
-			"Authorization": "Bearer \(apiKey)",
-			"User-Agent": DecartUserAgent.build(integration: integration)
-		]
-	}
+	var headers: [String: String] { ["Authorization": "Bearer \(apiKey)"] }
 
 	var signalingServerUrl: String {
 		var baseURLString = baseURL.absoluteString
@@ -26,7 +20,6 @@ public struct DecartConfiguration {
 	public init(
 		baseURL: String = "https://api.decart.ai",
 		apiKey: String,
-		integration: String? = nil,
 		telemetryEnabled: Bool = true
 	) {
 		guard let url = URL(string: baseURL) else {
@@ -39,7 +32,6 @@ public struct DecartConfiguration {
 		}
 		self.baseURL = url
 		self.apiKey = apiKey
-		self.integration = integration
 		self.telemetryEnabled = telemetryEnabled
 	}
 }

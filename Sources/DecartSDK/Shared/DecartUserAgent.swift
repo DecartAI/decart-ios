@@ -3,15 +3,12 @@ import Foundation
 enum DecartUserAgent {
 	static let sdkVersion = "0.0.0-dev"
 
-	static func build(integration: String?) -> String {
-		var parts = [
+	static func build() -> String {
+		let parts = [
 			"decart-swift-sdk/\(sdkVersion)",
-			"lang/swift"
+			"lang/swift",
+			runtime
 		]
-		if let integration = integration?.trimmingCharacters(in: .whitespacesAndNewlines), !integration.isEmpty {
-			parts.append("integration/\(integration)")
-		}
-		parts.append(runtime)
 		return parts.joined(separator: " ")
 	}
 

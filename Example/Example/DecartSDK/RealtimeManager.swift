@@ -18,15 +18,20 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	var currentPrompt: DecartPrompt {
 		didSet {
-			// Send updated prompt to the server for real-time style changes
-			realtimeManager?.setPrompt(currentPrompt)
+			let prompt = currentPrompt
+			Task { [weak self] in
+				do {
+					try await self?.realtimeManager?.setPrompt(prompt)
+				} catch {
+					DecartLogger.log("setPrompt failed: \(error.localizedDescription)", level: .error)
+				}
+			}
 		}
 	}
 
 	private(set) var connectionState: DecartRealtimeConnectionState = .idle
 	private(set) var localMediaStream: RealtimeMediaStream?
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
-	private(set) var isVideoMirrored = true
 
 	// MARK: - Private
 
@@ -103,7 +108,6 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		guard let cameraCapturer = localVideoTrack?.capturer as? CameraCapturer else { return }
 		do {
 			try await cameraCapturer.switchCameraPosition()
-			isVideoMirrored.toggle()
 		} catch {
 			DecartLogger.log("Failed to switch camera", level: .error)
 		}
@@ -146,7 +150,6 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions)
 		localVideoTrack = videoTrack
 		localMediaStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
-		isVideoMirrored = true
 	}
 	#endif
 

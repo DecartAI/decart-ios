@@ -1,14 +1,16 @@
 import Foundation
 
 actor RealtimeObservability {
+	typealias TelemetryTransport = @Sendable (URLRequest) async throws -> (Data, URLResponse)
+
 	nonisolated let diagnosticUpdates: AsyncStream<DecartRealtimeDiagnosticEvent>
 	nonisolated let statsUpdates: AsyncStream<DecartRealtimeWebRTCStats>
 
-	private let apiKey: String
+	private let apiKey: String?
 	private let model: String
-	private let integration: String?
 	private let telemetryEnabled: Bool
 	private let userAgent: String
+	private let telemetryTransport: TelemetryTransport
 	private let telemetryURL = URL(string: "https://platform.decart.ai/api/v1/telemetry")!
 	private let reportIntervalNanoseconds: UInt64 = 10_000_000_000
 	private let maxItemsPerReport = 120
@@ -25,16 +27,18 @@ actor RealtimeObservability {
 	private var pathObserver: NetworkPathObserver?
 
 	init(
-		apiKey: String,
+		apiKey: String?,
 		model: String,
-		integration: String?,
-		telemetryEnabled: Bool
+		telemetryEnabled: Bool,
+		telemetryTransport: @escaping TelemetryTransport = { request in
+			try await URLSession.shared.data(for: request)
+		}
 	) {
 		self.apiKey = apiKey
 		self.model = model
-		self.integration = integration
-		self.telemetryEnabled = telemetryEnabled
-		self.userAgent = DecartUserAgent.build(integration: integration)
+		self.telemetryEnabled = telemetryEnabled && apiKey?.isEmpty == false
+		self.userAgent = DecartUserAgent.build()
+		self.telemetryTransport = telemetryTransport
 
 		let diagnosticStream = AsyncStream.makeStream(
 			of: DecartRealtimeDiagnosticEvent.self,
@@ -50,7 +54,7 @@ actor RealtimeObservability {
 		self.statsUpdates = statsStream.stream
 		self.statsContinuation = statsStream.continuation
 
-		if telemetryEnabled {
+		if self.telemetryEnabled {
 			Task { [weak self] in await self?.startPathMonitoring() }
 		}
 	}
@@ -185,6 +189,7 @@ actor RealtimeObservability {
 	}
 
 	private func flushReports(sessionId: String) async {
+		guard let apiKey, !apiKey.isEmpty else { return }
 		while let report = makeReport(sessionId: sessionId) {
 			let containsLogs = !report.logs.isEmpty
 			var request = URLRequest(url: telemetryURL)
@@ -202,7 +207,7 @@ actor RealtimeObservability {
 				}
 
 				do {
-					let (data, response) = try await URLSession.shared.data(for: request)
+					let (data, response) = try await telemetryTransport(request)
 					if containsLogs {
 						printTelemetryLogResult(response: response, data: data, logCount: report.logs.count)
 					}
@@ -265,14 +270,11 @@ actor RealtimeObservability {
 		let diagnostics = Array(diagnosticsBuffer.prefix(maxItemsPerReport))
 		diagnosticsBuffer.removeFirst(diagnostics.count)
 
-		var tags = [
+		let tags = [
 			"session_id": sessionId,
 			"sdk_version": DecartUserAgent.sdkVersion,
 			"model": model
 		]
-		if let integration, !integration.isEmpty {
-			tags["integration"] = integration
-		}
 
 		return TelemetryReport(
 			sessionId: sessionId,

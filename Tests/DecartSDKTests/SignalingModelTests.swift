@@ -56,12 +56,11 @@ final class SignalingModelTests: XCTestCase {
 		XCTAssertTrue(json["image_data"] is NSNull)
 	}
 
-	func testUserAgentIncludesSwiftRuntimeAndIntegration() {
-		let userAgent = DecartUserAgent.build(integration: "test-suite")
+	func testUserAgentIncludesSwiftRuntime() {
+		let userAgent = DecartUserAgent.build()
 
 		XCTAssertTrue(userAgent.contains("decart-swift-sdk/"))
 		XCTAssertTrue(userAgent.contains("lang/swift"))
 		XCTAssertTrue(userAgent.contains("runtime/"))
-		XCTAssertTrue(userAgent.contains("integration/test-suite"))
 	}
 }

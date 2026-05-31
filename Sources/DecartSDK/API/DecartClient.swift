@@ -17,7 +17,7 @@ public struct DecartClient {
 		var queryItems = components.queryItems ?? []
 		queryItems.append(URLQueryItem(name: "api_key", value: decartConfiguration.apiKey))
 		queryItems.append(URLQueryItem(name: "model", value: options.model.name))
-		queryItems.append(URLQueryItem(name: "user_agent", value: DecartUserAgent.build(integration: decartConfiguration.integration)))
+		queryItems.append(URLQueryItem(name: "user_agent", value: DecartUserAgent.build()))
 		if let resolution = options.resolution {
 			queryItems.append(URLQueryItem(name: "resolution", value: resolution.rawValue))
 		}
@@ -31,9 +31,11 @@ public struct DecartClient {
 		return DecartRealtimeManager(
 			signalingServerURL: signalingServerURL,
 			options: options,
-			apiKey: decartConfiguration.apiKey,
-			integration: decartConfiguration.integration,
-			telemetryEnabled: decartConfiguration.telemetryEnabled
+			observability: RealtimeObservability(
+				apiKey: decartConfiguration.apiKey,
+				model: options.model.name,
+				telemetryEnabled: decartConfiguration.telemetryEnabled
+			)
 		)
 	}
 
