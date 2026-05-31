@@ -3,6 +3,7 @@ import Foundation
 public struct DecartConfiguration {
 	public let baseURL: URL
 	public let apiKey: String
+	public let telemetryEnabled: Bool
 
 	var headers: [String: String] { ["Authorization": "Bearer \(apiKey)"] }
 
@@ -16,7 +17,11 @@ public struct DecartConfiguration {
 		return baseURLString
 	}
 
-	public init(baseURL: String = "https://api.decart.ai", apiKey: String) {
+	public init(
+		baseURL: String = "https://api.decart.ai",
+		apiKey: String,
+		telemetryEnabled: Bool = true
+	) {
 		guard let url = URL(string: baseURL) else {
 			DecartLogger.log("Unable to create URL from: \(baseURL)", level: .error)
 			fatalError("Unable to create URL from: \(baseURL)")
@@ -27,5 +32,6 @@ public struct DecartConfiguration {
 		}
 		self.baseURL = url
 		self.apiKey = apiKey
+		self.telemetryEnabled = telemetryEnabled
 	}
 }

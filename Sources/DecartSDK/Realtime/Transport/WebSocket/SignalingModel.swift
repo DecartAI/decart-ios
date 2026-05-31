@@ -118,6 +118,11 @@ struct SetImageMessage: Encodable, Sendable {
 	}
 }
 
+struct ObservabilityMessage: Encodable, Sendable {
+	let type = "observability"
+	let data: DecartRealtimeJSONValue
+}
+
 struct ServerErrorMessage: Codable, Sendable {
 	let type: String
 	let message: String?
@@ -257,6 +262,7 @@ enum OutgoingWebSocketMessage: Encodable, Sendable {
 	case liveKitJoin
 	case prompt(PromptMessage)
 	case setImage(SetImageMessage)
+	case observability(data: DecartRealtimeJSONValue)
 
 	func encode(to encoder: Encoder) throws {
 		switch self {
@@ -266,6 +272,8 @@ enum OutgoingWebSocketMessage: Encodable, Sendable {
 			try msg.encode(to: encoder)
 		case .setImage(let msg):
 			try msg.encode(to: encoder)
+		case .observability(let data):
+			try ObservabilityMessage(data: data).encode(to: encoder)
 		}
 	}
 }

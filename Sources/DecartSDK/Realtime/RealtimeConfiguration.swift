@@ -39,13 +39,25 @@ public struct RealtimeConfiguration: Sendable {
 
 	public struct ConnectionConfig: Sendable {
 		public let connectionTimeout: TimeInterval
+		public let signalingConnectTimeout: TimeInterval
+		public let roomInfoTimeout: TimeInterval
+		public let requestTimeout: TimeInterval
+		public let sessionRetryAttempts: Int
 		public let reconnectAttempts: Int
 
 		public init(
 			connectionTimeout: TimeInterval = 15,
+			signalingConnectTimeout: TimeInterval = 60,
+			roomInfoTimeout: TimeInterval = 15,
+			requestTimeout: TimeInterval = 30,
+			sessionRetryAttempts: Int = 5,
 			reconnectAttempts: Int = 10
 		) {
 			self.connectionTimeout = connectionTimeout
+			self.signalingConnectTimeout = signalingConnectTimeout
+			self.roomInfoTimeout = roomInfoTimeout
+			self.requestTimeout = requestTimeout
+			self.sessionRetryAttempts = sessionRetryAttempts
 			self.reconnectAttempts = reconnectAttempts
 		}
 
@@ -55,7 +67,8 @@ public struct RealtimeConfiguration: Sendable {
 				reconnectAttempts: reconnectAttempts,
 				socketConnectTimeoutInterval: connectionTimeout,
 				primaryTransportConnectTimeout: connectionTimeout,
-				publisherTransportConnectTimeout: connectionTimeout
+				publisherTransportConnectTimeout: connectionTimeout,
+				enableMicrophone: false
 			)
 		}
 	}
@@ -78,7 +91,7 @@ public struct RealtimeConfiguration: Sendable {
 			maxBitrate: Int = 3_500_000,
 			maxFramerate: Int = 30,
 			preferredCodec: String = "h264",
-			simulcast: Bool = true
+			simulcast: Bool = false
 		) {
 			self.maxBitrate = maxBitrate
 			self.maxFramerate = maxFramerate

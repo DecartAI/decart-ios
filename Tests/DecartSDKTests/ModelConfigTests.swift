@@ -2,6 +2,13 @@ import XCTest
 @testable import DecartSDK
 
 final class ModelConfigTests: XCTestCase {
+	func testRealtimeVideoDefaultsDisableSimulcast() {
+		let videoConfig = RealtimeConfiguration.VideoConfig()
+
+		XCTAssertFalse(videoConfig.simulcast)
+		XCTAssertFalse(videoConfig.publishOptions.simulcast)
+	}
+
 	func testRealtimeModelsMatchJSSDKRegistry() {
 		let expectedCases: [RealtimeModel] = [
 			.lucy2_1,
