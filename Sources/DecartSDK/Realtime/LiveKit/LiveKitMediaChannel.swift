@@ -88,7 +88,17 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 
 		// Connect failures are captured by the manager's connection-breakdown
 		// diagnostic (the `webrtc-handshake` phase records the thrown error).
-		try await room.connect(url: roomInfo.liveKitURL, token: roomInfo.token)
+		do {
+			try await room.connect(url: roomInfo.liveKitURL, token: roomInfo.token)
+			if let snapshot = room.decartConnectSpanSnapshot() {
+				await observability.recordLiveKitConnectSpan(snapshot)
+			}
+		} catch {
+			if let snapshot = room.decartConnectSpanSnapshot() {
+				await observability.recordLiveKitConnectSpan(snapshot)
+			}
+			throw error
+		}
 	}
 
 	func disconnect() async {
@@ -175,6 +185,29 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		Task { [observability] in
 			await observability.emitInstrumentationEvent(name, data: data)
 		}
+	}
+}
+
+private extension Room {
+	func decartConnectSpanSnapshot(now: TimeInterval = ProcessInfo.processInfo.systemUptime) -> LiveKitConnectSpanSnapshot? {
+		guard let span = connectSpan else { return nil }
+		let entries = span.entries
+		var previous = span.start
+		let snapshotEntries = entries.map { entry in
+			let elapsedMs = Int(max(entry.time - span.start, 0) * 1000)
+			let deltaMs = Int(max(entry.time - previous, 0) * 1000)
+			previous = entry.time
+			return LiveKitConnectSpanSnapshot.Entry(
+				label: entry.label,
+				elapsedMs: elapsedMs,
+				deltaMs: deltaMs
+			)
+		}
+		let end = entries.last?.time ?? now
+		return LiveKitConnectSpanSnapshot(
+			totalDurationMs: Int(max(end - span.start, 0) * 1000),
+			entries: snapshotEntries
+		)
 	}
 }
 

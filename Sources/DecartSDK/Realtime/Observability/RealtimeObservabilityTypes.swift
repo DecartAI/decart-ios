@@ -84,6 +84,17 @@ struct DecartRealtimeLogEvent: Sendable {
 	}
 }
 
+struct LiveKitConnectSpanSnapshot: Sendable {
+	struct Entry: Sendable {
+		let label: String
+		let elapsedMs: Int
+		let deltaMs: Int
+	}
+
+	let totalDurationMs: Int
+	let entries: [Entry]
+}
+
 public struct DecartRealtimeDiagnosticEvent: Codable, Sendable {
 	public let name: String
 	public let data: [String: DecartRealtimeJSONValue]
@@ -178,6 +189,9 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 	/// just the selected one, so failed/in-progress attempts are observable.
 	public struct CandidatePairStatus: Codable, Sendable {
 		public let id: String
+		public let transportId: String?
+		public let localCandidateId: String?
+		public let remoteCandidateId: String?
 		public let state: String
 		public let nominated: Bool
 		public let currentRoundTripTimeMs: Double?
@@ -186,11 +200,19 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 		public let responsesReceived: Int?
 		public let requestsReceived: Int?
 		public let responsesSent: Int?
+		public let consentRequestsSent: Int?
+		public let lastPacketSentTimestamp: Double?
+		public let lastPacketReceivedTimestamp: Double?
 		public let bytesSent: UInt64?
 		public let bytesReceived: UInt64?
+		public let packetsDiscardedOnSend: Int?
+		public let bytesDiscardedOnSend: UInt64?
 
 		public init(
 			id: String,
+			transportId: String? = nil,
+			localCandidateId: String? = nil,
+			remoteCandidateId: String? = nil,
 			state: String,
 			nominated: Bool,
 			currentRoundTripTimeMs: Double? = nil,
@@ -199,10 +221,18 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 			responsesReceived: Int? = nil,
 			requestsReceived: Int? = nil,
 			responsesSent: Int? = nil,
+			consentRequestsSent: Int? = nil,
+			lastPacketSentTimestamp: Double? = nil,
+			lastPacketReceivedTimestamp: Double? = nil,
 			bytesSent: UInt64? = nil,
-			bytesReceived: UInt64? = nil
+			bytesReceived: UInt64? = nil,
+			packetsDiscardedOnSend: Int? = nil,
+			bytesDiscardedOnSend: UInt64? = nil
 		) {
 			self.id = id
+			self.transportId = transportId
+			self.localCandidateId = localCandidateId
+			self.remoteCandidateId = remoteCandidateId
 			self.state = state
 			self.nominated = nominated
 			self.currentRoundTripTimeMs = currentRoundTripTimeMs
@@ -211,8 +241,13 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 			self.responsesReceived = responsesReceived
 			self.requestsReceived = requestsReceived
 			self.responsesSent = responsesSent
+			self.consentRequestsSent = consentRequestsSent
+			self.lastPacketSentTimestamp = lastPacketSentTimestamp
+			self.lastPacketReceivedTimestamp = lastPacketReceivedTimestamp
 			self.bytesSent = bytesSent
 			self.bytesReceived = bytesReceived
+			self.packetsDiscardedOnSend = packetsDiscardedOnSend
+			self.bytesDiscardedOnSend = bytesDiscardedOnSend
 		}
 	}
 
@@ -221,6 +256,9 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 		public let availableOutgoingBitrate: Double?
 		public let selectedCandidatePairs: [IceCandidatePair]
 		public let candidatePairStates: [String: Int]
+		public let selectedCandidatePairId: String?
+		public let iceRole: String?
+		public let iceLocalUsernameFragment: String?
 		/// ICE transport state (new/checking/connected/completed/disconnected/failed/closed).
 		public let iceState: String?
 		public let dtlsState: String?
@@ -234,6 +272,9 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 			availableOutgoingBitrate: Double?,
 			selectedCandidatePairs: [IceCandidatePair],
 			candidatePairStates: [String: Int],
+			selectedCandidatePairId: String? = nil,
+			iceRole: String? = nil,
+			iceLocalUsernameFragment: String? = nil,
 			iceState: String? = nil,
 			dtlsState: String? = nil,
 			selectedCandidatePairChanges: Int? = nil,
@@ -243,6 +284,9 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 			self.availableOutgoingBitrate = availableOutgoingBitrate
 			self.selectedCandidatePairs = selectedCandidatePairs
 			self.candidatePairStates = candidatePairStates
+			self.selectedCandidatePairId = selectedCandidatePairId
+			self.iceRole = iceRole
+			self.iceLocalUsernameFragment = iceLocalUsernameFragment
 			self.iceState = iceState
 			self.dtlsState = dtlsState
 			self.selectedCandidatePairChanges = selectedCandidatePairChanges
@@ -393,6 +437,9 @@ extension DecartRealtimeWebRTCStats {
 		let candidatePairs = statistics.iceCandidatePair.map { pair in
 			CandidatePairStatus(
 				id: pair.id,
+				transportId: pair.transportId,
+				localCandidateId: pair.localCandidateId,
+				remoteCandidateId: pair.remoteCandidateId,
 				state: pair.state?.rawValue ?? "unknown",
 				nominated: pair.nominated ?? false,
 				currentRoundTripTimeMs: pair.currentRoundTripTime.map { $0 * 1000 },
@@ -401,8 +448,13 @@ extension DecartRealtimeWebRTCStats {
 				responsesReceived: pair.responsesReceived.map { Int($0) },
 				requestsReceived: pair.requestsReceived.map { Int($0) },
 				responsesSent: pair.responsesSent.map { Int($0) },
+				consentRequestsSent: pair.consentRequestsSent.map { Int($0) },
+				lastPacketSentTimestamp: pair.lastPacketSentTimestamp,
+				lastPacketReceivedTimestamp: pair.lastPacketReceivedTimestamp,
 				bytesSent: pair.bytesSent,
-				bytesReceived: pair.bytesReceived
+				bytesReceived: pair.bytesReceived,
+				packetsDiscardedOnSend: pair.packetsDiscardedOnSend.map { Int($0) },
+				bytesDiscardedOnSend: pair.bytesDiscardedOnSend
 			)
 		}
 
@@ -413,6 +465,9 @@ extension DecartRealtimeWebRTCStats {
 			availableOutgoingBitrate: candidatePair?.availableOutgoingBitrate,
 			selectedCandidatePairs: pairs,
 			candidatePairStates: pairStates,
+			selectedCandidatePairId: transport?.selectedCandidatePairId,
+			iceRole: transport?.iceRole?.rawValue,
+			iceLocalUsernameFragment: transport?.iceLocalUsernameFragment,
 			iceState: transport?.iceState?.rawValue,
 			dtlsState: transport?.dtlsState?.rawValue,
 			selectedCandidatePairChanges: transport?.selectedCandidatePairChanges.map { Int($0) },

@@ -30,6 +30,7 @@ actor RealtimeObservability {
 	private var lastSelectedPairSignature: String?
 	private var lastIceState: String?
 	private var lastCandidatePairStates: [String: String] = [:]
+	private var connectionDiagnosticsEnabled = true
 
 	init(
 		apiKey: String?,
@@ -119,9 +120,19 @@ actor RealtimeObservability {
 			lastSelectedPairSignature = nil
 			lastIceState = nil
 			lastCandidatePairStates.removeAll()
+			connectionDiagnosticsEnabled = true
 			DecartLiveKitLogging.setActiveObservability(self)
 		} else {
 			DecartLiveKitLogging.setActiveObservability(nil)
+		}
+	}
+
+	func setConnectionDiagnosticsEnabled(_ enabled: Bool) {
+		connectionDiagnosticsEnabled = enabled
+		if enabled {
+			lastSelectedPairSignature = nil
+			lastIceState = nil
+			lastCandidatePairStates.removeAll()
 		}
 	}
 
@@ -222,6 +233,7 @@ actor RealtimeObservability {
 			statsBuffer.append(stats)
 		}
 		await detectVideoStall(stats)
+		guard connectionDiagnosticsEnabled else { return }
 		await detectIceConnectionStateChange(stats)
 		await detectCandidatePairChanges(stats)
 		await detectSelectedCandidatePairChange(stats)
@@ -244,6 +256,15 @@ actor RealtimeObservability {
 		if let dtlsState = stats.connection.dtlsState {
 			data["dtlsState"] = .string(dtlsState)
 		}
+		if let selectedCandidatePairId = stats.connection.selectedCandidatePairId {
+			data["selectedCandidatePairId"] = .string(selectedCandidatePairId)
+		}
+		if let iceRole = stats.connection.iceRole {
+			data["iceRole"] = .string(iceRole)
+		}
+		if let iceLocalUsernameFragment = stats.connection.iceLocalUsernameFragment {
+			data["iceLocalUsernameFragment"] = .string(iceLocalUsernameFragment)
+		}
 		if let changes = stats.connection.selectedCandidatePairChanges {
 			data["selectedCandidatePairChanges"] = .int(changes)
 		}
@@ -265,6 +286,15 @@ actor RealtimeObservability {
 				"state": .string(pair.state),
 				"nominated": .bool(pair.nominated)
 			]
+			if let transportId = pair.transportId {
+				data["transportId"] = .string(transportId)
+			}
+			if let localCandidateId = pair.localCandidateId {
+				data["localCandidateId"] = .string(localCandidateId)
+			}
+			if let remoteCandidateId = pair.remoteCandidateId {
+				data["remoteCandidateId"] = .string(remoteCandidateId)
+			}
 			if let rtt = pair.currentRoundTripTimeMs {
 				data["currentRoundTripTimeMs"] = .double(rtt)
 			}
@@ -279,6 +309,27 @@ actor RealtimeObservability {
 			}
 			if let responsesSent = pair.responsesSent {
 				data["responsesSent"] = .int(responsesSent)
+			}
+			if let consentRequestsSent = pair.consentRequestsSent {
+				data["consentRequestsSent"] = .int(consentRequestsSent)
+			}
+			if let lastPacketSentTimestamp = pair.lastPacketSentTimestamp {
+				data["lastPacketSentTimestamp"] = .double(lastPacketSentTimestamp)
+			}
+			if let lastPacketReceivedTimestamp = pair.lastPacketReceivedTimestamp {
+				data["lastPacketReceivedTimestamp"] = .double(lastPacketReceivedTimestamp)
+			}
+			if let bytesSent = pair.bytesSent {
+				data["bytesSent"] = .int(Int(bytesSent))
+			}
+			if let bytesReceived = pair.bytesReceived {
+				data["bytesReceived"] = .int(Int(bytesReceived))
+			}
+			if let packetsDiscardedOnSend = pair.packetsDiscardedOnSend {
+				data["packetsDiscardedOnSend"] = .int(packetsDiscardedOnSend)
+			}
+			if let bytesDiscardedOnSend = pair.bytesDiscardedOnSend {
+				data["bytesDiscardedOnSend"] = .int(Int(bytesDiscardedOnSend))
 			}
 			await emitInstrumentationEvent("ice-candidate-pair", data: data)
 		}
@@ -368,6 +419,11 @@ actor RealtimeObservability {
 		connectionBreakdown?.phases[name] = entry
 	}
 
+	func recordLiveKitConnectSpan(_ snapshot: LiveKitConnectSpanSnapshot) {
+		guard connectionBreakdown != nil else { return }
+		connectionBreakdown?.liveKitConnectSpan = snapshot
+	}
+
 	func finishConnectionBreakdown(success: Bool, error: String? = nil) async {
 		DecartLiveKitLogging.setCaptureVerbose(false)
 		guard let buffer = connectionBreakdown else { return }
@@ -399,6 +455,9 @@ actor RealtimeObservability {
 			"initialImageSizeKb": buffer.initialImageSizeKb.map { .int($0) } ?? .null,
 			"phases": .array(phases)
 		]
+		if let liveKitConnectSpan = buffer.liveKitConnectSpan {
+			data["liveKitConnectSpan"] = Self.liveKitConnectSpanData(liveKitConnectSpan)
+		}
 		if let error {
 			data["error"] = .string(error)
 		}
@@ -448,6 +507,7 @@ actor RealtimeObservability {
 		lastSelectedPairSignature = nil
 		lastIceState = nil
 		lastCandidatePairStates.removeAll()
+		connectionDiagnosticsEnabled = true
 		connectionBreakdown = nil
 	}
 
@@ -467,6 +527,19 @@ actor RealtimeObservability {
 		guard hasPending else { return }
 		let effectiveSessionId = sessionId ?? "pre-session-\(UUID().uuidString)"
 		await flushReports(sessionId: effectiveSessionId)
+	}
+
+	private static func liveKitConnectSpanData(_ snapshot: LiveKitConnectSpanSnapshot) -> DecartRealtimeJSONValue {
+		.object([
+			"totalDurationMs": .int(snapshot.totalDurationMs),
+			"events": .array(snapshot.entries.map { entry in
+				.object([
+					"label": .string(entry.label),
+					"elapsedMs": .int(entry.elapsedMs),
+					"deltaMs": .int(entry.deltaMs)
+				])
+			})
+		])
 	}
 
 	private func flush() async {
@@ -529,6 +602,7 @@ private struct ConnectionBreakdownBuffer {
 	let initialImageSizeKb: Int?
 	var phaseOrder: [String] = []
 	var phases: [String: ConnectionPhaseEntry] = [:]
+	var liveKitConnectSpan: LiveKitConnectSpanSnapshot?
 }
 
 private struct ConnectionPhaseEntry {

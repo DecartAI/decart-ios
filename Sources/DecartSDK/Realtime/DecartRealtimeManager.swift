@@ -537,8 +537,10 @@ private extension DecartRealtimeManager {
 					)
 				case .generationStarted:
 					self.connectionState = .generating
+					await self.observability.setConnectionDiagnosticsEnabled(false)
 				case .generationTick(let tick):
 					self.generationTick = tick.seconds
+					await self.observability.setConnectionDiagnosticsEnabled(false)
 				case .generationEnded(let ended):
 					if let seconds = ended.seconds {
 						self.generationTick = seconds

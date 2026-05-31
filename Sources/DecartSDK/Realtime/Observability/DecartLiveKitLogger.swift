@@ -143,6 +143,8 @@ enum LiveKitLogNoiseFilter {
 		"did update state",   // "Transport(subscriber) did update state: ..."
 		"connectionstate:",   // "target: subscriber, connectionState: ..."
 		"connection state",
+		"icecandidate",       // "sending iceCandidate"
+		"ice candidate",
 		"ice restart",
 		"reconnect",
 		"disconnect",         // disconnected / disconnecting

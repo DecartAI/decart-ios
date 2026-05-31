@@ -91,7 +91,7 @@ public struct RealtimeConfiguration: Sendable {
 			maxBitrate: Int = 3_500_000,
 			maxFramerate: Int = 30,
 			preferredCodec: String = "h264",
-			simulcast: Bool = true
+			simulcast: Bool = false
 		) {
 			self.maxBitrate = maxBitrate
 			self.maxFramerate = maxFramerate

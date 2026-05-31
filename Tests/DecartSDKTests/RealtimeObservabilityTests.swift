@@ -135,6 +135,13 @@ final class RealtimeObservabilityTests: XCTestCase {
 		await observability.endPhase("websocket-open", success: true)
 		await observability.startPhase("room-join")
 		await observability.endPhase("room-join", success: false, error: "boom")
+		await observability.recordLiveKitConnectSpan(.init(
+			totalDurationMs: 220,
+			entries: [
+				.init(label: "ws_open", elapsedMs: 40, deltaMs: 40),
+				.init(label: "pc_created", elapsedMs: 120, deltaMs: 80)
+			]
+		))
 		await observability.finishConnectionBreakdown(success: false, error: "boom")
 
 		let firstPayload = await websocket.firstPayloadObject()
@@ -160,6 +167,17 @@ final class RealtimeObservabilityTests: XCTestCase {
 		XCTAssertEqual(secondPhase["phase"], .string("room-join"))
 		XCTAssertEqual(secondPhase["success"], .bool(false))
 		XCTAssertEqual(secondPhase["error"], .string("boom"))
+		guard case .object(let span)? = data["liveKitConnectSpan"], case .array(let spanEvents)? = span["events"] else {
+			return XCTFail("missing LiveKit connect span")
+		}
+		XCTAssertEqual(span["totalDurationMs"], .int(220))
+		XCTAssertEqual(spanEvents.count, 2)
+		guard case .object(let firstEvent) = spanEvents[0] else {
+			return XCTFail("malformed LiveKit span event")
+		}
+		XCTAssertEqual(firstEvent["label"], .string("ws_open"))
+		XCTAssertEqual(firstEvent["elapsedMs"], .int(40))
+		XCTAssertEqual(firstEvent["deltaMs"], .int(40))
 	}
 
 	func testReconnectDiagnosticForwardedOverWebSocket() async throws {
@@ -237,6 +255,9 @@ final class RealtimeObservabilityTests: XCTestCase {
 		}
 		XCTAssertEqual(iceData["state"], .string("checking"))
 		XCTAssertEqual(iceData["dtlsState"], .string("connecting"))
+		XCTAssertEqual(iceData["selectedCandidatePairId"], .string("pair-active"))
+		XCTAssertEqual(iceData["iceRole"], .string("controlling"))
+		XCTAssertEqual(iceData["iceLocalUsernameFragment"], .string("ufrag"))
 
 		let failedPair = objects.first {
 			guard case .object(let data)? = $0["data"] else { return false }
@@ -247,8 +268,34 @@ final class RealtimeObservabilityTests: XCTestCase {
 			return XCTFail("missing failed pair data")
 		}
 		XCTAssertEqual(failedData["state"], .string("failed"))
+		XCTAssertEqual(failedData["transportId"], .string("transport-1"))
+		XCTAssertEqual(failedData["localCandidateId"], .string("local-1"))
+		XCTAssertEqual(failedData["remoteCandidateId"], .string("remote-1"))
 		XCTAssertEqual(failedData["requestsSent"], .int(5))
 		XCTAssertEqual(failedData["responsesReceived"], .int(0))
+		XCTAssertEqual(failedData["consentRequestsSent"], .int(2))
+		XCTAssertEqual(failedData["lastPacketSentTimestamp"], .double(1234.5))
+	}
+
+	func testConnectionDiagnosticsCanBeDisabledDuringGeneration() async throws {
+		let telemetry = TelemetryRequestRecorder()
+		let websocket = ObservabilityPayloadRecorder()
+		let observability = makeObservability(telemetry: telemetry)
+
+		await observability.setObservabilityForwarder { payload in
+			await websocket.record(payload)
+		}
+		await observability.setConnectionDiagnosticsEnabled(false)
+		await observability.recordStats(Self.makeStatsWithIce())
+
+		let objects = await websocket.objects()
+		let names = objects.compactMap { object -> String? in
+			if case .string(let name)? = object["name"] { return name }
+			return nil
+		}
+		XCTAssertFalse(names.contains("ice-connection-state"))
+		XCTAssertFalse(names.contains("ice-candidate-pair"))
+		XCTAssertFalse(names.contains("selected-candidate-pair"))
 	}
 
 	func testLiveKitConnectionLogForwardedOverWebSocketOnly() async throws {
@@ -282,11 +329,10 @@ final class RealtimeObservabilityTests: XCTestCase {
 
 	func testLiveKitLogAllowlistKeepsConnectionDiagnostics() {
 		// Dropped by default: routine chatter the server already logs, plus
-		// per-candidate trickle sends, SDP/data-channel/negotiation, and empty.
+		// SDP/data-channel/negotiation, and empty lines.
 		let droppedSamples = [
 			"",
 			"   ",
-			"sending iceCandidate",
 			"ServerInfo(version: 1.2.3, region: us-east)",
 			"Join response id ABC waiting",
 			"ping/pong starting interval: 5",
@@ -314,6 +360,7 @@ final class RealtimeObservabilityTests: XCTestCase {
 			"target: subscriber, connectionState: disconnected",
 			"Failed to add ice candidate for target: subscriber",
 			"Failed to send iceCandidate, error: timeout",
+			"sending iceCandidate",
 			"Connect failed with region: us-east",
 			"Primary transport connect timed out",
 			"Unable to connect to signaling server",
@@ -352,11 +399,25 @@ final class RealtimeObservabilityTests: XCTestCase {
 				availableOutgoingBitrate: 500_000,
 				selectedCandidatePairs: [],
 				candidatePairStates: ["failed": 1, "in-progress": 1],
+				selectedCandidatePairId: "pair-active",
+				iceRole: "controlling",
+				iceLocalUsernameFragment: "ufrag",
 				iceState: "checking",
 				dtlsState: "connecting",
 				selectedCandidatePairChanges: 0,
 				candidatePairs: [
-					.init(id: "pair-failed", state: "failed", nominated: false, requestsSent: 5, responsesReceived: 0),
+					.init(
+						id: "pair-failed",
+						transportId: "transport-1",
+						localCandidateId: "local-1",
+						remoteCandidateId: "remote-1",
+						state: "failed",
+						nominated: false,
+						requestsSent: 5,
+						responsesReceived: 0,
+						consentRequestsSent: 2,
+						lastPacketSentTimestamp: 1234.5
+					),
 					.init(
 						id: "pair-active",
 						state: "in-progress",
