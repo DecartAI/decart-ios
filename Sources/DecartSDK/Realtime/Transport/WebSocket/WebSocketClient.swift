@@ -81,6 +81,14 @@ actor WebSocketClient {
 		try await socket.send(.text(jsonString))
 	}
 
+	func sendBestEffort<T: Encodable & Sendable>(_ message: T) async {
+		do {
+			try await send(message)
+		} catch {
+			// Observability is best-effort and must never disrupt a realtime session.
+		}
+	}
+
 	func disconnect() async {
 		listeningTask?.cancel()
 		listeningTask = nil

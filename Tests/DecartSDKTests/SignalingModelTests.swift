@@ -47,6 +47,22 @@ final class SignalingModelTests: XCTestCase {
 		XCTAssertEqual(json["enhance_prompt"] as? Bool, true)
 	}
 
+	func testEncodesObservabilityMessage() throws {
+		let payload: DecartRealtimeJSONValue = .object([
+			"kind": .string("instrumentation"),
+			"name": .string("room-connected"),
+			"timestamp": .int(123)
+		])
+		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.observability(data: payload))
+		let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+		let payloadJSON = try XCTUnwrap(json["data"] as? [String: Any])
+
+		XCTAssertEqual(json["type"] as? String, "observability")
+		XCTAssertEqual(payloadJSON["kind"] as? String, "instrumentation")
+		XCTAssertEqual(payloadJSON["name"] as? String, "room-connected")
+		XCTAssertEqual(payloadJSON["timestamp"] as? Int, 123)
+	}
+
 	func testEncodesPassthroughInitialStateWithNullPromptAndImage() throws {
 		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.setImage(.passthrough()))
 		let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])

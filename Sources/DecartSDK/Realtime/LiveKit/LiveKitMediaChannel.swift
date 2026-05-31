@@ -22,6 +22,7 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 
 	private var room: Room?
 	private var remoteVideoTrack: VideoTrack?
+	private var remoteAudioTrack: AudioTrack?
 	private var localVideoTrack: LocalVideoTrack?
 	private var statsPollingTask: Task<Void, Never>?
 
@@ -79,9 +80,12 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		let room = Room(delegate: self, connectOptions: connectOptions, roomOptions: roomOptions)
 		self.room = room
 		remoteVideoTrack = nil
+		remoteAudioTrack = nil
 		statsPollingTask?.cancel()
 		statsPollingTask = nil
 
+		// Connect failures are captured by the manager's connection-breakdown
+		// diagnostic (the `webrtc-handshake` phase records the thrown error).
 		try await room.connect(url: roomInfo.liveKitURL, token: roomInfo.token)
 	}
 
@@ -92,6 +96,7 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		statsPollingTask = nil
 		localVideoTrack = nil
 		remoteVideoTrack = nil
+		remoteAudioTrack = nil
 		await room?.disconnect()
 	}
 
@@ -106,12 +111,16 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 			startStatsPollingIfNeeded()
 			try await room.localParticipant.publish(videoTrack: videoTrack, options: videoPublishOptions)
 		}
+
+		if let audioTrack = stream.audioTrack as? LocalAudioTrack {
+			try await room.localParticipant.publish(audioTrack: audioTrack)
+		}
 	}
 
 	var currentRemoteStream: RealtimeMediaStream {
 		RealtimeMediaStream(
 			videoTrack: remoteVideoTrack,
-			audioTrack: nil,
+			audioTrack: remoteAudioTrack,
 			id: .remoteStream
 		)
 	}
@@ -139,9 +148,22 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	private func shouldAcceptTrack(from participant: RemoteParticipant) -> Bool {
 		participant.identity?.stringValue.hasPrefix("inference-server-") == true
 	}
+
+	private func emitObservabilityEvent(
+		_ name: String,
+		data: [String: DecartRealtimeJSONValue] = [:]
+	) {
+		Task { [observability] in
+			await observability.emitInstrumentationEvent(name, data: data)
+		}
+	}
 }
 
 extension LiveKitMediaChannel: RoomDelegate {
+	// ConnectionStateChanged is intentionally not forwarded as an
+	// observability event (it duplicates room-connected/-reconnecting/
+	// -disconnected, matching the JS SDK), but it still drives the SDK
+	// connection state machine.
 	func room(_ room: Room, didUpdateConnectionState connectionState: ConnectionState, from oldConnectionState: ConnectionState) {
 		switch connectionState {
 		case .connected:
@@ -157,38 +179,48 @@ extension LiveKitMediaChannel: RoomDelegate {
 		}
 	}
 
+	func roomDidConnect(_ room: Room) {
+		emitObservabilityEvent(
+			"room-connected",
+			data: [
+				"name": room.name.map { .string($0) } ?? .null,
+				"sid": room.localParticipant.sid.map { .string($0.stringValue) } ?? .null
+			]
+		)
+	}
+
 	func room(_ room: Room, didDisconnectWithError error: LiveKitError?) {
+		emitObservabilityEvent(
+			"room-disconnected",
+			data: [
+				"reason": .null,
+				"reasonName": error.map { .string($0.localizedDescription) } ?? .null
+			]
+		)
 		disconnectContinuation.yield(DisconnectInfo(reason: error?.localizedDescription))
 	}
 
 	func room(_ room: Room, didStartReconnectWithMode reconnectMode: ReconnectMode) {
-		observability.emitLog(
-			"LiveKit reconnect started",
-			level: .warning,
-			category: "livekit.room",
-			metadata: ["mode": "\(reconnectMode)"]
-		)
+		emitObservabilityEvent("room-reconnecting")
 		connectionStateContinuation.yield(.reconnecting)
 	}
 
 	func room(_ room: Room, didCompleteReconnectWithMode reconnectMode: ReconnectMode) {
+		emitObservabilityEvent("room-reconnected")
 		connectionStateContinuation.yield(.connected)
-	}
-
-	func room(_ room: Room, didFailToConnectWithError error: LiveKitError?) {
-		observability.emitLog(
-			"LiveKit room failed to connect",
-			level: .error,
-			category: "livekit.room",
-			metadata: ["error": error?.localizedDescription ?? "unknown"]
-		)
 	}
 
 	func room(_ room: Room, participant: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {
 		guard shouldAcceptTrack(from: participant) else { return }
-		if let videoTrack = publication.track as? VideoTrack {
+		switch publication.track {
+		case let videoTrack as VideoTrack:
 			remoteVideoTrack = videoTrack
 			emitRemoteStreamIfAvailable()
+		case let audioTrack as AudioTrack:
+			remoteAudioTrack = audioTrack
+			emitRemoteStreamIfAvailable()
+		default:
+			break
 		}
 	}
 }

@@ -19,7 +19,7 @@ final class AsyncRequest<Value: Sendable>: @unchecked Sendable {
 		resume(.failure(error))
 	}
 
-	func reset() {
+	func reset(error: Error = CancellationError()) {
 		let pending: Waiter?
 		lock.lock()
 		bufferedResult = nil
@@ -28,7 +28,7 @@ final class AsyncRequest<Value: Sendable>: @unchecked Sendable {
 		lock.unlock()
 
 		pending?.timeoutTask.cancel()
-		pending?.continuation.resume(throwing: CancellationError())
+		pending?.continuation.resume(throwing: error)
 	}
 
 	func wait(
