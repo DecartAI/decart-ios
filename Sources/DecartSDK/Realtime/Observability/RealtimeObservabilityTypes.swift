@@ -173,11 +173,81 @@ public struct DecartRealtimeWebRTCStats: Codable, Sendable {
 		public let remote: IceCandidateInfo
 	}
 
+	/// A single ICE candidate pair (connection attempt) and its connectivity
+	/// state. Unlike ``IceCandidatePair`` this is reported for every pair, not
+	/// just the selected one, so failed/in-progress attempts are observable.
+	public struct CandidatePairStatus: Codable, Sendable {
+		public let id: String
+		public let state: String
+		public let nominated: Bool
+		public let currentRoundTripTimeMs: Double?
+		public let availableOutgoingBitrate: Double?
+		public let requestsSent: Int?
+		public let responsesReceived: Int?
+		public let requestsReceived: Int?
+		public let responsesSent: Int?
+		public let bytesSent: UInt64?
+		public let bytesReceived: UInt64?
+
+		public init(
+			id: String,
+			state: String,
+			nominated: Bool,
+			currentRoundTripTimeMs: Double? = nil,
+			availableOutgoingBitrate: Double? = nil,
+			requestsSent: Int? = nil,
+			responsesReceived: Int? = nil,
+			requestsReceived: Int? = nil,
+			responsesSent: Int? = nil,
+			bytesSent: UInt64? = nil,
+			bytesReceived: UInt64? = nil
+		) {
+			self.id = id
+			self.state = state
+			self.nominated = nominated
+			self.currentRoundTripTimeMs = currentRoundTripTimeMs
+			self.availableOutgoingBitrate = availableOutgoingBitrate
+			self.requestsSent = requestsSent
+			self.responsesReceived = responsesReceived
+			self.requestsReceived = requestsReceived
+			self.responsesSent = responsesSent
+			self.bytesSent = bytesSent
+			self.bytesReceived = bytesReceived
+		}
+	}
+
 	public struct Connection: Codable, Sendable {
 		public let currentRoundTripTime: Double?
 		public let availableOutgoingBitrate: Double?
 		public let selectedCandidatePairs: [IceCandidatePair]
 		public let candidatePairStates: [String: Int]
+		/// ICE transport state (new/checking/connected/completed/disconnected/failed/closed).
+		public let iceState: String?
+		public let dtlsState: String?
+		public let selectedCandidatePairChanges: Int?
+		/// Every candidate pair (connection attempt) currently known, including
+		/// failed and in-progress ones.
+		public let candidatePairs: [CandidatePairStatus]
+
+		public init(
+			currentRoundTripTime: Double?,
+			availableOutgoingBitrate: Double?,
+			selectedCandidatePairs: [IceCandidatePair],
+			candidatePairStates: [String: Int],
+			iceState: String? = nil,
+			dtlsState: String? = nil,
+			selectedCandidatePairChanges: Int? = nil,
+			candidatePairs: [CandidatePairStatus] = []
+		) {
+			self.currentRoundTripTime = currentRoundTripTime
+			self.availableOutgoingBitrate = availableOutgoingBitrate
+			self.selectedCandidatePairs = selectedCandidatePairs
+			self.candidatePairStates = candidatePairStates
+			self.iceState = iceState
+			self.dtlsState = dtlsState
+			self.selectedCandidatePairChanges = selectedCandidatePairChanges
+			self.candidatePairs = candidatePairs
+		}
 	}
 
 	public let timestamp: Int64
@@ -320,11 +390,33 @@ extension DecartRealtimeWebRTCStats {
 			pairStates[stateName, default: 0] += 1
 		}
 
+		let candidatePairs = statistics.iceCandidatePair.map { pair in
+			CandidatePairStatus(
+				id: pair.id,
+				state: pair.state?.rawValue ?? "unknown",
+				nominated: pair.nominated ?? false,
+				currentRoundTripTimeMs: pair.currentRoundTripTime.map { $0 * 1000 },
+				availableOutgoingBitrate: pair.availableOutgoingBitrate,
+				requestsSent: pair.requestsSent.map { Int($0) },
+				responsesReceived: pair.responsesReceived.map { Int($0) },
+				requestsReceived: pair.requestsReceived.map { Int($0) },
+				responsesSent: pair.responsesSent.map { Int($0) },
+				bytesSent: pair.bytesSent,
+				bytesReceived: pair.bytesReceived
+			)
+		}
+
+		let transport = statistics.transportStats
+
 		return Connection(
 			currentRoundTripTime: candidatePair?.currentRoundTripTime,
 			availableOutgoingBitrate: candidatePair?.availableOutgoingBitrate,
 			selectedCandidatePairs: pairs,
-			candidatePairStates: pairStates
+			candidatePairStates: pairStates,
+			iceState: transport?.iceState?.rawValue,
+			dtlsState: transport?.dtlsState?.rawValue,
+			selectedCandidatePairChanges: transport?.selectedCandidatePairChanges.map { Int($0) },
+			candidatePairs: candidatePairs
 		)
 	}
 

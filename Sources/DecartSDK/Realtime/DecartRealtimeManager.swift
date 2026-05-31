@@ -122,7 +122,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		self.remoteStreamUpdates = remoteStream
 		self.remoteStreamContinuation = remoteContinuation
 
-		DecartLiveKitLogging.install(observability: observability)
+		DecartLiveKitLogging.install()
 		emitStateIfChanged()
 	}
 

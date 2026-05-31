@@ -28,6 +28,8 @@ actor RealtimeObservability {
 	private var pathObserver: NetworkPathObserver?
 	private var connectionBreakdown: ConnectionBreakdownBuffer?
 	private var lastSelectedPairSignature: String?
+	private var lastIceState: String?
+	private var lastCandidatePairStates: [String: String] = [:]
 
 	init(
 		apiKey: String?,
@@ -94,10 +96,18 @@ actor RealtimeObservability {
 	}
 
 	private static func networkSnapshotData(_ snapshot: NetworkPathSnapshot) -> [String: DecartRealtimeJSONValue] {
-		[
+		// Per-interface local IP addresses (en0=Wi-Fi, pdp_ip0=cellular, …),
+		// since `NWPath` only exposes interface *types*, not the actual
+		// addresses that are useful for correlating with the gathered ICE
+		// host candidates.
+		let addresses = NetworkPathObserver.interfaceAddresses().mapValues { ips in
+			DecartRealtimeJSONValue.array(ips.map { .string($0) })
+		}
+		return [
 			"online": .bool(snapshot.status == "satisfied"),
 			"status": .string(snapshot.status),
 			"interfaces": .array(snapshot.interfaces.map { .string($0) }),
+			"addresses": .object(addresses),
 			"isExpensive": .bool(snapshot.isExpensive),
 			"isConstrained": .bool(snapshot.isConstrained)
 		]
@@ -107,7 +117,32 @@ actor RealtimeObservability {
 		observabilityForwarder = forwarder
 		if forwarder != nil {
 			lastSelectedPairSignature = nil
+			lastIceState = nil
+			lastCandidatePairStates.removeAll()
+			DecartLiveKitLogging.setActiveObservability(self)
+		} else {
+			DecartLiveKitLogging.setActiveObservability(nil)
 		}
+	}
+
+	/// Forwards a LiveKit-originated connection log over the observability WS.
+	/// Used to surface ICE / transport / signaling detail during the connection
+	/// handshake (including failures that happen before any track stats exist).
+	func recordLiveKitConnectionLog(
+		_ message: String,
+		level: DecartRealtimeLogLevel,
+		category: String,
+		metadata: [String: String]
+	) async {
+		await emitInstrumentationEvent(
+			"livekit-log",
+			data: [
+				"level": .string(level.rawValue),
+				"category": .string(category),
+				"message": .string(message),
+				"metadata": .object(metadata.mapValues { .string($0) })
+			]
+		)
 	}
 
 	// Logs are local-only, matching the JS SDK: they go to the SDK logger,
@@ -187,7 +222,66 @@ actor RealtimeObservability {
 			statsBuffer.append(stats)
 		}
 		await detectVideoStall(stats)
+		await detectIceConnectionStateChange(stats)
+		await detectCandidatePairChanges(stats)
 		await detectSelectedCandidatePairChange(stats)
+	}
+
+	// Emits the ICE transport state (checking/connected/failed/disconnected/…)
+	// whenever it changes — the closest signal to "connection attempt
+	// progress" reachable on iOS, where LiveKit does not expose the underlying
+	// peer connection's ICE events.
+	private func detectIceConnectionStateChange(_ stats: DecartRealtimeWebRTCStats) async {
+		guard let iceState = stats.connection.iceState else { return }
+		guard iceState != lastIceState else { return }
+		let previous = lastIceState
+		lastIceState = iceState
+
+		var data: [String: DecartRealtimeJSONValue] = ["state": .string(iceState)]
+		if let previous {
+			data["previousState"] = .string(previous)
+		}
+		if let dtlsState = stats.connection.dtlsState {
+			data["dtlsState"] = .string(dtlsState)
+		}
+		if let changes = stats.connection.selectedCandidatePairChanges {
+			data["selectedCandidatePairChanges"] = .int(changes)
+		}
+		await emitInstrumentationEvent("ice-connection-state", data: data)
+	}
+
+	// Emits one `ice-candidate-pair` event per candidate pair whenever a pair
+	// first appears or transitions state (e.g. waiting → in-progress → failed
+	// or succeeded). This surfaces every connection attempt and any failing
+	// ones, with the STUN connectivity-check counts.
+	private func detectCandidatePairChanges(_ stats: DecartRealtimeWebRTCStats) async {
+		for pair in stats.connection.candidatePairs {
+			let signature = "\(pair.state)|\(pair.nominated)"
+			if lastCandidatePairStates[pair.id] == signature { continue }
+			lastCandidatePairStates[pair.id] = signature
+
+			var data: [String: DecartRealtimeJSONValue] = [
+				"id": .string(pair.id),
+				"state": .string(pair.state),
+				"nominated": .bool(pair.nominated)
+			]
+			if let rtt = pair.currentRoundTripTimeMs {
+				data["currentRoundTripTimeMs"] = .double(rtt)
+			}
+			if let requestsSent = pair.requestsSent {
+				data["requestsSent"] = .int(requestsSent)
+			}
+			if let responsesReceived = pair.responsesReceived {
+				data["responsesReceived"] = .int(responsesReceived)
+			}
+			if let requestsReceived = pair.requestsReceived {
+				data["requestsReceived"] = .int(requestsReceived)
+			}
+			if let responsesSent = pair.responsesSent {
+				data["responsesSent"] = .int(responsesSent)
+			}
+			await emitInstrumentationEvent("ice-candidate-pair", data: data)
+		}
 	}
 
 	// Stats themselves are intentionally not forwarded over the WS (they fire
@@ -251,6 +345,9 @@ actor RealtimeObservability {
 			connectStartedAt: DecartRealtimeClock.nowMilliseconds(),
 			initialImageSizeKb: initialImageSizeKb
 		)
+		// Capture LiveKit's verbose connection logs for the duration of the
+		// handshake so ICE/transport detail is recorded even if it fails.
+		DecartLiveKitLogging.setCaptureVerbose(true)
 	}
 
 	func startPhase(_ name: String) {
@@ -272,6 +369,7 @@ actor RealtimeObservability {
 	}
 
 	func finishConnectionBreakdown(success: Bool, error: String? = nil) async {
+		DecartLiveKitLogging.setCaptureVerbose(false)
 		guard let buffer = connectionBreakdown else { return }
 		connectionBreakdown = nil
 
@@ -348,10 +446,14 @@ actor RealtimeObservability {
 		videoStalled = false
 		stallStartMs = 0
 		lastSelectedPairSignature = nil
+		lastIceState = nil
+		lastCandidatePairStates.removeAll()
 		connectionBreakdown = nil
 	}
 
 	func finish() async {
+		DecartLiveKitLogging.setActiveObservability(nil)
+		DecartLiveKitLogging.setCaptureVerbose(false)
 		pathObserver?.stop()
 		pathObserver = nil
 		await stopTelemetry()
