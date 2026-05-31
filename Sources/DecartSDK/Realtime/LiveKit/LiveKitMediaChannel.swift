@@ -22,7 +22,6 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 
 	private var room: Room?
 	private var remoteVideoTrack: VideoTrack?
-	private var remoteAudioTrack: AudioTrack?
 	private var localVideoTrack: LocalVideoTrack?
 	private var statsPollingTask: Task<Void, Never>?
 
@@ -77,10 +76,13 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	}
 
 	func connect(roomInfo: LiveKitRoomInfoMessage) async throws {
+		// Realtime is video-only: configure LiveKit so it never touches the
+		// microphone or the speaker before the room is created.
+		Self.configureVideoOnlyAudio()
+
 		let room = Room(delegate: self, connectOptions: connectOptions, roomOptions: roomOptions)
 		self.room = room
 		remoteVideoTrack = nil
-		remoteAudioTrack = nil
 		statsPollingTask?.cancel()
 		statsPollingTask = nil
 
@@ -96,8 +98,29 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		statsPollingTask = nil
 		localVideoTrack = nil
 		remoteVideoTrack = nil
-		remoteAudioTrack = nil
 		await room?.disconnect()
+	}
+
+	/// Forces LiveKit into a video-only audio posture so a realtime session
+	/// never requests microphone access (which would otherwise crash without
+	/// `NSMicrophoneUsageDescription`) and never routes audio to the speaker.
+	///
+	/// - A playback-only `AVAudioSession` category guarantees the mic is never
+	///   engaged, so no microphone usage description is required.
+	/// - Disabling the audio engine entirely keeps both capture and playout off
+	///   regardless of any track subscription.
+	private static func configureVideoOnlyAudio() {
+		#if os(iOS) || os(visionOS) || os(tvOS)
+		AudioManager.shared.sessionConfiguration = .playback
+		do {
+			try AudioManager.shared.setEngineAvailability(.none)
+		} catch {
+			DecartLogger.log(
+				"Failed to disable LiveKit audio engine: \(error.localizedDescription)",
+				level: .warning
+			)
+		}
+		#endif
 	}
 
 	func publishLocalTracks(from stream: RealtimeMediaStream) async throws {
@@ -105,22 +128,18 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 			throw DecartError.webRTCError("LiveKit room is not connected")
 		}
 
+		// Video-only: the microphone is never captured or published.
 		if let videoTrack = stream.videoTrack as? LocalVideoTrack {
 			localVideoTrack = videoTrack
 			await videoTrack.set(reportStatistics: true)
 			startStatsPollingIfNeeded()
 			try await room.localParticipant.publish(videoTrack: videoTrack, options: videoPublishOptions)
 		}
-
-		if let audioTrack = stream.audioTrack as? LocalAudioTrack {
-			try await room.localParticipant.publish(audioTrack: audioTrack)
-		}
 	}
 
 	var currentRemoteStream: RealtimeMediaStream {
 		RealtimeMediaStream(
 			videoTrack: remoteVideoTrack,
-			audioTrack: remoteAudioTrack,
 			id: .remoteStream
 		)
 	}
@@ -212,15 +231,11 @@ extension LiveKitMediaChannel: RoomDelegate {
 
 	func room(_ room: Room, participant: RemoteParticipant, didSubscribeTrack publication: RemoteTrackPublication) {
 		guard shouldAcceptTrack(from: participant) else { return }
-		switch publication.track {
-		case let videoTrack as VideoTrack:
+		// Video-only: remote audio tracks are ignored so nothing is ever
+		// routed to the speaker.
+		if let videoTrack = publication.track as? VideoTrack {
 			remoteVideoTrack = videoTrack
 			emitRemoteStreamIfAvailable()
-		case let audioTrack as AudioTrack:
-			remoteAudioTrack = audioTrack
-			emitRemoteStreamIfAvailable()
-		default:
-			break
 		}
 	}
 }

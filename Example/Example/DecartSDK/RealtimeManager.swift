@@ -33,6 +33,11 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	private(set) var localMediaStream: RealtimeMediaStream?
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
 
+	/// Whether the front camera is active. Drives mirroring of both the local
+	/// preview and the AI-processed remote view so the front camera reads like
+	/// a mirror (selfie) while the back camera is shown un-mirrored.
+	private(set) var isFrontCamera: Bool = true
+
 	// MARK: - Private
 
 	@ObservationIgnored
@@ -108,6 +113,7 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		guard let cameraCapturer = localVideoTrack?.capturer as? CameraCapturer else { return }
 		do {
 			try await cameraCapturer.switchCameraPosition()
+			isFrontCamera.toggle()
 		} catch {
 			DecartLogger.log("Failed to switch camera", level: .error)
 		}
@@ -150,6 +156,7 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions)
 		localVideoTrack = videoTrack
 		localMediaStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
+		isFrontCamera = true
 	}
 	#endif
 
