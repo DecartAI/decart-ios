@@ -98,7 +98,10 @@ let captureOptions = CameraCaptureOptions(
     dimensions: Dimensions(width: Int32(modelConfig.height), height: Int32(modelConfig.width)),
     fps: modelConfig.fps
 )
-let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions)
+// `mirror: .auto` pre-flips the front camera so the server receives frames in
+// display orientation (see "Front-camera mirroring" below). Pass `.off` to disable.
+let mirror = MirroringVideoProcessor(mode: .auto)
+let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions, processor: mirror)
 let localStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
 let remoteStream = try await realtimeManager.connect(localStream: localStream)
 
@@ -116,15 +119,27 @@ await realtimeManager.disconnect()
 
 #### Front-camera mirroring
 
-LiveKit's `VideoView` can mirror the local preview without changing the encoded video sent to the server:
+Front cameras look natural only when mirrored, but mirroring just the local preview
+leaves the AI output reversed — and flipping the output would also flip any
+server-baked content (e.g. watermarks). `MirroringVideoProcessor` pre-flips frames
+**before** encoding, so the server works in display orientation and both the local
+preview and remote stream render as-is:
 
 ```swift
-RTCMLVideoViewWrapper(track: localStream.videoTrack, mirror: true)
+let mirror = MirroringVideoProcessor(mode: .auto)
+let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions, processor: mirror)
 ```
 
-Render the remote stream without mirroring:
+- `.off` (default) — never mirror.
+- `.auto` — mirror only when the active camera is `.front`. When switching cameras,
+  update `mirror.cameraPosition = cameraCapturer.position` so it follows the camera.
+- `.on` — always mirror.
+
+Render both streams with `RTCMLVideoViewWrapper(track:)` — no `mirror:` argument,
+since the frames are already in display orientation:
 
 ```swift
+RTCMLVideoViewWrapper(track: localStream.videoTrack)
 RTCMLVideoViewWrapper(track: remoteStream.videoTrack)
 ```
 
