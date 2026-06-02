@@ -53,6 +53,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	@ObservationIgnored
 	private var localVideoTrack: LocalVideoTrack?
 
+	@ObservationIgnored
+	private var mirrorProcessor: MirroringVideoProcessor?
+
 	// MARK: - Init
 
 	init(model: RealtimeModel, currentPrompt: DecartPrompt) {
@@ -108,6 +111,8 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		guard let cameraCapturer = localVideoTrack?.capturer as? CameraCapturer else { return }
 		do {
 			try await cameraCapturer.switchCameraPosition()
+			// Keep input-side mirroring (MirrorMode.auto) following the active camera.
+			mirrorProcessor?.cameraPosition = cameraCapturer.position
 		} catch {
 			DecartLogger.log("Failed to switch camera", level: .error)
 		}
@@ -128,6 +133,7 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 		try? await localVideoTrack?.stop()
 		localVideoTrack = nil
+		mirrorProcessor = nil
 
 		// Close LiveKit connection and release server resources.
 		await realtimeManager?.disconnect()
@@ -147,7 +153,15 @@ final class RealtimeManager: RealtimeManagerProtocol {
 			dimensions: dimensions,
 			fps: model.fps
 		)
-		let videoTrack = LocalVideoTrack.createCameraTrack(name: "video0", options: captureOptions)
+		// .auto pre-flips the front camera so the server gets display-orientation
+		// frames and server-baked content (e.g. watermarks) renders as-is.
+		let processor = MirroringVideoProcessor(mode: .auto, cameraPosition: .front)
+		mirrorProcessor = processor
+		let videoTrack = LocalVideoTrack.createCameraTrack(
+			name: "video0",
+			options: captureOptions,
+			processor: processor
+		)
 		localVideoTrack = videoTrack
 		localMediaStream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
 	}
