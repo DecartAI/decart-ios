@@ -7,6 +7,7 @@ final class ModelConfigTests: XCTestCase {
 			.lucy2_1,
 			.lucy2_1_vton,
 			.lucyVton2,
+			.lucyVton3,
 			.lucyRestyle2,
 			.lucyLatest,
 			.lucyVtonLatest,
@@ -17,6 +18,17 @@ final class ModelConfigTests: XCTestCase {
 		assertModel(
 			Models.realtime(.lucyVton2),
 			name: "lucy-vton-2",
+			urlPath: "/v1/stream",
+			jobsUrlPath: nil,
+			fps: 30,
+			width: 1088,
+			height: 624,
+			hasReferenceImage: true
+		)
+
+		assertModel(
+			Models.realtime(.lucyVton3),
+			name: "lucy-vton-3",
 			urlPath: "/v1/stream",
 			jobsUrlPath: nil,
 			fps: 30,
@@ -36,6 +48,7 @@ final class ModelConfigTests: XCTestCase {
 			.lucy2_1,
 			.lucy2_1_vton,
 			.lucyVton2,
+			.lucyVton3,
 			.lucyRestyle2,
 			.lucyLatest,
 			.lucyVtonLatest,
@@ -49,6 +62,16 @@ final class ModelConfigTests: XCTestCase {
 			name: "lucy-vton-2",
 			urlPath: "/v1/generate/lucy-vton-2",
 			jobsUrlPath: "/v1/jobs/lucy-vton-2",
+			fps: 20,
+			width: 1088,
+			height: 624
+		)
+
+		assertModel(
+			Models.video(.lucyVton3),
+			name: "lucy-vton-3",
+			urlPath: "/v1/generate/lucy-vton-3",
+			jobsUrlPath: "/v1/jobs/lucy-vton-3",
 			fps: 20,
 			width: 1088,
 			height: 624
