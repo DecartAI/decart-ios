@@ -14,6 +14,11 @@ public enum Resolution: String, Sendable {
 	case p1080 = "1080p"
 }
 
+public enum RealtimeVideoCodec: String, Sendable {
+	case h264
+	case vp9
+}
+
 public struct RealtimeConfiguration: Sendable {
 	public let model: ModelDefinition
 	public let initialPrompt: DecartPrompt
@@ -84,13 +89,13 @@ public struct RealtimeConfiguration: Sendable {
 	public struct VideoConfig: Sendable {
 		public let maxBitrate: Int
 		public let maxFramerate: Int
-		public let preferredCodec: String
+		public let preferredCodec: RealtimeVideoCodec
 		public let simulcast: Bool
 
 		public init(
 			maxBitrate: Int = 3_500_000,
 			maxFramerate: Int = 30,
-			preferredCodec: String = "h264",
+			preferredCodec: RealtimeVideoCodec = .vp9,
 			simulcast: Bool = false
 		) {
 			self.maxBitrate = maxBitrate
@@ -100,10 +105,15 @@ public struct RealtimeConfiguration: Sendable {
 		}
 
 		var publishOptions: VideoPublishOptions {
-			VideoPublishOptions(
+			makePublishOptions(preferedCodec: nil)
+		}
+
+		func makePublishOptions(preferedCodec: RealtimeVideoCodec?) -> VideoPublishOptions {
+			let codec = preferedCodec ?? preferredCodec
+			return VideoPublishOptions(
 				encoding: VideoEncoding(maxBitrate: maxBitrate, maxFps: maxFramerate),
 				simulcast: simulcast,
-				preferredCodec: LiveKit.VideoCodec.from(name: preferredCodec)
+				preferredCodec: LiveKit.VideoCodec.from(name: codec.rawValue)
 			)
 		}
 	}

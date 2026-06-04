@@ -57,6 +57,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private var isPermanentError = false
 	private var suppressMediaConnectedState = false
 	private var lastLocalStream: RealtimeMediaStream?
+	private var lastPreferedCodec: RealtimeVideoCodec?
 	private let observability: RealtimeObservability
 
 	private let roomInfoRequest = AsyncRequest<LiveKitRoomInfoMessage>()
@@ -201,7 +202,10 @@ private actor PromptAckRequests {
 // MARK: - Public API
 
 public extension DecartRealtimeManager {
-	func connect(localStream: RealtimeMediaStream) async throws -> RealtimeMediaStream {
+	func connect(
+		localStream: RealtimeMediaStream,
+		preferedCodec: RealtimeVideoCodec = .vp9
+	) async throws -> RealtimeMediaStream {
 		isUserInitiatedDisconnect = false
 		isPermanentError = false
 		reconnectTask?.cancel()
@@ -209,8 +213,13 @@ public extension DecartRealtimeManager {
 		isReconnecting = false
 		reconnectAttempts = 0
 		lastLocalStream = localStream
+		lastPreferedCodec = preferedCodec
 		connectionState = .connecting
-		return try await connectWithRetry(localStream: localStream, isReconnectAttempt: false)
+		return try await connectWithRetry(
+			localStream: localStream,
+			preferedCodec: preferedCodec,
+			isReconnectAttempt: false
+		)
 	}
 
 	func disconnect() async {
@@ -221,6 +230,7 @@ public extension DecartRealtimeManager {
 		reconnectTask = nil
 		reconnectAttempts = 0
 		lastLocalStream = nil
+		lastPreferedCodec = nil
 		connectionState = .disconnected
 		await resetPendingRequests()
 		generationTick = nil
@@ -264,6 +274,7 @@ public extension DecartRealtimeManager {
 private extension DecartRealtimeManager {
 	func connectWithRetry(
 		localStream: RealtimeMediaStream,
+		preferedCodec: RealtimeVideoCodec,
 		isReconnectAttempt: Bool
 	) async throws -> RealtimeMediaStream {
 		let maxAttempts = max(options.connection.sessionRetryAttempts, maxReconnectAttempts)
@@ -278,6 +289,7 @@ private extension DecartRealtimeManager {
 			do {
 				let stream = try await performConnect(
 					localStream: localStream,
+					preferedCodec: preferedCodec,
 					isReconnectAttempt: isReconnectAttempt,
 					attempt: attempt + 1
 				)
@@ -326,6 +338,7 @@ private extension DecartRealtimeManager {
 
 	func performConnect(
 		localStream: RealtimeMediaStream,
+		preferedCodec: RealtimeVideoCodec,
 		isReconnectAttempt: Bool,
 		attempt: Int
 	) async throws -> RealtimeMediaStream {
@@ -354,7 +367,7 @@ private extension DecartRealtimeManager {
 			let roomInfo = try await joinRoomPhase(wsClient)
 
 			let mediaChannel = LiveKitMediaChannel(
-				videoPublishOptions: options.media.video.publishOptions,
+				videoPublishOptions: options.media.video.makePublishOptions(preferedCodec: preferedCodec),
 				connectOptions: options.connection.connectOptions,
 				observability: observability
 			)
@@ -650,6 +663,7 @@ private extension DecartRealtimeManager {
 			connectionState = .error
 			return
 		}
+		let preferedCodec = lastPreferedCodec ?? .vp9
 
 		isReconnecting = true
 		connectionState = .reconnecting
@@ -659,7 +673,11 @@ private extension DecartRealtimeManager {
 			let startedAt = Date()
 			let attemptNumber = self.reconnectAttempts + 1
 			do {
-				let newRemoteStream = try await self.connectWithRetry(localStream: localStream, isReconnectAttempt: true)
+				let newRemoteStream = try await self.connectWithRetry(
+					localStream: localStream,
+					preferedCodec: preferedCodec,
+					isReconnectAttempt: true
+				)
 				self.remoteStreamContinuation.yield(newRemoteStream)
 				self.reconnectAttempts = 0
 				self.isReconnecting = false

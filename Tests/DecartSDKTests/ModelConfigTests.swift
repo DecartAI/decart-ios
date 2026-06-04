@@ -9,6 +9,18 @@ final class ModelConfigTests: XCTestCase {
 		XCTAssertFalse(videoConfig.publishOptions.simulcast)
 	}
 
+	func testRealtimeVideoDefaultsToVP9Codec() {
+		let videoConfig = RealtimeConfiguration.VideoConfig()
+
+		XCTAssertEqual(videoConfig.publishOptions.preferredCodec?.name, "vp9")
+	}
+
+	func testRealtimeVideoAcceptsConnectCodecOverride() {
+		let videoConfig = RealtimeConfiguration.VideoConfig()
+
+		XCTAssertEqual(videoConfig.makePublishOptions(preferedCodec: .h264).preferredCodec?.name, "h264")
+	}
+
 	func testRealtimeModelsMatchJSSDKRegistry() {
 		let expectedCases: [RealtimeModel] = [
 			.lucy2_1,
