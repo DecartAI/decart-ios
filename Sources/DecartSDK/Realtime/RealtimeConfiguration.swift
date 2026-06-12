@@ -40,13 +40,16 @@ public struct RealtimeConfiguration: Sendable {
 	public struct ConnectionConfig: Sendable {
 		public let connectionTimeout: TimeInterval
 		public let reconnectAttempts: Int
+		public let bundleInitialStateInJoin: Bool
 
 		public init(
 			connectionTimeout: TimeInterval = 15,
-			reconnectAttempts: Int = 10
+			reconnectAttempts: Int = 10,
+			bundleInitialStateInJoin: Bool = true
 		) {
 			self.connectionTimeout = connectionTimeout
 			self.reconnectAttempts = reconnectAttempts
+			self.bundleInitialStateInJoin = bundleInitialStateInJoin
 		}
 
 		var connectOptions: ConnectOptions {

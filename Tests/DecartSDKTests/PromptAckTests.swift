@@ -144,6 +144,39 @@ final class PromptAckTests: XCTestCase {
 		}
 	}
 
+	func testEarlyInitialPromptAckIsBufferedUntilWaiterStarts() async throws {
+		let manager = makeManager()
+		let promptText = "ack before room info"
+
+		manager.test_setConnectionState(.connecting)
+		manager.test_recordPromptAck(PromptAckMessage(
+			type: "prompt_ack",
+			prompt: promptText,
+			success: true,
+			error: nil
+		))
+
+		try await manager.test_awaitInitialPromptAck(prompt: promptText, timeout: 0.1)
+	}
+
+	func testRuntimePromptAckWaiterWinsOverConnectingBuffer() async throws {
+		let manager = makeManager()
+		let promptText = "runtime prompt"
+
+		manager.test_setConnectionState(.connecting)
+		async let wait: Void = manager.test_awaitRuntimePromptAck(prompt: promptText, timeout: 5)
+		await waitForRegistration()
+
+		manager.test_recordPromptAck(PromptAckMessage(
+			type: "prompt_ack",
+			prompt: promptText,
+			success: true,
+			error: nil
+		))
+
+		try await wait
+	}
+
 	// MARK: - set_image_ack
 
 	func testSetImageAckSuccessResolvesWaiter() async throws {
@@ -157,6 +190,51 @@ final class PromptAckTests: XCTestCase {
 			success: true,
 			error: nil
 		))
+		try await wait
+	}
+
+	func testEarlyInitialSetImageAckIsBufferedUntilWaiterStarts() async throws {
+		let manager = makeManager()
+
+		manager.test_setConnectionState(.connecting)
+		manager.test_recordSetImageAck(SetImageAckMessage(
+			type: "set_image_ack",
+			success: true,
+			error: nil
+		))
+
+		try await manager.test_awaitInitialSetImageAck(timeout: 0.1)
+	}
+
+	func testClosingRealtimeClientsClearsBufferedInitialAck() async throws {
+		let manager = makeManager()
+
+		manager.test_setConnectionState(.connecting)
+		manager.test_recordSetImageAck(SetImageAckMessage(
+			type: "set_image_ack",
+			success: true,
+			error: nil
+		))
+		XCTAssertTrue(manager.test_hasPendingInitialStateAck)
+
+		await manager.test_closeRealtimeClients()
+
+		XCTAssertFalse(manager.test_hasPendingInitialStateAck)
+	}
+
+	func testRuntimeSetImageAckWaiterWinsOverConnectingBuffer() async throws {
+		let manager = makeManager()
+
+		manager.test_setConnectionState(.connecting)
+		async let wait: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5)
+		await waitForRegistration()
+
+		manager.test_recordSetImageAck(SetImageAckMessage(
+			type: "set_image_ack",
+			success: true,
+			error: nil
+		))
+
 		try await wait
 	}
 
