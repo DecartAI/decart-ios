@@ -9,6 +9,7 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	let remoteStreamUpdates: AsyncStream<RealtimeMediaStream>
 	let connectionStateUpdates: AsyncStream<DecartRealtimeConnectionState>
 	let disconnectUpdates: AsyncStream<DisconnectInfo>
+	let connectionQualityUpdates: AsyncStream<ConnectionQualityReport>
 
 	private let videoPublishOptions: VideoPublishOptions
 	private let connectOptions: ConnectOptions
@@ -16,6 +17,12 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	private let remoteStreamContinuation: AsyncStream<RealtimeMediaStream>.Continuation
 	private let connectionStateContinuation: AsyncStream<DecartRealtimeConnectionState>.Continuation
 	private let disconnectContinuation: AsyncStream<DisconnectInfo>.Continuation
+	/// Nil when connection-quality observability is disabled.
+	private let connectionQualityCollector: ConnectionQualityStatsCollector?
+	/// Glass-to-glass tracker (opt-in `debugQuality`); shared with the stamp pump
+	/// (on the local track) and the marker reader (on the remote track). Nil when off.
+	private let seqTracker: SeqTracker?
+	private var markerReader: MarkerReader?
 
 	private var room: Room?
 	private var remoteVideoTrack: VideoTrack?
@@ -24,11 +31,27 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	init(
 		videoPublishOptions: VideoPublishOptions,
 		connectOptions: ConnectOptions,
-		roomOptions: RoomOptions = RoomOptions(adaptiveStream: false, dynacast: false)
+		roomOptions: RoomOptions = RoomOptions(adaptiveStream: false, dynacast: false),
+		connectionQualityThresholds: ConnectionQualityThresholds? = nil,
+		seqTracker: SeqTracker? = nil
 	) {
 		self.videoPublishOptions = videoPublishOptions
 		self.connectOptions = connectOptions
 		self.roomOptions = roomOptions
+		self.seqTracker = seqTracker
+
+		// Glass-to-glass implies the quality collector (it feeds measured latency in),
+		// even if quality scoring wasn't separately enabled.
+		let collectorThresholds = connectionQualityThresholds ?? (seqTracker != nil ? .default : nil)
+		if let collectorThresholds {
+			let collector = ConnectionQualityStatsCollector(thresholds: collectorThresholds, seqTracker: seqTracker)
+			connectionQualityCollector = collector
+			connectionQualityUpdates = collector.updates
+		} else {
+			connectionQualityCollector = nil
+			// Disabled: an empty stream that yields nothing and finishes immediately.
+			connectionQualityUpdates = AsyncStream { $0.finish() }
+		}
 
 		let (remoteStreamUpdates, remoteStreamContinuation) = AsyncStream.makeStream(
 			of: RealtimeMediaStream.self,
@@ -55,6 +78,7 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	deinit {
 		let room = room
 		Task { await room?.disconnect() }
+		connectionQualityCollector?.stop()
 		remoteStreamContinuation.finish()
 		connectionStateContinuation.finish()
 		disconnectContinuation.finish()
@@ -65,6 +89,8 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 		self.room = room
 		remoteVideoTrack = nil
 		remoteAudioTrack = nil
+		// Start the glass-to-glass TTFF clock for this attempt (resets the tracker).
+		seqTracker?.markStart(monotonicMs())
 
 		try await room.connect(url: roomInfo.liveKitURL, token: roomInfo.token)
 	}
@@ -72,9 +98,30 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 	func disconnect() async {
 		let room = room
 		self.room = nil
+		if let markerReader, let remoteVideoTrack {
+			remoteVideoTrack.remove(videoRenderer: markerReader)
+		}
+		markerReader = nil
 		remoteVideoTrack = nil
 		remoteAudioTrack = nil
+		connectionQualityCollector?.stop()
 		await room?.disconnect()
+	}
+
+	/// Latest interpreted connection-quality verdict, or nil before any stats arrive
+	/// (or when observability is disabled).
+	var currentConnectionQuality: ConnectionQualityReport? {
+		connectionQualityCollector?.current()
+	}
+
+	/// Latest glass-to-glass snapshot (only under `debugQuality`), or nil.
+	var currentGlassToGlass: G2GMetrics? {
+		connectionQualityCollector?.currentGlassToGlass()
+	}
+
+	/// Whether the selected ICE path is TURN-relayed; nil until stats arrive.
+	var isPathRelayed: Bool? {
+		connectionQualityCollector?.currentIsRelayed()
 	}
 
 	func publishLocalTracks(from stream: RealtimeMediaStream) async throws {
@@ -84,6 +131,7 @@ final class LiveKitMediaChannel: NSObject, @unchecked Sendable {
 
 		if let videoTrack = stream.videoTrack as? LocalVideoTrack {
 			try await room.localParticipant.publish(videoTrack: videoTrack, options: videoPublishOptions)
+			await connectionQualityCollector?.attachLocal(videoTrack)
 		}
 
 		if let audioTrack = stream.audioTrack as? LocalAudioTrack {
@@ -142,6 +190,15 @@ extension LiveKitMediaChannel: RoomDelegate {
 		switch publication.track {
 		case let videoTrack as VideoTrack:
 			remoteVideoTrack = videoTrack
+			if let collector = connectionQualityCollector {
+				Task { await collector.attachRemote(videoTrack) }
+			}
+			// Glass-to-glass: read the marker off the rendered remote frames.
+			if let seqTracker {
+				let reader = MarkerReader(tracker: seqTracker)
+				markerReader = reader
+				videoTrack.add(videoRenderer: reader)
+			}
 			emitRemoteStreamIfAvailable()
 		case let audioTrack as AudioTrack:
 			remoteAudioTrack = audioTrack

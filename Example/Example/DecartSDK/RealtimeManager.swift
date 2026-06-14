@@ -33,6 +33,14 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	private(set) var localMediaStream: RealtimeMediaStream?
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
 
+	/// Live in-session connection-quality verdict (nil until the first report).
+	private(set) var connectionQuality: ConnectionQualityReport?
+	/// Latest pre-connect connectivity probe result (nil until `checkConnectivity()` runs).
+	private(set) var connectivityReport: ConnectivityReport?
+	private(set) var isCheckingConnectivity = false
+	/// Opt-in glass-to-glass measurement (visible marker, diagnostic). Reconnects on change.
+	private(set) var debugQualityEnabled = false
+
 	// MARK: - Private
 
 	@ObservationIgnored
@@ -49,6 +57,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	@ObservationIgnored
 	private var remoteStreamTask: Task<Void, Never>?
+
+	@ObservationIgnored
+	private var connectionQualityTask: Task<Void, Never>?
 
 	@ObservationIgnored
 	private var localVideoTrack: LocalVideoTrack?
@@ -79,7 +90,8 @@ final class RealtimeManager: RealtimeManagerProtocol {
 			realtimeManager = try decartClient.createRealtimeManager(
 				options: RealtimeConfiguration(
 					model: modelConfig,
-					initialPrompt: currentPrompt
+					initialPrompt: currentPrompt,
+					debugQuality: debugQualityEnabled
 				)
 			)
 
@@ -90,9 +102,17 @@ final class RealtimeManager: RealtimeManagerProtocol {
 			// Listen for connection state changes (connecting, connected, error, etc.)
 			startEventMonitoring()
 			startRemoteStreamMonitoring()
+			startConnectionQualityMonitoring()
 
 			#if !targetEnvironment(simulator)
-			startCapture(model: modelConfig)
+			if debugQualityEnabled {
+				// SDK-created stream carries the glass-to-glass stamp pipeline.
+				let stream = decartClient.createLocalCameraStream(model: modelConfig, debugQuality: true)
+				localMediaStream = stream
+				localVideoTrack = stream.videoTrack as? LocalVideoTrack
+			} else {
+				startCapture(model: modelConfig)
+			}
 
 			// Establish LiveKit connection - sends local video, receives AI-processed video.
 			let initialRemoteStream = try await realtimeManager.connect(localStream: localMediaStream!)
@@ -104,6 +124,34 @@ final class RealtimeManager: RealtimeManagerProtocol {
 			DecartLogger.log("Connection failed: \(error.localizedDescription)", level: .error)
 			await cleanup()
 		}
+	}
+
+	/// SDK-only preflight: probe whether the network can sustain a session before
+	/// connecting. Safe to call without a session (only hits public STUN).
+	func checkConnectivity() async {
+		isCheckingConnectivity = true
+		connectivityReport = nil
+		connectivityReport = await decartClient.checkConnectivity()
+		isCheckingConnectivity = false
+	}
+
+	/// Deep probe: briefly opens a real session with a synthetic source and measures
+	/// true glass-to-glass latency (costs a short GPU session).
+	func runDeepProbe() async {
+		isCheckingConnectivity = true
+		connectivityReport = nil
+		connectivityReport = await decartClient.checkConnectivity(
+			options: .init(deep: true, model: Models.realtime(model))
+		)
+		isCheckingConnectivity = false
+	}
+
+	/// Toggle glass-to-glass measurement; reconnects if a session is live so the new
+	/// setting takes effect (the stamp pipeline is wired at stream/connect time).
+	func setDebugQuality(_ enabled: Bool) async {
+		guard enabled != debugQualityEnabled else { return }
+		debugQualityEnabled = enabled
+		if connectionState.isInSession { await connect() }
 	}
 
 	func switchCamera() async {
@@ -130,6 +178,10 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 		remoteStreamTask?.cancel()
 		remoteStreamTask = nil
+
+		connectionQualityTask?.cancel()
+		connectionQualityTask = nil
+		connectionQuality = nil
 
 		try? await localVideoTrack?.stop()
 		localVideoTrack = nil
@@ -196,6 +248,19 @@ final class RealtimeManager: RealtimeManagerProtocol {
 				if Task.isCancelled { return }
 				guard remoteStream.videoTrack != nil else { continue }
 				self.remoteMediaStreams = remoteStream
+			}
+		}
+	}
+
+	private func startConnectionQualityMonitoring() {
+		connectionQualityTask?.cancel()
+
+		connectionQualityTask = Task { [weak self] in
+			guard let self, let stream = self.realtimeManager?.connectionQualityUpdates else { return }
+
+			for await report in stream {
+				if Task.isCancelled { return }
+				self.connectionQuality = report
 			}
 		}
 	}

@@ -1,6 +1,8 @@
+import AVFoundation
 import Foundation
+@preconcurrency import LiveKit
 
-public struct DecartClient {
+public struct DecartClient: Sendable {
 	let decartConfiguration: DecartConfiguration
 
 	public init(decartConfiguration: DecartConfiguration) {
@@ -15,6 +17,12 @@ public struct DecartClient {
 			urlString += "&resolution=\(resolution.rawValue)"
 		}
 
+		// Ask the server to re-stamp the pixel marker from input to output so the
+		// client can read glass-to-glass latency back off the rendered frames.
+		if options.debugQuality {
+			urlString += "&pixel_latency=1"
+		}
+
 		guard let signalingServerURL = URL(string: urlString) else {
 			DecartLogger.log("Unable to generate signaling server URL from: \(urlString)", level: .error)
 			throw DecartError.invalidBaseURL(urlString)
@@ -24,6 +32,50 @@ public struct DecartClient {
 			signalingServerURL: signalingServerURL,
 			options: options
 		)
+	}
+
+	/// Build a camera-backed local stream sized for `model`, ready to pass to
+	/// `DecartRealtimeManager.connect(localStream:)`.
+	///
+	/// When `debugQuality` is true the stream carries the glass-to-glass stamp
+	/// pipeline (a visible pixel marker stamped into each outgoing frame) — pair it
+	/// with `RealtimeConfiguration(debugQuality: true)`. Diagnostic only. Otherwise
+	/// the stream just mirrors the front camera per `mirror`.
+	@MainActor
+	public func createLocalCameraStream(
+		model: ModelDefinition,
+		position: AVCaptureDevice.Position = .front,
+		mirror: MirrorMode = .auto,
+		debugQuality: Bool = false
+	) -> RealtimeMediaStream {
+		let dimensions = Dimensions(width: Int32(model.width), height: Int32(model.height))
+		let captureOptions = CameraCaptureOptions(position: position, dimensions: dimensions, fps: model.fps)
+
+		let tracker = debugQuality ? SeqTracker() : nil
+		let processor: VideoProcessor?
+		if let tracker {
+			processor = StampingVideoProcessor(mirror: resolveMirror(mirror, position: position), tracker: tracker)
+		} else {
+			processor = MirroringVideoProcessor(mode: mirror, cameraPosition: position)
+		}
+
+		let videoTrack = LocalVideoTrack.createCameraTrack(
+			name: "video0",
+			options: captureOptions,
+			processor: processor
+		)
+
+		var stream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
+		stream.seqTracker = tracker
+		return stream
+	}
+
+	private func resolveMirror(_ mode: MirrorMode, position: AVCaptureDevice.Position) -> Bool {
+		switch mode {
+		case .off: return false
+		case .on: return true
+		case .auto: return position == .front
+		}
 	}
 
 	public func createProcessClient(

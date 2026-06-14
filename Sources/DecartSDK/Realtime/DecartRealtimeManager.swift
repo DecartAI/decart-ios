@@ -4,6 +4,9 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
 	public let events: AsyncStream<DecartRealtimeState>
 	public let remoteStreamUpdates: AsyncStream<RealtimeMediaStream>
+	/// Interpreted in-session connection-quality verdicts, emitted ~1 Hz only when
+	/// the level or warm-up state changes. Empty when observability is disabled.
+	public let connectionQualityUpdates: AsyncStream<ConnectionQualityReport>
 	public private(set) var serviceStatus: RealtimeServiceStatus = .unknown {
 		didSet {
 			guard oldValue != serviceStatus else { return }
@@ -41,10 +44,13 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private let signalingServerURL: URL
 	private let stateContinuation: AsyncStream<DecartRealtimeState>.Continuation
 	private let remoteStreamContinuation: AsyncStream<RealtimeMediaStream>.Continuation
+	private let connectionQualityContinuation: AsyncStream<ConnectionQualityReport>.Continuation
+	private var lastConnectionQuality: ConnectionQualityReport?
 	private var webSocketListenerTask: Task<Void, Never>?
 	private var mediaListenerTask: Task<Void, Never>?
 	private var mediaConnectionStateTask: Task<Void, Never>?
 	private var mediaDisconnectTask: Task<Void, Never>?
+	private var connectionQualityTask: Task<Void, Never>?
 	private var reconnectTask: Task<Void, Never>?
 	private let initialStateAckTimeout: TimeInterval = 30
 	private let promptAckTimeout: TimeInterval = 15
@@ -111,6 +117,13 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		self.remoteStreamUpdates = remoteStream
 		self.remoteStreamContinuation = remoteContinuation
 
+		let (qualityStream, qualityContinuation) = AsyncStream.makeStream(
+			of: ConnectionQualityReport.self,
+			bufferingPolicy: .bufferingNewest(1)
+		)
+		self.connectionQualityUpdates = qualityStream
+		self.connectionQualityContinuation = qualityContinuation
+
 		emitStateIfChanged()
 	}
 
@@ -128,6 +141,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		mediaListenerTask?.cancel()
 		mediaConnectionStateTask?.cancel()
 		mediaDisconnectTask?.cancel()
+		connectionQualityTask?.cancel()
 		reconnectTask?.cancel()
 		let liveKitMediaChannel = liveKitMediaChannel
 		let webSocketClient = webSocketClient
@@ -137,6 +151,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		}
 		stateContinuation.finish()
 		remoteStreamContinuation.finish()
+		connectionQualityContinuation.finish()
 		DecartLogger.log("RealtimeManager (SDK) deinitialized", level: .info)
 	}
 }
@@ -169,6 +184,7 @@ public extension DecartRealtimeManager {
 		failAllPendingRuntimeWaiters(DecartError.websocketError("WebSocket disconnected"))
 		generationTick = nil
 		sessionId = nil
+		lastConnectionQuality = nil
 		serviceStatus = .unknown
 		queuePosition = nil
 		queueSize = nil
@@ -219,6 +235,22 @@ public extension DecartRealtimeManager {
 		}
 	}
 
+	/// Latest interpreted connection-quality verdict, or nil before any stats
+	/// arrive (or when observability is disabled).
+	func getConnectionQuality() -> ConnectionQualityReport? {
+		lastConnectionQuality
+	}
+
+	/// Latest glass-to-glass snapshot (only populated under `debugQuality`), or nil.
+	func getGlassToGlass() -> G2GMetrics? {
+		liveKitMediaChannel?.currentGlassToGlass
+	}
+
+	/// Whether the selected ICE path is TURN-relayed; nil until stats arrive.
+	func isPathRelayed() -> Bool? {
+		liveKitMediaChannel?.isPathRelayed
+	}
+
 }
 
 private extension DecartRealtimeManager {
@@ -232,6 +264,7 @@ private extension DecartRealtimeManager {
 		clearPendingInitialState()
 		generationTick = nil
 		sessionId = nil
+		lastConnectionQuality = nil
 
 		await closeRealtimeClients()
 
@@ -248,7 +281,9 @@ private extension DecartRealtimeManager {
 
 		let mediaChannel = LiveKitMediaChannel(
 			videoPublishOptions: options.media.video.publishOptions,
-			connectOptions: options.connection.connectOptions
+			connectOptions: options.connection.connectOptions,
+			connectionQualityThresholds: options.observability.thresholdsIfEnabled,
+			seqTracker: localStream.seqTracker
 		)
 		liveKitMediaChannel = mediaChannel
 		setupMediaListeners(mediaChannel)
@@ -272,6 +307,8 @@ private extension DecartRealtimeManager {
 		mediaConnectionStateTask = nil
 		mediaDisconnectTask?.cancel()
 		mediaDisconnectTask = nil
+		connectionQualityTask?.cancel()
+		connectionQualityTask = nil
 		await liveKitMediaChannel?.disconnect()
 		liveKitMediaChannel = nil
 		await webSocketClient?.disconnect()
@@ -361,6 +398,15 @@ private extension DecartRealtimeManager {
 				DecartLogger.log("LiveKit room disconnected: \(disconnect.reason ?? "unknown")", level: .warning)
 				self.connectionState = .disconnected
 				self.handleUnexpectedDisconnect()
+			}
+		}
+
+		connectionQualityTask?.cancel()
+		connectionQualityTask = Task { [weak self] in
+			for await report in mediaChannel.connectionQualityUpdates {
+				guard !Task.isCancelled, let self else { return }
+				self.lastConnectionQuality = report
+				self.connectionQualityContinuation.yield(report)
 			}
 		}
 	}
