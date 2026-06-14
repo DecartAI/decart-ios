@@ -189,6 +189,12 @@ extension LiveKitMediaChannel: RoomDelegate {
 		guard shouldAcceptTrack(from: participant) else { return }
 		switch publication.track {
 		case let videoTrack as VideoTrack:
+			// Detach a prior reader from the previous track on resubscribe/replacement,
+			// so a stale renderer can't keep feeding the shared tracker.
+			if let markerReader, let previous = remoteVideoTrack {
+				previous.remove(videoRenderer: markerReader)
+			}
+			markerReader = nil
 			remoteVideoTrack = videoTrack
 			if let collector = connectionQualityCollector {
 				Task { await collector.attachRemote(videoTrack) }

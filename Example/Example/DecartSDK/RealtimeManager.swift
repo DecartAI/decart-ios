@@ -129,6 +129,7 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	/// SDK-only preflight: probe whether the network can sustain a session before
 	/// connecting. Safe to call without a session (only hits public STUN).
 	func checkConnectivity() async {
+		guard !isCheckingConnectivity else { return }
 		isCheckingConnectivity = true
 		connectivityReport = nil
 		connectivityReport = await decartClient.checkConnectivity()
@@ -138,6 +139,7 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	/// Deep probe: briefly opens a real session with a synthetic source and measures
 	/// true glass-to-glass latency (costs a short GPU session).
 	func runDeepProbe() async {
+		guard !isCheckingConnectivity else { return }
 		isCheckingConnectivity = true
 		connectivityReport = nil
 		connectivityReport = await decartClient.checkConnectivity(
@@ -159,8 +161,17 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		guard let cameraCapturer = localVideoTrack?.capturer as? CameraCapturer else { return }
 		do {
 			try await cameraCapturer.switchCameraPosition()
-			// Keep input-side mirroring (MirrorMode.auto) following the active camera.
-			mirrorProcessor?.cameraPosition = cameraCapturer.position
+			// Keep input-side mirroring (MirrorMode.auto) following the active camera,
+			// whether the stream uses the mirror or the glass-to-glass stamp processor.
+			let position = cameraCapturer.position
+			switch cameraCapturer.processor {
+			case let stamping as StampingVideoProcessor:
+				stamping.cameraPosition = position
+			case let mirroring as MirroringVideoProcessor:
+				mirroring.cameraPosition = position
+			default:
+				break
+			}
 		} catch {
 			DecartLogger.log("Failed to switch camera", level: .error)
 		}

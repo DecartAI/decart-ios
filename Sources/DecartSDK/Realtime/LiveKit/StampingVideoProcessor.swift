@@ -19,7 +19,9 @@ import CoreVideo
 /// marker doesn't round-trip on a rotated source, the orientation constants below
 /// are the first thing to check (cf. the Android port's rotation fix).
 public final class StampingVideoProcessor: NSObject, VideoProcessor, @unchecked Sendable {
-	private let mirror: Bool
+	private let lock = NSLock()
+	private let mode: MirrorMode
+	private var _cameraPosition: AVCaptureDevice.Position
 	private let tracker: SeqTracker
 	private let ciContext = CIContext()
 
@@ -29,8 +31,24 @@ public final class StampingVideoProcessor: NSObject, VideoProcessor, @unchecked 
 	private var poolHeight = 0
 	private let outputFormat = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
 
-	init(mirror: Bool, tracker: SeqTracker) {
-		self.mirror = mirror
+	/// Active camera position, used to resolve ``MirrorMode/auto``. Update on camera switch.
+	public var cameraPosition: AVCaptureDevice.Position {
+		get { lock.lock(); defer { lock.unlock() }; return _cameraPosition }
+		set { lock.lock(); _cameraPosition = newValue; lock.unlock() }
+	}
+
+	private var shouldMirror: Bool {
+		lock.lock(); defer { lock.unlock() }
+		switch mode {
+		case .off: return false
+		case .on: return true
+		case .auto: return _cameraPosition == .front
+		}
+	}
+
+	init(mode: MirrorMode, cameraPosition: AVCaptureDevice.Position, tracker: SeqTracker) {
+		self.mode = mode
+		_cameraPosition = cameraPosition
 		self.tracker = tracker
 		super.init()
 	}
@@ -49,7 +67,7 @@ public final class StampingVideoProcessor: NSObject, VideoProcessor, @unchecked 
 			toWidth: Int(frame.dimensions.width),
 			height: Int(frame.dimensions.height)
 		)
-		let oriented = cropped.oriented(uprightOrientation(for: frame.rotation, mirror: mirror))
+		let oriented = cropped.oriented(uprightOrientation(for: frame.rotation, mirror: shouldMirror))
 		let normalized = oriented.transformed(
 			by: CGAffineTransform(translationX: -oriented.extent.origin.x, y: -oriented.extent.origin.y)
 		)

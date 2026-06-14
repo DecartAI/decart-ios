@@ -54,7 +54,7 @@ public struct DecartClient: Sendable {
 		let tracker = debugQuality ? SeqTracker() : nil
 		let processor: VideoProcessor?
 		if let tracker {
-			processor = StampingVideoProcessor(mirror: resolveMirror(mirror, position: position), tracker: tracker)
+			processor = StampingVideoProcessor(mode: mirror, cameraPosition: position, tracker: tracker)
 		} else {
 			processor = MirroringVideoProcessor(mode: mirror, cameraPosition: position)
 		}
@@ -68,14 +68,6 @@ public struct DecartClient: Sendable {
 		var stream = RealtimeMediaStream(videoTrack: videoTrack, id: .localStream)
 		stream.seqTracker = tracker
 		return stream
-	}
-
-	private func resolveMirror(_ mode: MirrorMode, position: AVCaptureDevice.Position) -> Bool {
-		switch mode {
-		case .off: return false
-		case .on: return true
-		case .auto: return position == .front
-		}
 	}
 
 	public func createProcessClient(
