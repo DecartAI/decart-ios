@@ -153,7 +153,10 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	func setDebugQuality(_ enabled: Bool) async {
 		guard enabled != debugQualityEnabled else { return }
 		debugQualityEnabled = enabled
-		if connectionState.isInSession { await connect() }
+		// Re-apply only on a fully established session; reconnecting during a
+		// transitional state (.connecting/.reconnecting) would tear down the
+		// in-flight attempt. Otherwise the flag takes effect on the next connect.
+		if connectionState.isConnected { await connect() }
 	}
 
 	func switchCamera() async {
