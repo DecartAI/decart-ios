@@ -40,14 +40,8 @@ final class MarkerReader: VideoRenderer, @unchecked Sendable {
 	}
 
 	private func readLumaPlane(_ buffer: CVPixelBuffer) -> Int? {
-		guard CVPixelBufferGetPlaneCount(buffer) >= 1 else { return nil }
-		CVPixelBufferLockBaseAddress(buffer, .readOnly)
-		defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
-		guard let base = CVPixelBufferGetBaseAddressOfPlane(buffer, 0) else { return nil }
-		let bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
-		let width = CVPixelBufferGetWidthOfPlane(buffer, 0)
-		let height = CVPixelBufferGetHeightOfPlane(buffer, 0)
-		let ptr = base.assumingMemoryBound(to: UInt8.self)
-		return PixelMarker.read(width: width, height: height) { x, y in Int(ptr[y * bytesPerRow + x]) }
+		buffer.withLumaPlane(readOnly: true) { ptr, width, height, bytesPerRow in
+			PixelMarker.read(width: width, height: height) { x, y in Int(ptr[y * bytesPerRow + x]) }
+		} ?? nil
 	}
 }

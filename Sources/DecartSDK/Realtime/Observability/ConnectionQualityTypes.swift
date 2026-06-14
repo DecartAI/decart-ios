@@ -12,26 +12,22 @@ public enum ConnectionQualityLimitingFactor: String, Sendable, Equatable {
 
 /// Human-meaningful numbers behind the verdict. `nil` means not-yet-measured.
 public struct ConnectionQualityMetrics: Sendable, Equatable {
-	/// Round-trip time in ms, or nil until measured.
+	/// Round-trip time (ms), or nil until measured.
 	public let rttMs: Double?
-	/// Mid-stream (steady-state) glass-to-glass latency (ms) — the real per-frame
-	/// camera→display latency through the model, excluding startup. Only populated
-	/// under the opt-in pixel-marker measurement and past warm-up; nil otherwise.
-	/// When present it drives the latency verdict instead of `rttMs`.
+	/// Steady-state glass-to-glass latency (ms). Only set under `debugQuality` past
+	/// warm-up; drives the latency verdict instead of `rttMs` when present.
 	public let g2gMs: Double?
-	/// Time-to-first-frame (ms) — startup latency to the first rendered model frame.
-	/// One-shot; surfaced for visibility but does not drive the live verdict.
+	/// Time-to-first-frame (ms). One-shot startup metric; not part of the live verdict.
 	public let ttffMs: Double?
 	/// Rendered (inbound) frames per second, or nil until measured.
 	public let fps: Double?
-	/// Fraction (0–1) of our outbound packets the server reports lost, or nil until measured.
+	/// Fraction (0–1) of our outbound packets the server reports lost, or nil.
 	public let packetLoss: Double?
-	/// Server's view of upstream (client→server) jitter in ms, or nil. Observational.
+	/// Server's view of upstream jitter (ms), or nil. Observational.
 	public let upstreamJitterMs: Double?
-	/// End-to-end frame drop ratio (0–1) inferred from the pixel-marker seq stream.
-	/// Only populated under the opt-in g2g measurement; nil otherwise.
+	/// End-to-end frame drop ratio (0–1). Only set under `debugQuality`; nil otherwise.
 	public let g2gDropRatio: Double?
-	/// Estimated available upstream bandwidth in kbps, or nil until measured.
+	/// Estimated available upstream bandwidth (kbps), or nil until measured.
 	public let availableUpstreamKbps: Double?
 
 	public init(

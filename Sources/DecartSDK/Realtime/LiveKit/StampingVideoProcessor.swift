@@ -29,7 +29,6 @@ public final class StampingVideoProcessor: NSObject, VideoProcessor, @unchecked 
 	private var bufferPool: CVPixelBufferPool?
 	private var poolWidth = 0
 	private var poolHeight = 0
-	private let outputFormat = kCVPixelFormatType_420YpCbCr8BiPlanarFullRange
 
 	/// Active camera position, used to resolve ``MirrorMode/auto``. Update on camera switch.
 	public var cameraPosition: AVCaptureDevice.Position {
@@ -77,7 +76,9 @@ public final class StampingVideoProcessor: NSObject, VideoProcessor, @unchecked 
 		guard outWidth > 0, outHeight > 0 else { return nil }
 
 		if bufferPool == nil || poolWidth != outWidth || poolHeight != outHeight {
-			guard createPool(width: outWidth, height: outHeight) else { return nil }
+			bufferPool = makePixelBufferPool(width: outWidth, height: outHeight, pixelFormat: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
+			poolWidth = outWidth
+			poolHeight = outHeight
 		}
 		guard let pool = bufferPool else { return nil }
 
@@ -86,7 +87,12 @@ public final class StampingVideoProcessor: NSObject, VideoProcessor, @unchecked 
 			let outputBuffer else { return nil }
 
 		ciContext.render(normalized, to: outputBuffer)
-		stampLumaPlane(outputBuffer, seq: tracker.stampNext(monotonicMs()))
+		let seq = tracker.stampNext(monotonicMs())
+		outputBuffer.withLumaPlane { ptr, width, height, bytesPerRow in
+			PixelMarker.stamp(width: width, height: height, seq: seq) { x, y, value in
+				ptr[y * bytesPerRow + x] = UInt8(value)
+			}
+		}
 
 		// Rotation was consumed by the upright step — emit ._0.
 		return VideoFrame(
@@ -111,65 +117,5 @@ public final class StampingVideoProcessor: NSObject, VideoProcessor, @unchecked 
 		case (._270, true): return .leftMirrored
 		@unknown default: return mirror ? .upMirrored : .up
 		}
-	}
-
-	private func stampLumaPlane(_ buffer: CVPixelBuffer, seq: Int) {
-		guard CVPixelBufferGetPlaneCount(buffer) >= 1 else { return }
-		CVPixelBufferLockBaseAddress(buffer, [])
-		defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
-		guard let base = CVPixelBufferGetBaseAddressOfPlane(buffer, 0) else { return }
-		let bytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(buffer, 0)
-		let width = CVPixelBufferGetWidthOfPlane(buffer, 0)
-		let height = CVPixelBufferGetHeightOfPlane(buffer, 0)
-		let ptr = base.assumingMemoryBound(to: UInt8.self)
-		PixelMarker.stamp(width: width, height: height, seq: seq) { x, y, value in
-			ptr[y * bytesPerRow + x] = UInt8(value)
-		}
-	}
-
-	/// Center-crops to the target aspect and scales to `targetWidth`×`targetHeight`
-	/// (matching LiveKit's `cropAndScaleFromCenter`); returns `image` if already sized.
-	private func centerCropAndScale(_ image: CIImage, toWidth targetWidth: Int, height targetHeight: Int) -> CIImage {
-		let extent = image.extent
-		guard extent.width > 0, extent.height > 0,
-			Int(extent.width) != targetWidth || Int(extent.height) != targetHeight else {
-			return image
-		}
-
-		let target = CGFloat(targetWidth) / CGFloat(targetHeight)
-		let source = extent.width / extent.height
-
-		var cropWidth = extent.width
-		var cropHeight = extent.height
-		if source > target {
-			cropWidth = extent.height * target
-		} else {
-			cropHeight = extent.width / target
-		}
-		let cropX = extent.origin.x + (extent.width - cropWidth) / 2
-		let cropY = extent.origin.y + (extent.height - cropHeight) / 2
-
-		return image
-			.cropped(to: CGRect(x: cropX, y: cropY, width: cropWidth, height: cropHeight))
-			.transformed(by: CGAffineTransform(translationX: -cropX, y: -cropY))
-			.transformed(by: CGAffineTransform(scaleX: CGFloat(targetWidth) / cropWidth, y: CGFloat(targetHeight) / cropHeight))
-	}
-
-	private func createPool(width: Int, height: Int) -> Bool {
-		let attrs: [CFString: Any] = [
-			kCVPixelBufferPixelFormatTypeKey: outputFormat,
-			kCVPixelBufferWidthKey: width,
-			kCVPixelBufferHeightKey: height,
-			kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-		]
-		var pool: CVPixelBufferPool?
-		guard CVPixelBufferPoolCreate(nil, nil, attrs as CFDictionary, &pool) == kCVReturnSuccess, let pool else {
-			DecartLogger.log("StampingVideoProcessor: CVPixelBufferPoolCreate failed", level: .error)
-			return false
-		}
-		bufferPool = pool
-		poolWidth = width
-		poolHeight = height
-		return true
 	}
 }

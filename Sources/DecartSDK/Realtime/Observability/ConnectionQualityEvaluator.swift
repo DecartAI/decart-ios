@@ -93,8 +93,6 @@ final class ConnectionQualityEvaluator {
 			metrics: ConnectionQualityMetrics(
 				rttMs: smoothed.rttMs,
 				g2gMs: smoothed.g2gMs,
-				// ttffMs (one-shot startup), upstreamJitterMs (observational), and
-				// g2gDropRatio (already windowed) are surfaced raw, not re-smoothed.
 				ttffMs: raw.ttffMs,
 				fps: smoothed.fps,
 				packetLoss: smoothed.fractionLost,

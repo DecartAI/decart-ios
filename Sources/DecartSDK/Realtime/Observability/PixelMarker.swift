@@ -106,7 +106,7 @@ enum PixelMarker {
 		return true
 	}
 
-	/// RGBA convenience: stamp grayscale blocks (R=G=B=v) into `img` in place.
+	/// RGBA convenience (tests): stamp grayscale blocks (R=G=B=v) into `img`.
 	@discardableResult
 	static func stamp(_ img: inout PixelMarkerImage, seq: Int) -> Bool {
 		let width = img.width
@@ -140,7 +140,7 @@ enum PixelMarker {
 		return nil
 	}
 
-	/// RGBA convenience: read the marker from `img` (samples luma from R/G/B).
+	/// RGBA convenience (tests): read the marker from `img` (luma from R/G/B).
 	static func read(_ img: PixelMarkerImage) -> Int? {
 		let width = img.width
 		return read(width: width, height: img.height) { x, y in

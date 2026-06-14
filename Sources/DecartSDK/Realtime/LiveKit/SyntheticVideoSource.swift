@@ -89,15 +89,6 @@ final class SyntheticVideoSource: @unchecked Sendable {
 
 	private func createPoolIfNeeded() {
 		guard pool == nil else { return }
-		let attrs: [CFString: Any] = [
-			kCVPixelBufferPixelFormatTypeKey: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-			kCVPixelBufferWidthKey: width,
-			kCVPixelBufferHeightKey: height,
-			kCVPixelBufferIOSurfacePropertiesKey: [:] as CFDictionary,
-		]
-		var p: CVPixelBufferPool?
-		if CVPixelBufferPoolCreate(nil, nil, attrs as CFDictionary, &p) == kCVReturnSuccess {
-			pool = p
-		}
+		pool = makePixelBufferPool(width: width, height: height, pixelFormat: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange)
 	}
 }
