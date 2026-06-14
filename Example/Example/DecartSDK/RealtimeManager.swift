@@ -132,8 +132,8 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		guard !isCheckingConnectivity else { return }
 		isCheckingConnectivity = true
 		connectivityReport = nil
+		defer { isCheckingConnectivity = false }
 		connectivityReport = await decartClient.checkConnectivity()
-		isCheckingConnectivity = false
 	}
 
 	/// Deep probe: briefly opens a real session with a synthetic source and measures
@@ -142,10 +142,10 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		guard !isCheckingConnectivity else { return }
 		isCheckingConnectivity = true
 		connectivityReport = nil
+		defer { isCheckingConnectivity = false }
 		connectivityReport = await decartClient.checkConnectivity(
 			options: .init(deep: true, model: Models.realtime(model))
 		)
-		isCheckingConnectivity = false
 	}
 
 	/// Toggle glass-to-glass measurement; reconnects if a session is live so the new
@@ -266,12 +266,14 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	private func startConnectionQualityMonitoring() {
 		connectionQualityTask?.cancel()
 
+		// Poll the live snapshot ~1 Hz so the badge's metrics (rtt/g2g/fps/drops) stay
+		// fresh. The `connectionQualityUpdates` stream only fires on debounced level
+		// changes, so its metrics would otherwise look fresh while going stale.
 		connectionQualityTask = Task { [weak self] in
-			guard let self, let stream = self.realtimeManager?.connectionQualityUpdates else { return }
-
-			for await report in stream {
-				if Task.isCancelled { return }
-				self.connectionQuality = report
+			while !Task.isCancelled {
+				guard let self, let manager = self.realtimeManager else { return }
+				self.connectionQuality = manager.getConnectionQuality()
+				try? await Task.sleep(nanoseconds: 1_000_000_000)
 			}
 		}
 	}
