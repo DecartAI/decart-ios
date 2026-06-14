@@ -236,9 +236,11 @@ public extension DecartRealtimeManager {
 	}
 
 	/// Latest interpreted connection-quality verdict, or nil before any stats
-	/// arrive (or when observability is disabled).
+	/// arrive (or when observability is disabled). Prefers the collector's live
+	/// snapshot — its metrics (rtt/loss/jitter/g2g) refresh every poll, whereas the
+	/// `connectionQualityUpdates` stream only yields on a debounced level change.
 	func getConnectionQuality() -> ConnectionQualityReport? {
-		lastConnectionQuality
+		liveKitMediaChannel?.currentConnectionQuality ?? lastConnectionQuality
 	}
 
 	/// Latest glass-to-glass snapshot (only populated under `debugQuality`), or nil.
