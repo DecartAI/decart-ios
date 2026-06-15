@@ -177,6 +177,39 @@ final class PromptAckTests: XCTestCase {
 		try await wait
 	}
 
+	// Regression: while the initial-state waiter is active, a concurrent runtime
+	// setPrompt for the same text must not steal its ack — otherwise connect
+	// waits out its full timeout even though the server already responded.
+	func testActiveInitialPromptWaiterWinsOverRuntimeWaiter() async throws {
+		let manager = makeManager()
+		let promptText = "shared prompt"
+
+		async let runtime: Void = manager.test_awaitRuntimePromptAck(prompt: promptText, timeout: 5)
+		await waitForRegistration()
+
+		async let initial: Void = manager.test_awaitInitialPromptAck(prompt: promptText, timeout: 5)
+		await waitForRegistration()
+
+		manager.test_recordPromptAck(PromptAckMessage(
+			type: "prompt_ack",
+			prompt: promptText,
+			success: true,
+			error: nil
+		))
+
+		try await initial
+
+		// The single ack resolved the initial-state waiter; the runtime waiter is
+		// still pending. Prove it by failing it explicitly.
+		manager.test_failAllPendingRuntimeWaiters(DecartError.websocketError("forced"))
+		do {
+			try await runtime
+			XCTFail("runtime waiter should not have claimed the initial-state ack")
+		} catch {
+			// expected: resolved by the forced failure, not by the ack
+		}
+	}
+
 	// MARK: - set_image_ack
 
 	func testSetImageAckSuccessResolvesWaiter() async throws {
@@ -236,6 +269,35 @@ final class PromptAckTests: XCTestCase {
 		))
 
 		try await wait
+	}
+
+	// Regression: a set_image_ack matches any runtime waiter (no text key), so
+	// while the initial-state waiter is active a concurrent runtime setImage
+	// must not consume its ack.
+	func testActiveInitialSetImageWaiterWinsOverRuntimeWaiter() async throws {
+		let manager = makeManager()
+
+		async let runtime: Void = manager.test_awaitRuntimeSetImageAck(timeout: 5)
+		await waitForRegistration()
+
+		async let initial: Void = manager.test_awaitInitialSetImageAck(timeout: 5)
+		await waitForRegistration()
+
+		manager.test_recordSetImageAck(SetImageAckMessage(
+			type: "set_image_ack",
+			success: true,
+			error: nil
+		))
+
+		try await initial
+
+		manager.test_failAllPendingRuntimeWaiters(DecartError.websocketError("forced"))
+		do {
+			try await runtime
+			XCTFail("runtime waiter should not have claimed the initial-state ack")
+		} catch {
+			// expected: resolved by the forced failure, not by the ack
+		}
 	}
 
 	func testSetImageAckFailureThrowsServerError() async throws {

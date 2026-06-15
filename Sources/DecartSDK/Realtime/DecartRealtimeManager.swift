@@ -710,17 +710,23 @@ private extension DecartRealtimeManager {
 		}
 	}
 
-	// Runtime waiters are registered before their sends, so they get first
-	// chance to claim matching acks. Unclaimed acks during connect/reconnect are
-	// buffered for the initial-state waiter that starts after room info.
+	// While the initial-state waiter is active it owns the next ack: a
+	// concurrent runtime setPrompt must not steal it, or the connect path would
+	// wait out its full timeout even though the server already responded. Acks
+	// that land during connect/reconnect before that waiter starts are buffered
+	// for it; runtime waiters only claim acks outside the active window.
 	func recordPromptAck(_ ack: PromptAckMessage) {
+		if isWaitingForInitialStateAck {
+			pendingPromptAcks.append(ack)
+			return
+		}
+
 		if resolveRuntimePromptAck(ack) {
 			return
 		}
 
-		if isWaitingForInitialStateAck || shouldBufferInitialStateAck {
+		if shouldBufferInitialStateAck {
 			pendingPromptAcks.append(ack)
-			return
 		}
 	}
 
@@ -743,13 +749,17 @@ private extension DecartRealtimeManager {
 	}
 
 	func recordSetImageAck(_ ack: SetImageAckMessage) {
+		if isWaitingForInitialStateAck {
+			pendingSetImageAcks.append(ack)
+			return
+		}
+
 		if resolveRuntimeSetImageAck(ack) {
 			return
 		}
 
-		if isWaitingForInitialStateAck || shouldBufferInitialStateAck {
+		if shouldBufferInitialStateAck {
 			pendingSetImageAcks.append(ack)
-			return
 		}
 	}
 
