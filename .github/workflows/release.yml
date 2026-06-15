@@ -11,7 +11,7 @@ jobs:
         runs-on: macos-latest
         env:
             IOS_DEVICE_NAME: "iPhone 16 Pro"
-            IOS_OS_VERSION: "18.5"
+            IOS_OS_VERSION: "latest"
 
         permissions:
             contents: write
