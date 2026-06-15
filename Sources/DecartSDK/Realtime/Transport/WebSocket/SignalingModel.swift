@@ -15,11 +15,46 @@ struct InitializeConnectionMessage: Codable, Sendable {
 	let initialPrompt: String?
 }
 
-struct LiveKitJoinMessage: Codable, Sendable {
-	let type: String
+enum InitialStateMessage: Encodable, Sendable {
+	case prompt(PromptMessage)
+	case setImage(SetImageMessage)
 
-	init() {
+	func encode(to encoder: Encoder) throws {
+		switch self {
+		case .prompt(let message):
+			try message.encode(to: encoder)
+		case .setImage(let message):
+			try message.encode(to: encoder)
+		}
+	}
+}
+
+struct LiveKitJoinMessage: Encodable, Sendable {
+	let type: String
+	let initialState: InitialStateMessage?
+	let encodesInitialState: Bool
+
+	init(initialState: InitialStateMessage?, encodesInitialState: Bool) {
 		self.type = "livekit_join"
+		self.initialState = initialState
+		self.encodesInitialState = encodesInitialState
+	}
+
+	private enum CodingKeys: String, CodingKey {
+		case type
+		case initialState = "initial_state"
+	}
+
+	func encode(to encoder: Encoder) throws {
+		var container = encoder.container(keyedBy: CodingKeys.self)
+		try container.encode(type, forKey: .type)
+
+		guard encodesInitialState else { return }
+		if let initialState {
+			try container.encode(initialState, forKey: .initialState)
+		} else {
+			try container.encodeNil(forKey: .initialState)
+		}
 	}
 }
 
@@ -254,14 +289,17 @@ enum IncomingWebSocketMessage: Codable, Sendable {
 }
 
 enum OutgoingWebSocketMessage: Encodable, Sendable {
-	case liveKitJoin
+	case liveKitJoin(initialState: InitialStateMessage?, encodesInitialState: Bool)
 	case prompt(PromptMessage)
 	case setImage(SetImageMessage)
 
 	func encode(to encoder: Encoder) throws {
 		switch self {
-		case .liveKitJoin:
-			try LiveKitJoinMessage().encode(to: encoder)
+		case .liveKitJoin(let initialState, let encodesInitialState):
+			try LiveKitJoinMessage(
+				initialState: initialState,
+				encodesInitialState: encodesInitialState
+			).encode(to: encoder)
 		case .prompt(let msg):
 			try msg.encode(to: encoder)
 		case .setImage(let msg):

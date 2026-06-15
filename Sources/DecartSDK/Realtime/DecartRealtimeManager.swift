@@ -1,5 +1,15 @@
 import Foundation
 
+private struct InitialStateRequest: Sendable {
+	let message: InitialStateMessage
+	let ackTarget: InitialStateAckTarget
+}
+
+private enum InitialStateAckTarget: Sendable {
+	case prompt(String)
+	case setImage(failureMessage: String, timeoutMessage: String)
+}
+
 public final class DecartRealtimeManager: @unchecked Sendable {
 	public let options: RealtimeConfiguration
 	public let events: AsyncStream<DecartRealtimeState>
@@ -57,8 +67,8 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private let imageAckTimeout: TimeInterval = 30
 	private var isWaitingForInitialStateAck = false
 	private var pendingLiveKitRoomInfo: LiveKitRoomInfoMessage?
-	private var pendingPromptAck: PromptAckMessage?
-	private var pendingSetImageAck: SetImageAckMessage?
+	private var pendingPromptAcks: [PromptAckMessage] = []
+	private var pendingSetImageAcks: [SetImageAckMessage] = []
 	private var pendingInitialStateError: Error?
 
 	// Serial queue around runtime ack waiters: CheckedContinuation forbids
@@ -278,7 +288,11 @@ private extension DecartRealtimeManager {
 			try await waitForServiceReady()
 		}
 
-		try await sendMessageThrowing(.liveKitJoin)
+		let initialStateRequest = buildInitialStateRequest()
+		try await sendMessageThrowing(.liveKitJoin(
+			initialState: options.connection.bundleInitialStateInJoin ? initialStateRequest?.message : nil,
+			encodesInitialState: options.connection.bundleInitialStateInJoin
+		))
 		let roomInfo = try await waitForLiveKitRoomInfo(timeout: options.connection.connectionTimeout)
 
 		let mediaChannel = LiveKitMediaChannel(
@@ -290,7 +304,18 @@ private extension DecartRealtimeManager {
 		liveKitMediaChannel = mediaChannel
 		setupMediaListeners(mediaChannel)
 
-		async let initialStateAck: Void = sendInitialState()
+		let prearmedInitialStateAck = options.connection.bundleInitialStateInJoin && initialStateRequest != nil
+		if prearmedInitialStateAck {
+			isWaitingForInitialStateAck = true
+		}
+		defer {
+			if prearmedInitialStateAck {
+				isWaitingForInitialStateAck = false
+				clearPendingInitialState()
+			}
+		}
+
+		async let initialStateAck: Void = handleInitialStateAfterRoomInfo(initialStateRequest)
 		try await mediaChannel.connect(roomInfo: roomInfo)
 		try await initialStateAck
 		try await mediaChannel.publishLocalTracks(from: localStream)
@@ -301,6 +326,7 @@ private extension DecartRealtimeManager {
 		// Cancelling the listener below skips its iterator-exit cleanup, so
 		// fail runtime waiters here.
 		failAllPendingRuntimeWaiters(DecartError.websocketError("WebSocket disconnected"))
+		clearPendingInitialState()
 		webSocketListenerTask?.cancel()
 		webSocketListenerTask = nil
 		mediaListenerTask?.cancel()
@@ -315,6 +341,7 @@ private extension DecartRealtimeManager {
 		liveKitMediaChannel = nil
 		await webSocketClient?.disconnect()
 		webSocketClient = nil
+		clearPendingInitialState()
 	}
 }
 
@@ -498,6 +525,61 @@ private extension DecartRealtimeManager {
 		try await webSocketClient.send(message)
 	}
 
+	func buildInitialStateRequest() -> InitialStateRequest? {
+		let initialPrompt = options.initialPrompt
+		if options.model.hasReferenceImage,
+			let base64Image = initialPrompt.referenceImageData?.base64EncodedString()
+		{
+			let message = SetImageMessage(
+				imageData: base64Image,
+				prompt: initialPrompt.text,
+				enhancePrompt: initialPrompt.enrich
+			)
+			return InitialStateRequest(
+				message: .setImage(message),
+				ackTarget: .setImage(
+					failureMessage: "Failed to set initial image",
+					timeoutMessage: "Initial image acknowledgment timed out"
+				)
+			)
+		}
+
+		guard !initialPrompt.text.isEmpty else { return nil }
+		return InitialStateRequest(
+			message: .prompt(PromptMessage(prompt: initialPrompt.text, enhancePrompt: initialPrompt.enrich)),
+			ackTarget: .prompt(initialPrompt.text)
+		)
+	}
+
+	func handleInitialStateAfterRoomInfo(_ request: InitialStateRequest?) async throws {
+		if options.connection.bundleInitialStateInJoin {
+			try await waitForBundledInitialStateAck(request)
+		} else {
+			try await sendInitialState()
+		}
+	}
+
+	func waitForBundledInitialStateAck(_ request: InitialStateRequest?) async throws {
+		guard let request else { return }
+
+		isWaitingForInitialStateAck = true
+		defer {
+			isWaitingForInitialStateAck = false
+			clearPendingInitialState()
+		}
+
+		switch request.ackTarget {
+		case .prompt(let prompt):
+			try await waitForPromptAck(prompt: prompt, timeout: initialStateAckTimeout)
+		case .setImage(let failureMessage, let timeoutMessage):
+			try await waitForSetImageAck(
+				timeout: initialStateAckTimeout,
+				failureMessage: failureMessage,
+				timeoutMessage: timeoutMessage
+			)
+		}
+	}
+
 	func sendInitialState() async throws {
 		let initialPrompt = options.initialPrompt
 		if options.model.hasReferenceImage,
@@ -624,10 +706,8 @@ private extension DecartRealtimeManager {
 				throw error
 			}
 
-			if let ack = pendingPromptAck,
-				ack.prompt == nil || ack.prompt == prompt
-			{
-				pendingPromptAck = nil
+			if let index = pendingPromptAcks.firstIndex(where: { $0.prompt == nil || $0.prompt == prompt }) {
+				let ack = pendingPromptAcks.remove(at: index)
 				guard ack.success == true else {
 					connectionState = .error
 					throw DecartError.serverError(ack.error ?? "Failed to send initial prompt")
@@ -660,8 +740,8 @@ private extension DecartRealtimeManager {
 				throw error
 			}
 
-			if let ack = pendingSetImageAck {
-				pendingSetImageAck = nil
+			if !pendingSetImageAcks.isEmpty {
+				let ack = pendingSetImageAcks.removeFirst()
 				guard ack.success == true else {
 					connectionState = .error
 					throw DecartError.serverError(ack.error ?? failureMessage)
@@ -678,15 +758,28 @@ private extension DecartRealtimeManager {
 		}
 	}
 
-	// Initial state takes priority. If a user-initiated setPrompt installs a
-	// runtime waiter while connect is still inside sendInitialState, the next
-	// ack belongs to the initial-state flow — routing it through the runtime
-	// waiter would hang the connect path.
+	// While the initial-state waiter is active it owns the next ack: a
+	// concurrent runtime setPrompt must not steal it, or the connect path would
+	// wait out its full timeout even though the server already responded. Acks
+	// that land during connect/reconnect before that waiter starts are buffered
+	// for it; runtime waiters only claim acks outside the active window.
 	func recordPromptAck(_ ack: PromptAckMessage) {
 		if isWaitingForInitialStateAck {
-			pendingPromptAck = ack
+			pendingPromptAcks.append(ack)
 			return
 		}
+
+		if resolveRuntimePromptAck(ack) {
+			return
+		}
+
+		if shouldBufferInitialStateAck {
+			pendingPromptAcks.append(ack)
+		}
+	}
+
+	@discardableResult
+	func resolveRuntimePromptAck(_ ack: PromptAckMessage) -> Bool {
 		// Runtime path: match by exact prompt text only (same as JS/Python).
 		var runtimeWaiter: RuntimeWaiter?
 		if let promptText = ack.prompt {
@@ -694,34 +787,48 @@ private extension DecartRealtimeManager {
 				runtimeWaiter = pendingRuntimePromptWaiters.removeValue(forKey: promptText)
 			}
 		}
-		guard let waiter = runtimeWaiter else { return }
+		guard let waiter = runtimeWaiter else { return false }
 		if ack.success == true {
 			waiter.cont.resume()
 		} else {
 			waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to send prompt"))
 		}
+		return true
 	}
 
 	func recordSetImageAck(_ ack: SetImageAckMessage) {
 		if isWaitingForInitialStateAck {
-			pendingSetImageAck = ack
+			pendingSetImageAcks.append(ack)
 			return
 		}
+
+		if resolveRuntimeSetImageAck(ack) {
+			return
+		}
+
+		if shouldBufferInitialStateAck {
+			pendingSetImageAcks.append(ack)
+		}
+	}
+
+	@discardableResult
+	func resolveRuntimeSetImageAck(_ ack: SetImageAckMessage) -> Bool {
 		var runtimeWaiter: RuntimeWaiter?
 		ackQueue.sync {
 			runtimeWaiter = pendingRuntimeSetImageWaiter
 			pendingRuntimeSetImageWaiter = nil
 		}
-		guard let waiter = runtimeWaiter else { return }
+		guard let waiter = runtimeWaiter else { return false }
 		if ack.success == true {
 			waiter.cont.resume()
 		} else {
 			waiter.cont.resume(throwing: DecartError.serverError(ack.error ?? "Failed to set image"))
 		}
+		return true
 	}
 
 	func recordInitialStateError(_ error: Error) {
-		guard isWaitingForInitialStateAck else { return }
+		guard isWaitingForInitialStateAck || shouldBufferInitialStateAck else { return }
 		pendingInitialStateError = error
 	}
 
@@ -741,9 +848,13 @@ private extension DecartRealtimeManager {
 	}
 
 	func clearPendingInitialState() {
-		pendingPromptAck = nil
-		pendingSetImageAck = nil
+		pendingPromptAcks.removeAll()
+		pendingSetImageAcks.removeAll()
 		pendingInitialStateError = nil
+	}
+
+	var shouldBufferInitialStateAck: Bool {
+		connectionState == .connecting || connectionState == .reconnecting
 	}
 
 	// Install the waiter BEFORE invoking `send`, so a fast ack that arrives
@@ -847,6 +958,35 @@ extension DecartRealtimeManager {
 	}
 	internal func test_awaitRuntimeSetImageAck(timeout: TimeInterval) async throws {
 		try await awaitRuntimeSetImageAck(timeout: timeout) { /* no-op send */ }
+	}
+	internal func test_awaitInitialPromptAck(prompt: String, timeout: TimeInterval) async throws {
+		isWaitingForInitialStateAck = true
+		defer {
+			isWaitingForInitialStateAck = false
+			clearPendingInitialState()
+		}
+		try await waitForPromptAck(prompt: prompt, timeout: timeout)
+	}
+	internal func test_awaitInitialSetImageAck(timeout: TimeInterval) async throws {
+		isWaitingForInitialStateAck = true
+		defer {
+			isWaitingForInitialStateAck = false
+			clearPendingInitialState()
+		}
+		try await waitForSetImageAck(
+			timeout: timeout,
+			failureMessage: "Failed to set initial image",
+			timeoutMessage: "Initial image acknowledgment timed out"
+		)
+	}
+	internal func test_setConnectionState(_ state: DecartRealtimeConnectionState) {
+		connectionState = state
+	}
+	internal var test_hasPendingInitialStateAck: Bool {
+		!pendingPromptAcks.isEmpty || !pendingSetImageAcks.isEmpty || pendingInitialStateError != nil
+	}
+	internal func test_closeRealtimeClients() async {
+		await closeRealtimeClients()
 	}
 	internal func test_recordPromptAck(_ ack: PromptAckMessage) { recordPromptAck(ack) }
 	internal func test_recordSetImageAck(_ ack: SetImageAckMessage) { recordSetImageAck(ack) }
