@@ -33,6 +33,14 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	private(set) var localMediaStream: RealtimeMediaStream?
 	private(set) var remoteMediaStreams: RealtimeMediaStream?
 
+	/// Live in-session connection-quality verdict (nil until the first report).
+	private(set) var connectionQuality: ConnectionQualityReport?
+	/// Latest pre-connect connectivity probe result (nil until `checkConnectivity()` runs).
+	private(set) var connectivityReport: ConnectivityReport?
+	private(set) var isCheckingConnectivity = false
+	/// Opt-in glass-to-glass measurement (visible marker, diagnostic). Reconnects on change.
+	private(set) var debugQualityEnabled = false
+
 	// MARK: - Private
 
 	@ObservationIgnored
@@ -49,6 +57,9 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 	@ObservationIgnored
 	private var remoteStreamTask: Task<Void, Never>?
+
+	@ObservationIgnored
+	private var connectionQualityTask: Task<Void, Never>?
 
 	@ObservationIgnored
 	private var localVideoTrack: LocalVideoTrack?
@@ -79,7 +90,8 @@ final class RealtimeManager: RealtimeManagerProtocol {
 			realtimeManager = try decartClient.createRealtimeManager(
 				options: RealtimeConfiguration(
 					model: modelConfig,
-					initialPrompt: currentPrompt
+					initialPrompt: currentPrompt,
+					debugQuality: debugQualityEnabled
 				)
 			)
 
@@ -90,9 +102,17 @@ final class RealtimeManager: RealtimeManagerProtocol {
 			// Listen for connection state changes (connecting, connected, error, etc.)
 			startEventMonitoring()
 			startRemoteStreamMonitoring()
+			startConnectionQualityMonitoring()
 
 			#if !targetEnvironment(simulator)
-			startCapture(model: modelConfig)
+			if debugQualityEnabled {
+				// SDK-created stream carries the glass-to-glass stamp pipeline.
+				let stream = decartClient.createLocalCameraStream(model: modelConfig, debugQuality: true)
+				localMediaStream = stream
+				localVideoTrack = stream.videoTrack as? LocalVideoTrack
+			} else {
+				startCapture(model: modelConfig)
+			}
 
 			// Establish LiveKit connection - sends local video, receives AI-processed video.
 			let initialRemoteStream = try await realtimeManager.connect(localStream: localMediaStream!)
@@ -106,13 +126,55 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		}
 	}
 
+	/// SDK-only preflight: probe whether the network can sustain a session before
+	/// connecting. Safe to call without a session (only hits public STUN).
+	func checkConnectivity() async {
+		guard !isCheckingConnectivity else { return }
+		isCheckingConnectivity = true
+		connectivityReport = nil
+		defer { isCheckingConnectivity = false }
+		connectivityReport = await decartClient.checkConnectivity()
+	}
+
+	/// Deep probe: briefly opens a real session with a synthetic source and measures
+	/// true glass-to-glass latency (costs a short GPU session).
+	func runDeepProbe() async {
+		guard !isCheckingConnectivity else { return }
+		isCheckingConnectivity = true
+		connectivityReport = nil
+		defer { isCheckingConnectivity = false }
+		connectivityReport = await decartClient.checkConnectivity(
+			options: .init(deep: true, model: Models.realtime(model))
+		)
+	}
+
+	/// Toggle glass-to-glass measurement; reconnects if a session is live so the new
+	/// setting takes effect (the stamp pipeline is wired at stream/connect time).
+	func setDebugQuality(_ enabled: Bool) async {
+		guard enabled != debugQualityEnabled else { return }
+		debugQualityEnabled = enabled
+		// Re-apply only on a fully established session; reconnecting during a
+		// transitional state (.connecting/.reconnecting) would tear down the
+		// in-flight attempt. Otherwise the flag takes effect on the next connect.
+		if connectionState.isConnected { await connect() }
+	}
+
 	func switchCamera() async {
 		#if !targetEnvironment(simulator)
 		guard let cameraCapturer = localVideoTrack?.capturer as? CameraCapturer else { return }
 		do {
 			try await cameraCapturer.switchCameraPosition()
-			// Keep input-side mirroring (MirrorMode.auto) following the active camera.
-			mirrorProcessor?.cameraPosition = cameraCapturer.position
+			// Keep input-side mirroring (MirrorMode.auto) following the active camera,
+			// whether the stream uses the mirror or the glass-to-glass stamp processor.
+			let position = cameraCapturer.position
+			switch cameraCapturer.processor {
+			case let stamping as StampingVideoProcessor:
+				stamping.cameraPosition = position
+			case let mirroring as MirroringVideoProcessor:
+				mirroring.cameraPosition = position
+			default:
+				break
+			}
 		} catch {
 			DecartLogger.log("Failed to switch camera", level: .error)
 		}
@@ -130,6 +192,10 @@ final class RealtimeManager: RealtimeManagerProtocol {
 
 		remoteStreamTask?.cancel()
 		remoteStreamTask = nil
+
+		connectionQualityTask?.cancel()
+		connectionQualityTask = nil
+		connectionQuality = nil
 
 		try? await localVideoTrack?.stop()
 		localVideoTrack = nil
@@ -196,6 +262,21 @@ final class RealtimeManager: RealtimeManagerProtocol {
 				if Task.isCancelled { return }
 				guard remoteStream.videoTrack != nil else { continue }
 				self.remoteMediaStreams = remoteStream
+			}
+		}
+	}
+
+	private func startConnectionQualityMonitoring() {
+		connectionQualityTask?.cancel()
+
+		// Poll the live snapshot ~1 Hz so the badge's metrics (rtt/g2g/fps/drops) stay
+		// fresh. The `connectionQualityUpdates` stream only fires on debounced level
+		// changes, so its metrics would otherwise look fresh while going stale.
+		connectionQualityTask = Task { [weak self] in
+			while !Task.isCancelled {
+				guard let self, let manager = self.realtimeManager else { return }
+				self.connectionQuality = manager.getConnectionQuality()
+				try? await Task.sleep(nanoseconds: 1_000_000_000)
 			}
 		}
 	}

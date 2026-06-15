@@ -1,6 +1,6 @@
 import Foundation
 
-public struct DecartConfiguration {
+public struct DecartConfiguration: Sendable {
 	public let baseURL: URL
 	public let apiKey: String
 

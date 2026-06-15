@@ -20,19 +20,30 @@ public struct RealtimeConfiguration: Sendable {
 	public let resolution: Resolution?
 	public let connection: ConnectionConfig
 	public let media: MediaConfig
+	public let observability: ObservabilityConfig
+	/// Opt-in DEBUG-quality measurement: asks the server to re-stamp the pixel
+	/// marker (`pixel_latency=1`) so the SDK can read true glass-to-glass latency
+	/// off the rendered frames. Diagnostic only: the marker is **visible** and adds
+	/// per-frame pixel work — don't enable it for production. Requires a stream
+	/// built via `DecartClient.createLocalCameraStream(debugQuality: true)`.
+	public let debugQuality: Bool
 
 	public init(
 		model: ModelDefinition,
 		initialPrompt: DecartPrompt = .init(text: ""),
 		resolution: Resolution? = nil,
 		connection: ConnectionConfig = .init(),
-		media: MediaConfig = .init()
+		media: MediaConfig = .init(),
+		observability: ObservabilityConfig = .init(),
+		debugQuality: Bool = false
 	) {
 		self.model = model
 		self.initialPrompt = initialPrompt
 		self.resolution = resolution
 		self.connection = connection
 		self.media = media
+		self.observability = observability
+		self.debugQuality = debugQuality
 	}
 
 	// MARK: - Sub-Configurations
@@ -57,6 +68,27 @@ public struct RealtimeConfiguration: Sendable {
 				primaryTransportConnectTimeout: connectionTimeout,
 				publisherTransportConnectTimeout: connectionTimeout
 			)
+		}
+	}
+
+	/// In-session observability (connection-quality signal). Defaults on; the
+	/// `connectionQualityEnabled` flag gates LiveKit's 1 Hz stats polling so
+	/// opted-out callers pay no overhead.
+	public struct ObservabilityConfig: Sendable {
+		public let connectionQualityEnabled: Bool
+		public let connectionQuality: ConnectionQualityThresholds
+
+		public init(
+			connectionQualityEnabled: Bool = true,
+			connectionQuality: ConnectionQualityThresholds = .default
+		) {
+			self.connectionQualityEnabled = connectionQualityEnabled
+			self.connectionQuality = connectionQuality
+		}
+
+		/// Thresholds to hand the media channel, or nil when disabled.
+		var thresholdsIfEnabled: ConnectionQualityThresholds? {
+			connectionQualityEnabled ? connectionQuality : nil
 		}
 	}
 

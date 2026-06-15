@@ -62,16 +62,30 @@ private struct RealtimeContentView: View {
 			}
 
 			VStack(spacing: 5) {
-				HStack {
-					VStack(alignment: .center, spacing: 1) {
+				HStack(alignment: .top) {
+					VStack(alignment: .leading, spacing: 6) {
 						Text(realtimeManager.connectionState.rawValue)
 							.font(.caption)
 							.foregroundColor(
 								realtimeManager.connectionState.isConnected ? .green : .white
 							)
+						if let quality = realtimeManager.connectionQuality {
+							ConnectionQualityBadge(report: quality)
+						}
 					}
 					Spacer()
+					ConnectivityPreflightView(
+						isChecking: realtimeManager.isCheckingConnectivity,
+						report: realtimeManager.connectivityReport,
+						debugQuality: realtimeManager.debugQualityEnabled,
+						onCheck: { Task { await realtimeManager.checkConnectivity() } },
+						onDeepProbe: { Task { await realtimeManager.runDeepProbe() } },
+						onToggleDebugQuality: { on in Task { await realtimeManager.setDebugQuality(on) } }
+					)
+					.frame(maxWidth: 260, alignment: .trailing)
 				}
+				.padding(.horizontal, 12)
+				.padding(.top, 8)
 				.padding(.bottom, 10)
 				.background(Color.black.opacity(0.6))
 
