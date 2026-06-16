@@ -18,6 +18,7 @@ private func warnDeprecated(_ oldName: String, canonical: String) {
 
 public enum VideoCodec: String, Sendable {
 	case vp8 = "video/VP8"
+	case vp9 = "video/VP9"
 	case h264 = "video/H264"
 }
 
