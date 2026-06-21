@@ -51,16 +51,18 @@ public struct RealtimeConfiguration: Sendable {
 	public struct ConnectionConfig: Sendable {
 		public let connectionTimeout: TimeInterval
 		public let reconnectAttempts: Int
-		public let bundleInitialStateInJoin: Bool
+		/// Overrides the `passthrough` flag sent on the join. `nil` derives it from
+		/// the initial prompt/image: `false` when a real reference is set, else `true`.
+		public let passthrough: Bool?
 
 		public init(
 			connectionTimeout: TimeInterval = 15,
 			reconnectAttempts: Int = 10,
-			bundleInitialStateInJoin: Bool = true
+			passthrough: Bool? = nil
 		) {
 			self.connectionTimeout = connectionTimeout
 			self.reconnectAttempts = reconnectAttempts
-			self.bundleInitialStateInJoin = bundleInitialStateInJoin
+			self.passthrough = passthrough
 		}
 
 		var connectOptions: ConnectOptions {
