@@ -9,9 +9,6 @@ jobs:
     release:
         name: Create Release
         runs-on: macos-latest
-        env:
-            IOS_DEVICE_NAME: "iPhone 16 Pro"
-            IOS_OS_VERSION: "latest"
 
         permissions:
             contents: write
@@ -33,7 +30,7 @@ jobs:
                   set -o pipefail
                   xcodebuild build \
                     -scheme DecartSDK \
-                    -destination "platform=iOS Simulator,name=$IOS_DEVICE_NAME,OS=$IOS_OS_VERSION" \
+                    -destination "generic/platform=iOS Simulator" \
                     2>&1 | xcbeautify --renderer github-actions
 
             - name: Extract Version
