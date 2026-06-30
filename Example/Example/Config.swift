@@ -21,7 +21,7 @@ enum DecartConfig: Sendable {
 		switch model {
 		case .lucyRestyle2, .lucyRestyleLatest, .mirage_v2:
 			return restylePresets
-		case .lucy2_1, .lucy2_1_vton, .lucyVton2, .lucyVton3, .lucyLatest, .lucyVtonLatest, .lucyVton, .lucy2_1_vton_2:
+		case .lucy2_1, .lucyVton2, .lucyVton3, .lucyLatest, .lucyVtonLatest, .lucy2_1_vton_2:
 			return lucyEditPresets
 		}
 	}
