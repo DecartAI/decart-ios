@@ -5,7 +5,6 @@ final class ModelConfigTests: XCTestCase {
 	func testRealtimeModelsMatchJSSDKRegistry() {
 		let expectedCases: [RealtimeModel] = [
 			.lucy2_1,
-			.lucy2_1_vton,
 			.lucyVton2,
 			.lucyVton3,
 			.lucyRestyle2,
@@ -46,7 +45,6 @@ final class ModelConfigTests: XCTestCase {
 		let expectedCases: [VideoModel] = [
 			.lucyClip,
 			.lucy2_1,
-			.lucy2_1_vton,
 			.lucyVton2,
 			.lucyVton3,
 			.lucyRestyle2,
@@ -80,16 +78,6 @@ final class ModelConfigTests: XCTestCase {
 
 	func testDeprecatedAliasesMatchJSSDKDefinitions() {
 		assertModel(
-			Models.realtime(realtimeModel("lucy-vton")),
-			name: "lucy-vton",
-			urlPath: "/v1/stream",
-			jobsUrlPath: nil,
-			fps: 30,
-			width: 1088,
-			height: 624,
-			hasReferenceImage: true
-		)
-		assertModel(
 			Models.realtime(realtimeModel("lucy-2.1-vton-2")),
 			name: "lucy-2.1-vton-2",
 			urlPath: "/v1/stream",
@@ -98,15 +86,6 @@ final class ModelConfigTests: XCTestCase {
 			width: 1088,
 			height: 624,
 			hasReferenceImage: true
-		)
-		assertModel(
-			Models.video(videoModel("lucy-vton")),
-			name: "lucy-vton",
-			urlPath: "/v1/generate/lucy-vton",
-			jobsUrlPath: "/v1/jobs/lucy-vton",
-			fps: 20,
-			width: 1088,
-			height: 624
 		)
 		assertModel(
 			Models.video(videoModel("lucy-2.1-vton-2")),
