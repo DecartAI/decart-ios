@@ -1,7 +1,7 @@
 import Foundation
 
 private struct InitialStateRequest: Sendable {
-	let message: InitialStateMessage
+	let message: OutgoingWebSocketMessage
 	let ackTarget: InitialStateAckTarget
 }
 
@@ -61,6 +61,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private var mediaConnectionStateTask: Task<Void, Never>?
 	private var mediaDisconnectTask: Task<Void, Never>?
 	private var connectionQualityTask: Task<Void, Never>?
+	private var initialStateAckTask: Task<Void, Never>?
 	private var reconnectTask: Task<Void, Never>?
 	private let initialStateAckTimeout: TimeInterval = 30
 	private let promptAckTimeout: TimeInterval = 15
@@ -152,6 +153,7 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 		mediaConnectionStateTask?.cancel()
 		mediaDisconnectTask?.cancel()
 		connectionQualityTask?.cancel()
+		initialStateAckTask?.cancel()
 		reconnectTask?.cancel()
 		let liveKitMediaChannel = liveKitMediaChannel
 		let webSocketClient = webSocketClient
@@ -289,10 +291,12 @@ private extension DecartRealtimeManager {
 		}
 
 		let initialStateRequest = buildInitialStateRequest()
-		try await sendMessageThrowing(.liveKitJoin(
-			initialState: options.connection.bundleInitialStateInJoin ? initialStateRequest?.message : nil,
-			encodesInitialState: options.connection.bundleInitialStateInJoin
-		))
+
+		// Buffer any ack that lands before the out-of-band observer starts.
+		isWaitingForInitialStateAck = true
+		try await sendMessageThrowing(.liveKitJoin(passthrough: isPassthrough))
+		try await sendMessageThrowing(initialStateRequest.message)
+
 		let roomInfo = try await waitForLiveKitRoomInfo(timeout: options.connection.connectionTimeout)
 
 		let mediaChannel = LiveKitMediaChannel(
@@ -304,20 +308,11 @@ private extension DecartRealtimeManager {
 		liveKitMediaChannel = mediaChannel
 		setupMediaListeners(mediaChannel)
 
-		let prearmedInitialStateAck = options.connection.bundleInitialStateInJoin && initialStateRequest != nil
-		if prearmedInitialStateAck {
-			isWaitingForInitialStateAck = true
-		}
-		defer {
-			if prearmedInitialStateAck {
-				isWaitingForInitialStateAck = false
-				clearPendingInitialState()
-			}
-		}
-
-		async let initialStateAck: Void = handleInitialStateAfterRoomInfo(initialStateRequest)
+		// Watch the ack off the critical path: arm its timeout now that room_info
+		// arrived (a long queue wait can't trip it) and let it run concurrently
+		// with room connect + publish, surfacing an error only on rejection.
+		observeInitialStateAck(initialStateRequest)
 		try await mediaChannel.connect(roomInfo: roomInfo)
-		try await initialStateAck
 		try await mediaChannel.publishLocalTracks(from: localStream)
 		return mediaChannel.currentRemoteStream
 	}
@@ -327,6 +322,9 @@ private extension DecartRealtimeManager {
 		// fail runtime waiters here.
 		failAllPendingRuntimeWaiters(DecartError.websocketError("WebSocket disconnected"))
 		clearPendingInitialState()
+		initialStateAckTask?.cancel()
+		initialStateAckTask = nil
+		isWaitingForInitialStateAck = false
 		webSocketListenerTask?.cancel()
 		webSocketListenerTask = nil
 		mediaListenerTask?.cancel()
@@ -513,11 +511,6 @@ private extension DecartRealtimeManager {
 // MARK: - Messaging
 
 private extension DecartRealtimeManager {
-	private func sendMessage(_ message: OutgoingWebSocketMessage) {
-		guard let webSocketClient else { return }
-		Task { [webSocketClient] in try? await webSocketClient.send(message) }
-	}
-
 	private func sendMessageThrowing(_ message: OutgoingWebSocketMessage) async throws {
 		guard let webSocketClient else {
 			throw DecartError.websocketError("WebSocket not connected")
@@ -525,18 +518,26 @@ private extension DecartRealtimeManager {
 		try await webSocketClient.send(message)
 	}
 
-	func buildInitialStateRequest() -> InitialStateRequest? {
+	// `false` when the user set a real image/prompt (one real frame follows),
+	// `true` otherwise (a null-bootstrap frame follows). Session config may override.
+	var isPassthrough: Bool {
+		if let override = options.connection.passthrough { return override }
+		let initialPrompt = options.initialPrompt
+		let hasImage = options.model.hasReferenceImage && initialPrompt.referenceImageData != nil
+		return !(hasImage || !initialPrompt.text.isEmpty)
+	}
+
+	func buildInitialStateRequest() -> InitialStateRequest {
 		let initialPrompt = options.initialPrompt
 		if options.model.hasReferenceImage,
 			let base64Image = initialPrompt.referenceImageData?.base64EncodedString()
 		{
-			let message = SetImageMessage(
-				imageData: base64Image,
-				prompt: initialPrompt.text,
-				enhancePrompt: initialPrompt.enrich
-			)
 			return InitialStateRequest(
-				message: .setImage(message),
+				message: .setImage(SetImageMessage(
+					imageData: base64Image,
+					prompt: initialPrompt.text,
+					enhancePrompt: initialPrompt.enrich
+				)),
 				ackTarget: .setImage(
 					failureMessage: "Failed to set initial image",
 					timeoutMessage: "Initial image acknowledgment timed out"
@@ -544,56 +545,46 @@ private extension DecartRealtimeManager {
 			)
 		}
 
-		guard !initialPrompt.text.isEmpty else { return nil }
+		if !initialPrompt.text.isEmpty {
+			return InitialStateRequest(
+				message: .prompt(PromptMessage(prompt: initialPrompt.text, enhancePrompt: initialPrompt.enrich)),
+				ackTarget: .prompt(initialPrompt.text)
+			)
+		}
+
 		return InitialStateRequest(
-			message: .prompt(PromptMessage(prompt: initialPrompt.text, enhancePrompt: initialPrompt.enrich)),
-			ackTarget: .prompt(initialPrompt.text)
+			message: .setImage(.passthrough()),
+			ackTarget: .setImage(
+				failureMessage: "Failed to apply initial passthrough state",
+				timeoutMessage: "Initial passthrough acknowledgment timed out"
+			)
 		)
 	}
 
-	func handleInitialStateAfterRoomInfo(_ request: InitialStateRequest?) async throws {
-		if options.connection.bundleInitialStateInJoin {
-			try await waitForBundledInitialStateAck(request)
-		} else {
-			try await sendInitialState()
-		}
-	}
-
-	func waitForBundledInitialStateAck(_ request: InitialStateRequest?) async throws {
-		guard let request else { return }
-
-		isWaitingForInitialStateAck = true
-		defer {
-			isWaitingForInitialStateAck = false
-			clearPendingInitialState()
-		}
-
-		switch request.ackTarget {
-		case .prompt(let prompt):
-			try await waitForPromptAck(prompt: prompt, timeout: initialStateAckTimeout)
-		case .setImage(let failureMessage, let timeoutMessage):
-			try await waitForSetImageAck(
-				timeout: initialStateAckTimeout,
-				failureMessage: failureMessage,
-				timeoutMessage: timeoutMessage
-			)
-		}
-	}
-
-	func sendInitialState() async throws {
-		let initialPrompt = options.initialPrompt
-		if options.model.hasReferenceImage,
-			let base64Image = initialPrompt.referenceImageData?.base64EncodedString()
-		{
-			try await sendInitialImageAndWait(
-				base64Image,
-				prompt: initialPrompt.text,
-				enhance: initialPrompt.enrich
-			)
-		} else if !initialPrompt.text.isEmpty {
-			try await sendInitialPromptAndWait(initialPrompt)
-		} else {
-			try await sendPassthroughAndWait()
+	func observeInitialStateAck(_ request: InitialStateRequest) {
+		initialStateAckTask?.cancel()
+		initialStateAckTask = Task { [weak self] in
+			guard let self else { return }
+			defer {
+				self.isWaitingForInitialStateAck = false
+				self.clearPendingInitialState()
+			}
+			do {
+				switch request.ackTarget {
+				case .prompt(let prompt):
+					try await self.waitForPromptAck(prompt: prompt, timeout: self.initialStateAckTimeout)
+				case .setImage(let failureMessage, let timeoutMessage):
+					try await self.waitForSetImageAck(
+						timeout: self.initialStateAckTimeout,
+						failureMessage: failureMessage,
+						timeoutMessage: timeoutMessage
+					)
+				}
+			} catch is CancellationError {
+				return
+			} catch {
+				DecartLogger.log("Initial-state acknowledgment failed: \(error.localizedDescription)", level: .error)
+			}
 		}
 	}
 
@@ -621,77 +612,6 @@ private extension DecartRealtimeManager {
 
 			try await Task.sleep(nanoseconds: 100_000_000)
 		}
-	}
-
-	func sendInitialPromptAndWait(_ prompt: DecartPrompt) async throws {
-		guard let webSocketClient else {
-			connectionState = .error
-			throw DecartError.websocketError("WebSocket not connected")
-		}
-
-		clearPendingInitialState()
-		isWaitingForInitialStateAck = true
-		defer {
-			isWaitingForInitialStateAck = false
-			clearPendingInitialState()
-		}
-
-		let message: OutgoingWebSocketMessage = .prompt(PromptMessage(prompt: prompt.text, enhancePrompt: prompt.enrich))
-		try await webSocketClient.send(message)
-		try await waitForPromptAck(prompt: prompt.text, timeout: initialStateAckTimeout)
-	}
-
-	func sendInitialImageAndWait(
-		_ imageBase64: String,
-		prompt: String,
-		enhance: Bool
-	) async throws {
-		guard let webSocketClient else {
-			connectionState = .error
-			throw DecartError.websocketError("WebSocket not connected")
-		}
-
-		clearPendingInitialState()
-		isWaitingForInitialStateAck = true
-		defer {
-			isWaitingForInitialStateAck = false
-			clearPendingInitialState()
-		}
-
-		let message = SetImageMessage(
-			imageData: imageBase64,
-			prompt: prompt,
-			enhancePrompt: enhance
-		)
-		let outgoing: OutgoingWebSocketMessage = .setImage(message)
-		try await webSocketClient.send(outgoing)
-		try await waitForSetImageAck(
-			timeout: initialStateAckTimeout,
-			failureMessage: "Failed to set initial image",
-			timeoutMessage: "Initial image acknowledgment timed out"
-		)
-	}
-
-	func sendPassthroughAndWait() async throws {
-		guard let webSocketClient else {
-			connectionState = .error
-			throw DecartError.websocketError("WebSocket not connected")
-		}
-
-		clearPendingInitialState()
-		isWaitingForInitialStateAck = true
-		defer {
-			isWaitingForInitialStateAck = false
-			clearPendingInitialState()
-		}
-
-		let passthrough: OutgoingWebSocketMessage = .setImage(.passthrough())
-		try await webSocketClient.send(passthrough)
-		try await waitForSetImageAck(
-			timeout: initialStateAckTimeout,
-			failureMessage: "Failed to apply initial passthrough state",
-			timeoutMessage: "Initial passthrough acknowledgment timed out"
-		)
 	}
 
 	func waitForPromptAck(prompt: String, timeout: TimeInterval) async throws {
@@ -982,6 +902,7 @@ extension DecartRealtimeManager {
 	internal func test_setConnectionState(_ state: DecartRealtimeConnectionState) {
 		connectionState = state
 	}
+	internal var test_isPassthrough: Bool { isPassthrough }
 	internal var test_hasPendingInitialStateAck: Bool {
 		!pendingPromptAcks.isEmpty || !pendingSetImageAcks.isEmpty || pendingInitialStateError != nil
 	}
