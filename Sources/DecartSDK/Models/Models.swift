@@ -26,6 +26,7 @@ public enum RealtimeModel: String, CaseIterable {
 	// Canonical names
 	case lucyRestyle2 = "lucy-restyle-2"
 	case lucy2_1 = "lucy-2.1"
+	case lucy2_5 = "lucy-2.5"
 	case lucyVton2 = "lucy-vton-2"
 	case lucyVton3 = "lucy-vton-3"
 	// Latest aliases (server-side resolution)
@@ -40,7 +41,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucy2_1_vton_2 = "lucy-2.1-vton-2"
 
 	public static var allCases: [RealtimeModel] {
-		[.lucy2_1, .lucyVton2, .lucyVton3, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
+		[.lucy2_1, .lucy2_5, .lucyVton2, .lucyVton3, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
 	}
 }
 
@@ -63,6 +64,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	// Canonical names
 	case lucyClip = "lucy-clip"
 	case lucy2_1 = "lucy-2.1"
+	case lucy2_5 = "lucy-2.5"
 	case lucyRestyle2 = "lucy-restyle-2"
 	case lucyVton2 = "lucy-vton-2"
 	case lucyVton3 = "lucy-vton-3"
@@ -81,7 +83,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucy2_1_vton_2 = "lucy-2.1-vton-2"
 
 	public static var allCases: [VideoModel] {
-		[.lucyClip, .lucy2_1, .lucyVton2, .lucyVton3, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest]
+		[.lucyClip, .lucy2_1, .lucy2_5, .lucyVton2, .lucyVton3, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest]
 	}
 }
 
@@ -101,6 +103,15 @@ public enum Models {
 				name: "lucy-2.1",
 				urlPath: "/v1/stream",
 				fps: 30,
+				width: 1088,
+				height: 624,
+				hasReferenceImage: true
+			)
+		case .lucy2_5:
+			return ModelDefinition(
+				name: "lucy-2.5",
+				urlPath: "/v1/stream",
+				fps: 20,
 				width: 1088,
 				height: 624,
 				hasReferenceImage: true
@@ -218,6 +229,15 @@ public enum Models {
 				name: "lucy-2.1",
 				urlPath: "/v1/generate/lucy-2.1",
 				jobsUrlPath: "/v1/jobs/lucy-2.1",
+				fps: 20,
+				width: 1088,
+				height: 624
+			)
+		case .lucy2_5:
+			return ModelDefinition(
+				name: "lucy-2.5",
+				urlPath: "/v1/generate/lucy-2.5",
+				jobsUrlPath: "/v1/jobs/lucy-2.5",
 				fps: 20,
 				width: 1088,
 				height: 624
