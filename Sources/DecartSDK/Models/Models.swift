@@ -111,9 +111,9 @@ public enum Models {
 			return ModelDefinition(
 				name: "lucy-2.5",
 				urlPath: "/v1/stream",
-				fps: 20,
-				width: 1088,
-				height: 624,
+				fps: 30,
+				width: 1280,
+				height: 720,
 				hasReferenceImage: true
 			)
 		case .lucyVton2:
@@ -239,8 +239,8 @@ public enum Models {
 				urlPath: "/v1/generate/lucy-2.5",
 				jobsUrlPath: "/v1/jobs/lucy-2.5",
 				fps: 20,
-				width: 1088,
-				height: 624
+				width: 1280,
+				height: 720
 			)
 		case .lucyVton2:
 			return ModelDefinition(
