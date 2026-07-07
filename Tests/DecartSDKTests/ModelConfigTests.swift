@@ -20,9 +20,9 @@ final class ModelConfigTests: XCTestCase {
 			name: "lucy-2.5",
 			urlPath: "/v1/stream",
 			jobsUrlPath: nil,
-			fps: 20,
-			width: 1088,
-			height: 624,
+			fps: 30,
+			width: 1280,
+			height: 720,
 			hasReferenceImage: true
 		)
 
@@ -49,9 +49,8 @@ final class ModelConfigTests: XCTestCase {
 		)
 
 		for model in RealtimeModel.allCases {
-			// lucy-2.5 runs at a fixed 20 fps; all other realtime models run at 30 fps.
-			let expectedFps = model == .lucy2_5 ? 20 : 30
-			XCTAssertEqual(Models.realtime(model).fps, expectedFps, "\(model.rawValue) realtime fps should match JS SDK")
+			// All realtime models run at 30 fps.
+			XCTAssertEqual(Models.realtime(model).fps, 30, "\(model.rawValue) realtime fps should match JS SDK")
 		}
 	}
 
@@ -76,8 +75,8 @@ final class ModelConfigTests: XCTestCase {
 			urlPath: "/v1/generate/lucy-2.5",
 			jobsUrlPath: "/v1/jobs/lucy-2.5",
 			fps: 20,
-			width: 1088,
-			height: 624
+			width: 1280,
+			height: 720
 		)
 
 		assertModel(
