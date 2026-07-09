@@ -35,8 +35,6 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucyRestyleLatest = "lucy-restyle-latest"
 
 	// Deprecated aliases
-	@available(*, deprecated, renamed: "lucyRestyle2")
-	case mirage_v2 = "mirage_v2"
 	@available(*, deprecated, renamed: "lucyVton2")
 	case lucy2_1_vton_2 = "lucy-2.1-vton-2"
 
@@ -155,15 +153,6 @@ public enum Models {
 		case .lucyRestyleLatest:
 			return ModelDefinition(
 				name: "lucy-restyle-latest",
-				urlPath: "/v1/stream",
-				fps: 30,
-				width: 1280,
-				height: 704
-			)
-		case .mirage_v2:
-			warnDeprecated("mirage_v2", canonical: "lucy-restyle-2")
-			return ModelDefinition(
-				name: "mirage_v2",
 				urlPath: "/v1/stream",
 				fps: 30,
 				width: 1280,
