@@ -8,7 +8,6 @@ final class ModelConfigTests: XCTestCase {
 			.lucy2_5,
 			.lucyVton2,
 			.lucyVton3,
-			.lucyVton3_5,
 			.lucyRestyle2,
 			.lucyLatest,
 			.lucyVtonLatest,
@@ -49,17 +48,6 @@ final class ModelConfigTests: XCTestCase {
 			hasReferenceImage: true
 		)
 
-		assertModel(
-			Models.realtime(.lucyVton3_5),
-			name: "lucy-vton-3.5",
-			urlPath: "/v1/stream",
-			jobsUrlPath: nil,
-			fps: 30,
-			width: 1088,
-			height: 624,
-			hasReferenceImage: true
-		)
-
 		for model in RealtimeModel.allCases {
 			// All realtime models run at 30 fps.
 			XCTAssertEqual(Models.realtime(model).fps, 30, "\(model.rawValue) realtime fps should match JS SDK")
@@ -73,7 +61,6 @@ final class ModelConfigTests: XCTestCase {
 			.lucy2_5,
 			.lucyVton2,
 			.lucyVton3,
-			.lucyVton3_5,
 			.lucyRestyle2,
 			.lucyLatest,
 			.lucyVtonLatest,
@@ -107,16 +94,6 @@ final class ModelConfigTests: XCTestCase {
 			name: "lucy-vton-3",
 			urlPath: "/v1/generate/lucy-vton-3",
 			jobsUrlPath: "/v1/jobs/lucy-vton-3",
-			fps: 20,
-			width: 1088,
-			height: 624
-		)
-
-		assertModel(
-			Models.video(.lucyVton3_5),
-			name: "lucy-vton-3.5",
-			urlPath: "/v1/generate/lucy-vton-3.5",
-			jobsUrlPath: "/v1/jobs/lucy-vton-3.5",
 			fps: 20,
 			width: 1088,
 			height: 624
