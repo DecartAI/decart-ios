@@ -27,20 +27,14 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucyRestyle2 = "lucy-restyle-2"
 	case lucy2_1 = "lucy-2.1"
 	case lucy2_5 = "lucy-2.5"
-	case lucyVton2 = "lucy-vton-2"
-	case lucyVton3 = "lucy-vton-3"
 	case lucyVton3_5 = "lucy-vton-3.5"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
 	case lucyVtonLatest = "lucy-vton-latest"
 	case lucyRestyleLatest = "lucy-restyle-latest"
 
-	// Deprecated aliases
-	@available(*, deprecated, renamed: "lucyVton2")
-	case lucy2_1_vton_2 = "lucy-2.1-vton-2"
-
 	public static var allCases: [RealtimeModel] {
-		[.lucy2_1, .lucy2_5, .lucyVton2, .lucyVton3, .lucyVton3_5, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
+		[.lucy2_1, .lucy2_5, .lucyVton3_5, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
 	}
 }
 
@@ -65,8 +59,6 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucy2_1 = "lucy-2.1"
 	case lucy2_5 = "lucy-2.5"
 	case lucyRestyle2 = "lucy-restyle-2"
-	case lucyVton2 = "lucy-vton-2"
-	case lucyVton3 = "lucy-vton-3"
 	case lucyVton3_5 = "lucy-vton-3.5"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
@@ -79,11 +71,9 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucy_pro_v2v = "lucy-pro-v2v"
 	@available(*, deprecated, renamed: "lucyRestyle2")
 	case lucy_restyle_v2v = "lucy-restyle-v2v"
-	@available(*, deprecated, renamed: "lucyVton2")
-	case lucy2_1_vton_2 = "lucy-2.1-vton-2"
 
 	public static var allCases: [VideoModel] {
-		[.lucyClip, .lucy2_1, .lucy2_5, .lucyVton2, .lucyVton3, .lucyVton3_5, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest]
+		[.lucyClip, .lucy2_1, .lucy2_5, .lucyVton3_5, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest]
 	}
 }
 
@@ -114,24 +104,6 @@ public enum Models {
 				fps: 30,
 				width: 1280,
 				height: 720,
-				hasReferenceImage: true
-			)
-		case .lucyVton2:
-			return ModelDefinition(
-				name: "lucy-vton-2",
-				urlPath: "/v1/stream",
-				fps: 30,
-				width: 1088,
-				height: 624,
-				hasReferenceImage: true
-			)
-		case .lucyVton3:
-			return ModelDefinition(
-				name: "lucy-vton-3",
-				urlPath: "/v1/stream",
-				fps: 30,
-				width: 1088,
-				height: 624,
 				hasReferenceImage: true
 			)
 		case .lucyVton3_5:
@@ -168,16 +140,6 @@ public enum Models {
 				fps: 30,
 				width: 1280,
 				height: 704
-			)
-		case .lucy2_1_vton_2:
-			warnDeprecated("lucy-2.1-vton-2", canonical: "lucy-vton-2")
-			return ModelDefinition(
-				name: "lucy-2.1-vton-2",
-				urlPath: "/v1/stream",
-				fps: 30,
-				width: 1088,
-				height: 624,
-				hasReferenceImage: true
 			)
 		}
 	}
@@ -241,24 +203,6 @@ public enum Models {
 				fps: 20,
 				width: 1280,
 				height: 720
-			)
-		case .lucyVton2:
-			return ModelDefinition(
-				name: "lucy-vton-2",
-				urlPath: "/v1/generate/lucy-vton-2",
-				jobsUrlPath: "/v1/jobs/lucy-vton-2",
-				fps: 20,
-				width: 1088,
-				height: 624
-			)
-		case .lucyVton3:
-			return ModelDefinition(
-				name: "lucy-vton-3",
-				urlPath: "/v1/generate/lucy-vton-3",
-				jobsUrlPath: "/v1/jobs/lucy-vton-3",
-				fps: 20,
-				width: 1088,
-				height: 624
 			)
 		case .lucyVton3_5:
 			return ModelDefinition(
@@ -333,16 +277,6 @@ public enum Models {
 				fps: 22,
 				width: 1280,
 				height: 704
-			)
-		case .lucy2_1_vton_2:
-			warnDeprecated("lucy-2.1-vton-2", canonical: "lucy-vton-2")
-			return ModelDefinition(
-				name: "lucy-2.1-vton-2",
-				urlPath: "/v1/generate/lucy-2.1-vton-2",
-				jobsUrlPath: "/v1/jobs/lucy-2.1-vton-2",
-				fps: 20,
-				width: 1088,
-				height: 624
 			)
 		}
 	}

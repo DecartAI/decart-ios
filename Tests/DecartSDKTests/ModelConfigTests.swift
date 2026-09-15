@@ -6,8 +6,6 @@ final class ModelConfigTests: XCTestCase {
 		let expectedCases: [RealtimeModel] = [
 			.lucy2_1,
 			.lucy2_5,
-			.lucyVton2,
-			.lucyVton3,
 			.lucyVton3_5,
 			.lucyRestyle2,
 			.lucyLatest,
@@ -24,28 +22,6 @@ final class ModelConfigTests: XCTestCase {
 			fps: 30,
 			width: 1280,
 			height: 720,
-			hasReferenceImage: true
-		)
-
-		assertModel(
-			Models.realtime(.lucyVton2),
-			name: "lucy-vton-2",
-			urlPath: "/v1/stream",
-			jobsUrlPath: nil,
-			fps: 30,
-			width: 1088,
-			height: 624,
-			hasReferenceImage: true
-		)
-
-		assertModel(
-			Models.realtime(.lucyVton3),
-			name: "lucy-vton-3",
-			urlPath: "/v1/stream",
-			jobsUrlPath: nil,
-			fps: 30,
-			width: 1088,
-			height: 624,
 			hasReferenceImage: true
 		)
 
@@ -71,8 +47,6 @@ final class ModelConfigTests: XCTestCase {
 			.lucyClip,
 			.lucy2_1,
 			.lucy2_5,
-			.lucyVton2,
-			.lucyVton3,
 			.lucyVton3_5,
 			.lucyRestyle2,
 			.lucyLatest,
@@ -93,26 +67,6 @@ final class ModelConfigTests: XCTestCase {
 		)
 
 		assertModel(
-			Models.video(.lucyVton2),
-			name: "lucy-vton-2",
-			urlPath: "/v1/generate/lucy-vton-2",
-			jobsUrlPath: "/v1/jobs/lucy-vton-2",
-			fps: 20,
-			width: 1088,
-			height: 624
-		)
-
-		assertModel(
-			Models.video(.lucyVton3),
-			name: "lucy-vton-3",
-			urlPath: "/v1/generate/lucy-vton-3",
-			jobsUrlPath: "/v1/jobs/lucy-vton-3",
-			fps: 20,
-			width: 1088,
-			height: 624
-		)
-
-		assertModel(
 			Models.video(.lucyVton3_5),
 			name: "lucy-vton-3.5",
 			urlPath: "/v1/generate/lucy-vton-3.5",
@@ -121,44 +75,6 @@ final class ModelConfigTests: XCTestCase {
 			width: 1280,
 			height: 720
 		)
-	}
-
-	func testDeprecatedAliasesMatchJSSDKDefinitions() {
-		assertModel(
-			Models.realtime(realtimeModel("lucy-2.1-vton-2")),
-			name: "lucy-2.1-vton-2",
-			urlPath: "/v1/stream",
-			jobsUrlPath: nil,
-			fps: 30,
-			width: 1088,
-			height: 624,
-			hasReferenceImage: true
-		)
-		assertModel(
-			Models.video(videoModel("lucy-2.1-vton-2")),
-			name: "lucy-2.1-vton-2",
-			urlPath: "/v1/generate/lucy-2.1-vton-2",
-			jobsUrlPath: "/v1/jobs/lucy-2.1-vton-2",
-			fps: 20,
-			width: 1088,
-			height: 624
-		)
-	}
-
-	private func realtimeModel(_ rawValue: String, file: StaticString = #filePath, line: UInt = #line) -> RealtimeModel {
-		guard let model = RealtimeModel(rawValue: rawValue) else {
-			XCTFail("Missing realtime model \(rawValue)", file: file, line: line)
-			return .lucy2_1
-		}
-		return model
-	}
-
-	private func videoModel(_ rawValue: String, file: StaticString = #filePath, line: UInt = #line) -> VideoModel {
-		guard let model = VideoModel(rawValue: rawValue) else {
-			XCTFail("Missing video model \(rawValue)", file: file, line: line)
-			return .lucyClip
-		}
-		return model
 	}
 
 	private func assertModel(
