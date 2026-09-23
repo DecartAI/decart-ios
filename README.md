@@ -156,6 +156,24 @@ let realtimeManager = try client.createRealtimeManager(
 )
 ```
 
+#### Fast mode
+
+Fast mode (`speed: .fast`) serves the session from a higher-compute tier for lower latency and higher throughput; output quality is unchanged. It is currently available for `lucy-2.5` / `lucy-latest` and `lucy-vton-3.5` / `lucy-vton-latest`, in the US region only, and is billed at 2x the standard realtime rate for those models. Other models ignore the option. Omit it (the default) for standard mode.
+
+Models that offer fast mode list it in `ModelDefinition.supportedSpeeds`; passing `speed` for any other model logs a warning and the server serves the session in standard mode. See the [platform docs](https://docs.platform.decart.ai/models) for details.
+
+```swift
+let modelConfig = Models.realtime(.lucy2_5)
+let fastModeAvailable = modelConfig.supportedSpeeds.contains(.fast)
+
+let realtimeManager = try client.createRealtimeManager(
+    options: RealtimeConfiguration(
+        model: modelConfig,
+        speed: fastModeAvailable ? .fast : nil // default: nil (standard mode)
+    )
+)
+```
+
 ### 2. Image-to-Image Generation
 
 Transform images with AI:
@@ -383,10 +401,17 @@ enum QueueJobResult {
 ```swift
 RealtimeConfiguration(
     model: ModelDefinition,
-    initialPrompt: DecartPrompt,
-    connection: ConnectionConfig,  // Optional
-    media: MediaConfig             // Optional
+    initialPrompt: DecartPrompt,           // Optional
+    resolution: Resolution?,               // Optional: .p720 / .p1080 (default: nil, server default 720p)
+    speed: Speed?,                         // Optional: .fast (default: nil, standard mode)
+    connection: ConnectionConfig,          // Optional
+    media: MediaConfig,                    // Optional
+    observability: ObservabilityConfig,    // Optional
+    debugQuality: Bool                     // Optional, diagnostic only (default: false)
 )
+
+// Compute tier (fast mode). Advertised per model via `ModelDefinition.supportedSpeeds`.
+enum Speed: String { case fast }
 
 // Connection config
 ConnectionConfig(
