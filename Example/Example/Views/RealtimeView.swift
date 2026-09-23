@@ -72,6 +72,11 @@ private struct RealtimeContentView: View {
 						if let quality = realtimeManager.connectionQuality {
 							ConnectionQualityBadge(report: quality)
 						}
+						FastModeToggle(
+							isOn: realtimeManager.fastModeEnabled,
+							isSupported: realtimeManager.supportsFastMode,
+							onToggle: { on in Task { await realtimeManager.setFastMode(on) } }
+						)
 					}
 					Spacer()
 					ConnectivityPreflightView(
@@ -114,5 +119,25 @@ private struct RealtimeContentView: View {
 				)
 			}
 		}
+	}
+}
+
+/// Fast mode (`speed: .fast`). Enabled only when the selected model advertises the
+/// tier via `ModelDefinition.supportedSpeeds`; billed at 2x, US region only.
+private struct FastModeToggle: View {
+	let isOn: Bool
+	let isSupported: Bool
+	let onToggle: (Bool) -> Void
+
+	var body: some View {
+		Toggle(isOn: Binding(get: { isOn && isSupported }, set: onToggle)) {
+			Text(isSupported ? "Fast mode (2x rate, US only)" : "Fast mode (not available for this model)")
+				.font(.caption2)
+				.foregroundStyle(.white.opacity(isSupported ? 0.85 : 0.4))
+		}
+		.toggleStyle(.switch)
+		.tint(Color(red: 0.4, green: 0.3, blue: 1.0))
+		.disabled(!isSupported)
+		.fixedSize()
 	}
 }

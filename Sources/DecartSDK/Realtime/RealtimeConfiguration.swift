@@ -14,10 +14,25 @@ public enum Resolution: String, Sendable {
 	case p1080 = "1080p"
 }
 
+/// Compute tier requested from the realtime server.
+///
+/// Fast mode (`.fast`) serves the session from a higher-compute tier for lower
+/// latency and higher throughput; output quality is unchanged. It is currently
+/// available for `lucy-2.5` / `lucy-latest` and `lucy-vton-3.5` /
+/// `lucy-vton-latest`, in the US region only, and is billed at 2x the standard
+/// realtime rate for those models. Other models ignore the option. Omit it (the
+/// default) for standard mode. See `ModelDefinition.supportedSpeeds`.
+public enum Speed: String, Sendable {
+	case fast = "fast"
+}
+
 public struct RealtimeConfiguration: Sendable {
 	public let model: ModelDefinition
 	public let initialPrompt: DecartPrompt
 	public let resolution: Resolution?
+	/// Optional compute tier (`speed=fast`). `nil` (the default) selects standard
+	/// mode and sends no `speed` parameter.
+	public let speed: Speed?
 	public let connection: ConnectionConfig
 	public let media: MediaConfig
 	public let observability: ObservabilityConfig
@@ -32,6 +47,7 @@ public struct RealtimeConfiguration: Sendable {
 		model: ModelDefinition,
 		initialPrompt: DecartPrompt = .init(text: ""),
 		resolution: Resolution? = nil,
+		speed: Speed? = nil,
 		connection: ConnectionConfig = .init(),
 		media: MediaConfig = .init(),
 		observability: ObservabilityConfig = .init(),
@@ -40,6 +56,7 @@ public struct RealtimeConfiguration: Sendable {
 		self.model = model
 		self.initialPrompt = initialPrompt
 		self.resolution = resolution
+		self.speed = speed
 		self.connection = connection
 		self.media = media
 		self.observability = observability

@@ -22,7 +22,8 @@ final class ModelConfigTests: XCTestCase {
 			fps: 30,
 			width: 1280,
 			height: 720,
-			hasReferenceImage: true
+			hasReferenceImage: true,
+			supportedSpeeds: [.fast]
 		)
 
 		assertModel(
@@ -33,12 +34,31 @@ final class ModelConfigTests: XCTestCase {
 			fps: 30,
 			width: 1280,
 			height: 720,
-			hasReferenceImage: true
+			hasReferenceImage: true,
+			supportedSpeeds: [.fast]
 		)
 
 		for model in RealtimeModel.allCases {
 			// All realtime models run at 30 fps.
 			XCTAssertEqual(Models.realtime(model).fps, 30, "\(model.rawValue) realtime fps should match JS SDK")
+		}
+	}
+
+	func testRealtimeFastSpeedCapabilityMatchesJSSDKRegistry() {
+		// Fast mode (`speed: .fast`) is advertised only by lucy-2.5 / lucy-latest and
+		// lucy-vton-3.5 / lucy-vton-latest; every other realtime model has no tier.
+		let fastModels: Set<RealtimeModel> = [.lucy2_5, .lucyLatest, .lucyVton3_5, .lucyVtonLatest]
+		for model in RealtimeModel.allCases {
+			let expected: [Speed] = fastModels.contains(model) ? [.fast] : []
+			XCTAssertEqual(Models.realtime(model).supportedSpeeds, expected, "\(model.rawValue) supportedSpeeds should match JS SDK")
+		}
+
+		// Batch (image/video) models never advertise a realtime speed tier.
+		for model in ImageModel.allCases {
+			XCTAssertEqual(Models.image(model).supportedSpeeds, [], "\(model.rawValue) should have no speed tiers")
+		}
+		for model in VideoModel.allCases {
+			XCTAssertEqual(Models.video(model).supportedSpeeds, [], "\(model.rawValue) should have no speed tiers")
 		}
 	}
 
@@ -86,6 +106,7 @@ final class ModelConfigTests: XCTestCase {
 		width: Int,
 		height: Int,
 		hasReferenceImage: Bool = false,
+		supportedSpeeds: [Speed] = [],
 		file: StaticString = #filePath,
 		line: UInt = #line
 	) {
@@ -96,5 +117,6 @@ final class ModelConfigTests: XCTestCase {
 		XCTAssertEqual(model.width, width, file: file, line: line)
 		XCTAssertEqual(model.height, height, file: file, line: line)
 		XCTAssertEqual(model.hasReferenceImage, hasReferenceImage, file: file, line: line)
+		XCTAssertEqual(model.supportedSpeeds, supportedSpeeds, file: file, line: line)
 	}
 }

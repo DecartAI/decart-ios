@@ -13,6 +13,10 @@ public struct ModelDefinition: Sendable {
 	public let width: Int
 	public let height: Int
 	public let hasReferenceImage: Bool
+	/// Realtime compute tiers this model can be served from (see `Speed`). Empty
+	/// for models that only offer standard mode; `speed` is ignored server-side for
+	/// those.
+	public let supportedSpeeds: [Speed]
 
 	public init(
 		name: String,
@@ -21,7 +25,8 @@ public struct ModelDefinition: Sendable {
 		fps: Int,
 		width: Int,
 		height: Int,
-		hasReferenceImage: Bool = false
+		hasReferenceImage: Bool = false,
+		supportedSpeeds: [Speed] = []
 	) {
 		self.name = name
 		self.urlPath = urlPath
@@ -30,5 +35,6 @@ public struct ModelDefinition: Sendable {
 		self.width = width
 		self.height = height
 		self.hasReferenceImage = hasReferenceImage
+		self.supportedSpeeds = supportedSpeeds
 	}
 }

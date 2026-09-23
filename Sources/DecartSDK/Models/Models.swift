@@ -104,7 +104,8 @@ public enum Models {
 				fps: 30,
 				width: 1280,
 				height: 720,
-				hasReferenceImage: true
+				hasReferenceImage: true,
+				supportedSpeeds: [.fast]
 			)
 		case .lucyVton3_5:
 			return ModelDefinition(
@@ -113,7 +114,8 @@ public enum Models {
 				fps: 30,
 				width: 1280,
 				height: 720,
-				hasReferenceImage: true
+				hasReferenceImage: true,
+				supportedSpeeds: [.fast]
 			)
 		case .lucyLatest:
 			return ModelDefinition(
@@ -122,7 +124,8 @@ public enum Models {
 				fps: 30,
 				width: 1088,
 				height: 624,
-				hasReferenceImage: true
+				hasReferenceImage: true,
+				supportedSpeeds: [.fast]
 			)
 		case .lucyVtonLatest:
 			return ModelDefinition(
@@ -131,7 +134,8 @@ public enum Models {
 				fps: 30,
 				width: 1280,
 				height: 720,
-				hasReferenceImage: true
+				hasReferenceImage: true,
+				supportedSpeeds: [.fast]
 			)
 		case .lucyRestyleLatest:
 			return ModelDefinition(

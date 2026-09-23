@@ -40,6 +40,14 @@ final class RealtimeManager: RealtimeManagerProtocol {
 	private(set) var isCheckingConnectivity = false
 	/// Opt-in glass-to-glass measurement (visible marker, diagnostic). Reconnects on change.
 	private(set) var debugQualityEnabled = false
+	/// Fast mode (`speed: .fast`): higher-compute tier, 2x rate, US region only.
+	/// Only honoured when `supportsFastMode` is true. Reconnects on change.
+	private(set) var fastModeEnabled = false
+
+	/// Whether the selected model advertises fast mode (`ModelDefinition.supportedSpeeds`).
+	var supportsFastMode: Bool {
+		Models.realtime(model).supportedSpeeds.contains(.fast)
+	}
 
 	// MARK: - Private
 
@@ -91,6 +99,7 @@ final class RealtimeManager: RealtimeManagerProtocol {
 				options: RealtimeConfiguration(
 					model: modelConfig,
 					initialPrompt: currentPrompt,
+					speed: fastModeEnabled && supportsFastMode ? .fast : nil,
 					debugQuality: debugQualityEnabled
 				)
 			)
@@ -156,6 +165,14 @@ final class RealtimeManager: RealtimeManagerProtocol {
 		// Re-apply only on a fully established session; reconnecting during a
 		// transitional state (.connecting/.reconnecting) would tear down the
 		// in-flight attempt. Otherwise the flag takes effect on the next connect.
+		if connectionState.isConnected { await connect() }
+	}
+
+	/// Toggle fast mode; reconnects if a session is live so the new tier takes
+	/// effect (the `speed` parameter is part of the signaling URL, fixed at connect).
+	func setFastMode(_ enabled: Bool) async {
+		guard supportsFastMode, enabled != fastModeEnabled else { return }
+		fastModeEnabled = enabled
 		if connectionState.isConnected { await connect() }
 	}
 

@@ -51,7 +51,11 @@ public final class DecartRealtimeManager: @unchecked Sendable {
 	private var liveKitMediaChannel: LiveKitMediaChannel?
 	private var webSocketClient: WebSocketClient?
 
-	private let signalingServerURL: URL
+	/// Immutable signaling URL built by `DecartClient.createRealtimeManager`. The
+	/// initial connect and every reconnect attempt dial this same URL, so query
+	/// parameters such as `resolution` and `speed` survive reconnects. Internal
+	/// (not private) so tests can pin that.
+	let signalingServerURL: URL
 	private let stateContinuation: AsyncStream<DecartRealtimeState>.Continuation
 	private let remoteStreamContinuation: AsyncStream<RealtimeMediaStream>.Continuation
 	private let connectionQualityContinuation: AsyncStream<ConnectionQualityReport>.Continuation
