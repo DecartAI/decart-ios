@@ -2,45 +2,76 @@ import XCTest
 @testable import DecartSDK
 
 final class SignalingModelTests: XCTestCase {
-	func testEncodesLiveKitJoinMessageWithNullInitialState() throws {
-		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.liveKitJoin(
-			initialState: nil,
-			encodesInitialState: true
-		))
+	func testEncodesLeanLiveKitJoinWithPassthroughFalse() throws {
+		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.liveKitJoin(passthrough: false))
 		let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
 		XCTAssertEqual(json["type"] as? String, "livekit_join")
-		XCTAssertTrue(json["initial_state"] is NSNull)
+		XCTAssertEqual(json["passthrough"] as? Bool, false)
+		XCTAssertNil(json["initial_state"], "join must be lean — no nested initial state")
 	}
 
-	func testEncodesLiveKitJoinMessageWithBundledInitialState() throws {
-		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.liveKitJoin(
-			initialState: .setImage(SetImageMessage(
-				imageData: "base64-image",
-				prompt: "wear the jacket",
-				enhancePrompt: true
-			)),
-			encodesInitialState: true
-		))
+	func testEncodesLeanLiveKitJoinWithPassthroughTrue() throws {
+		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.liveKitJoin(passthrough: true))
 		let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
-		let initialState = try XCTUnwrap(json["initial_state"] as? [String: Any])
 
 		XCTAssertEqual(json["type"] as? String, "livekit_join")
-		XCTAssertEqual(initialState["type"] as? String, "set_image")
-		XCTAssertEqual(initialState["image_data"] as? String, "base64-image")
-		XCTAssertEqual(initialState["prompt"] as? String, "wear the jacket")
-		XCTAssertEqual(initialState["enhance_prompt"] as? Bool, true)
+		XCTAssertEqual(json["passthrough"] as? Bool, true)
+		XCTAssertEqual(json.count, 2, "join carries only type + passthrough")
 	}
 
-	func testEncodesLegacyLiveKitJoinMessageWithoutInitialStateField() throws {
-		let data = try JSONEncoder().encode(OutgoingWebSocketMessage.liveKitJoin(
-			initialState: nil,
-			encodesInitialState: false
-		))
-		let json = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+	// MARK: - passthrough derivation
 
-		XCTAssertEqual(json["type"] as? String, "livekit_join")
-		XCTAssertNil(json["initial_state"])
+	private func makeManager(
+		hasReferenceImage: Bool = false,
+		initialPrompt: DecartPrompt = .init(text: ""),
+		passthroughOverride: Bool? = nil
+	) -> DecartRealtimeManager {
+		let model = ModelDefinition(
+			name: "test-model",
+			urlPath: "/v1/test",
+			fps: 24,
+			width: 512,
+			height: 512,
+			hasReferenceImage: hasReferenceImage
+		)
+		return DecartRealtimeManager(
+			signalingServerURL: URL(string: "wss://example.test")!,
+			options: RealtimeConfiguration(
+				model: model,
+				initialPrompt: initialPrompt,
+				connection: .init(passthrough: passthroughOverride)
+			)
+		)
+	}
+
+	func testPassthroughTrueWhenNoInitialReference() {
+		XCTAssertTrue(makeManager().test_isPassthrough)
+	}
+
+	func testPassthroughFalseWhenPromptSet() {
+		XCTAssertFalse(makeManager(initialPrompt: .init(text: "a city")).test_isPassthrough)
+	}
+
+	func testPassthroughFalseWhenReferenceImageSet() {
+		let manager = makeManager(
+			hasReferenceImage: true,
+			initialPrompt: .init(text: "", referenceImageData: Data([0x1, 0x2]))
+		)
+		XCTAssertFalse(manager.test_isPassthrough)
+	}
+
+	func testReferenceImageIgnoredWhenModelHasNoReferenceSupport() {
+		let manager = makeManager(
+			hasReferenceImage: false,
+			initialPrompt: .init(text: "", referenceImageData: Data([0x1, 0x2]))
+		)
+		XCTAssertTrue(manager.test_isPassthrough)
+	}
+
+	func testExplicitPassthroughOverridesDerivation() {
+		XCTAssertTrue(makeManager(initialPrompt: .init(text: "a city"), passthroughOverride: true).test_isPassthrough)
+		XCTAssertFalse(makeManager(passthroughOverride: false).test_isPassthrough)
 	}
 
 	func testDecodesLiveKitRoomInfoMessage() throws {
