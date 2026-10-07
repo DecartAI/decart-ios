@@ -14,8 +14,7 @@ struct PixelMarkerImage {
 	}
 }
 
-/// Port of the server's E2E pixel-latency marker protocol
-/// (`inference_server/rt/bench/pixel_marker.py`) — used to measure true
+/// Port of the server's E2E pixel-latency marker protocol — used to measure true
 /// glass-to-glass latency. The client stamps a monotonic 16-bit sequence number
 /// into the bottom-left of every outgoing frame; the server (with `pixel_latency`
 /// on) re-stamps it onto the matching output; the client reads it back off the
