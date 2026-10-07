@@ -119,7 +119,6 @@ public enum Models {
 				hasReferenceImage: true,
 				supportedSpeeds: [.fast]
 			)
-		// No supportedSpeeds: lucy-vton-3.6 is not offered on the fast tier.
 		case .lucyVton3_6:
 			return ModelDefinition(
 				name: "lucy-vton-3.6",
