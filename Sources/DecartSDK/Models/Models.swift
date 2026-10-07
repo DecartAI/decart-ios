@@ -28,13 +28,14 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucy2_1 = "lucy-2.1"
 	case lucy2_5 = "lucy-2.5"
 	case lucyVton3_5 = "lucy-vton-3.5"
+	case lucyVton3_6 = "lucy-vton-3.6"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
 	case lucyVtonLatest = "lucy-vton-latest"
 	case lucyRestyleLatest = "lucy-restyle-latest"
 
 	public static var allCases: [RealtimeModel] {
-		[.lucy2_1, .lucy2_5, .lucyVton3_5, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
+		[.lucy2_1, .lucy2_5, .lucyVton3_5, .lucyVton3_6, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
 	}
 }
 
@@ -60,6 +61,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucy2_5 = "lucy-2.5"
 	case lucyRestyle2 = "lucy-restyle-2"
 	case lucyVton3_5 = "lucy-vton-3.5"
+	case lucyVton3_6 = "lucy-vton-3.6"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
 	case lucyVtonLatest = "lucy-vton-latest"
@@ -73,7 +75,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucy_restyle_v2v = "lucy-restyle-v2v"
 
 	public static var allCases: [VideoModel] {
-		[.lucyClip, .lucy2_1, .lucy2_5, .lucyVton3_5, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest]
+		[.lucyClip, .lucy2_1, .lucy2_5, .lucyVton3_5, .lucyVton3_6, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest, .lucyClipLatest]
 	}
 }
 
@@ -116,6 +118,16 @@ public enum Models {
 				height: 720,
 				hasReferenceImage: true,
 				supportedSpeeds: [.fast]
+			)
+		// No supportedSpeeds: lucy-vton-3.6 is not offered on the fast tier.
+		case .lucyVton3_6:
+			return ModelDefinition(
+				name: "lucy-vton-3.6",
+				urlPath: "/v1/stream",
+				fps: 30,
+				width: 1280,
+				height: 720,
+				hasReferenceImage: true
 			)
 		case .lucyLatest:
 			return ModelDefinition(
@@ -213,6 +225,15 @@ public enum Models {
 				name: "lucy-vton-3.5",
 				urlPath: "/v1/generate/lucy-vton-3.5",
 				jobsUrlPath: "/v1/jobs/lucy-vton-3.5",
+				fps: 20,
+				width: 1280,
+				height: 720
+			)
+		case .lucyVton3_6:
+			return ModelDefinition(
+				name: "lucy-vton-3.6",
+				urlPath: "/v1/generate/lucy-vton-3.6",
+				jobsUrlPath: "/v1/jobs/lucy-vton-3.6",
 				fps: 20,
 				width: 1280,
 				height: 720
