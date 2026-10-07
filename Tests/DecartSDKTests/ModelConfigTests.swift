@@ -7,6 +7,7 @@ final class ModelConfigTests: XCTestCase {
 			.lucy2_1,
 			.lucy2_5,
 			.lucyVton3_5,
+			.lucyVton3_6,
 			.lucyRestyle2,
 			.lucyLatest,
 			.lucyVtonLatest,
@@ -36,6 +37,19 @@ final class ModelConfigTests: XCTestCase {
 			height: 720,
 			hasReferenceImage: true,
 			supportedSpeeds: [.fast]
+		)
+
+		// 3.6 is not offered on the fast tier, unlike 3.5.
+		assertModel(
+			Models.realtime(.lucyVton3_6),
+			name: "lucy-vton-3.6",
+			urlPath: "/v1/stream",
+			jobsUrlPath: nil,
+			fps: 30,
+			width: 1280,
+			height: 720,
+			hasReferenceImage: true,
+			supportedSpeeds: []
 		)
 
 		for model in RealtimeModel.allCases {
@@ -68,6 +82,7 @@ final class ModelConfigTests: XCTestCase {
 			.lucy2_1,
 			.lucy2_5,
 			.lucyVton3_5,
+			.lucyVton3_6,
 			.lucyRestyle2,
 			.lucyLatest,
 			.lucyVtonLatest,
@@ -91,6 +106,16 @@ final class ModelConfigTests: XCTestCase {
 			name: "lucy-vton-3.5",
 			urlPath: "/v1/generate/lucy-vton-3.5",
 			jobsUrlPath: "/v1/jobs/lucy-vton-3.5",
+			fps: 20,
+			width: 1280,
+			height: 720
+		)
+
+		assertModel(
+			Models.video(.lucyVton3_6),
+			name: "lucy-vton-3.6",
+			urlPath: "/v1/generate/lucy-vton-3.6",
+			jobsUrlPath: "/v1/jobs/lucy-vton-3.6",
 			fps: 20,
 			width: 1280,
 			height: 720

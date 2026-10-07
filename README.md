@@ -353,6 +353,7 @@ func process() async throws -> Data
 - `RealtimeModel.lucy2_1` - Realtime video editing with reference image support
 - `RealtimeModel.lucy2_5` - Realtime video editing with reference image support
 - `RealtimeModel.lucyVton3_5` - Virtual try-on
+- `RealtimeModel.lucyVton3_6` - Virtual try-on 3.6 (opt-in by name; no `speed: .fast` tier)
 - `RealtimeModel.lucyRestyle2` - Realtime video restyling
 
 **Image Models:**
@@ -363,6 +364,7 @@ func process() async throws -> Data
 - `VideoModel.lucy2_1` - Video edit with optional reference image
 - `VideoModel.lucy2_5` - Video edit with optional reference image
 - `VideoModel.lucyVton3_5` - Virtual try-on video edit
+- `VideoModel.lucyVton3_6` - Virtual try-on 3.6 video edit (opt-in by name)
 - `VideoModel.lucyRestyle2` - Video restyle (prompt or reference image)
 
 ### Input Types
