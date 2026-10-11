@@ -39,7 +39,6 @@ final class ModelConfigTests: XCTestCase {
 			supportedSpeeds: [.fast]
 		)
 
-		// 3.6 is not offered on the fast tier, unlike 3.5.
 		assertModel(
 			Models.realtime(.lucyVton3_6),
 			name: "lucy-vton-3.6",
@@ -49,7 +48,7 @@ final class ModelConfigTests: XCTestCase {
 			width: 1280,
 			height: 720,
 			hasReferenceImage: true,
-			supportedSpeeds: []
+			supportedSpeeds: [.fast]
 		)
 
 		for model in RealtimeModel.allCases {
@@ -60,8 +59,9 @@ final class ModelConfigTests: XCTestCase {
 
 	func testRealtimeFastSpeedCapabilityMatchesJSSDKRegistry() {
 		// Fast mode (`speed: .fast`) is advertised only by lucy-2.5 / lucy-latest and
-		// lucy-vton-3.5 / lucy-vton-latest; every other realtime model has no tier.
-		let fastModels: Set<RealtimeModel> = [.lucy2_5, .lucyLatest, .lucyVton3_5, .lucyVtonLatest]
+		// lucy-vton-3.5 / lucy-vton-3.6 / lucy-vton-latest; every other realtime model
+		// has no tier.
+		let fastModels: Set<RealtimeModel> = [.lucy2_5, .lucyLatest, .lucyVton3_5, .lucyVton3_6, .lucyVtonLatest]
 		for model in RealtimeModel.allCases {
 			let expected: [Speed] = fastModels.contains(model) ? [.fast] : []
 			XCTAssertEqual(Models.realtime(model).supportedSpeeds, expected, "\(model.rawValue) supportedSpeeds should match JS SDK")

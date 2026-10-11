@@ -158,7 +158,7 @@ let realtimeManager = try client.createRealtimeManager(
 
 #### Fast mode
 
-Fast mode (`speed: .fast`) serves the session from a higher-compute tier for lower latency and higher throughput; output quality is unchanged. It is currently available for `lucy-2.5` / `lucy-latest` and `lucy-vton-3.5` / `lucy-vton-latest`, in the US region only, and is billed at 2x the standard realtime rate for those models. Other models ignore the option. Omit it (the default) for standard mode.
+Fast mode (`speed: .fast`) serves the session from a higher-compute tier for lower latency and higher throughput; output quality is unchanged. It is currently available for `lucy-2.5` / `lucy-latest` and `lucy-vton-3.5` / `lucy-vton-3.6` / `lucy-vton-latest`, in the US region only, and is billed at 2x the standard realtime rate for those models. Other models ignore the option. Omit it (the default) for standard mode.
 
 Models that offer fast mode list it in `ModelDefinition.supportedSpeeds`; passing `speed` for any other model logs a warning and the server serves the session in standard mode. See the [platform docs](https://docs.platform.decart.ai/models) for details.
 
@@ -353,7 +353,7 @@ func process() async throws -> Data
 - `RealtimeModel.lucy2_1` - Realtime video editing with reference image support
 - `RealtimeModel.lucy2_5` - Realtime video editing with reference image support
 - `RealtimeModel.lucyVton3_5` - Virtual try-on
-- `RealtimeModel.lucyVton3_6` - Virtual try-on 3.6 (opt-in by name; no `speed: .fast` tier)
+- `RealtimeModel.lucyVton3_6` - Virtual try-on 3.6 (`lucy-vton-latest` currently resolves here)
 - `RealtimeModel.lucyRestyle2` - Realtime video restyling
 
 **Image Models:**
@@ -364,7 +364,7 @@ func process() async throws -> Data
 - `VideoModel.lucy2_1` - Video edit with optional reference image
 - `VideoModel.lucy2_5` - Video edit with optional reference image
 - `VideoModel.lucyVton3_5` - Virtual try-on video edit
-- `VideoModel.lucyVton3_6` - Virtual try-on 3.6 video edit (opt-in by name)
+- `VideoModel.lucyVton3_6` - Virtual try-on 3.6 video edit (`lucy-vton-latest` currently resolves here)
 - `VideoModel.lucyRestyle2` - Video restyle (prompt or reference image)
 
 ### Input Types

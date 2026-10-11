@@ -31,6 +31,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucyVton3_6 = "lucy-vton-3.6"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
+	/// Server-side alias; currently resolves to `lucy-vton-3.6`.
 	case lucyVtonLatest = "lucy-vton-latest"
 	case lucyRestyleLatest = "lucy-restyle-latest"
 
@@ -64,6 +65,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucyVton3_6 = "lucy-vton-3.6"
 	// Latest aliases (server-side resolution)
 	case lucyLatest = "lucy-latest"
+	/// Server-side alias; currently resolves to `lucy-vton-3.6`.
 	case lucyVtonLatest = "lucy-vton-latest"
 	case lucyRestyleLatest = "lucy-restyle-latest"
 	case lucyClipLatest = "lucy-clip-latest"
@@ -126,7 +128,8 @@ public enum Models {
 				fps: 30,
 				width: 1280,
 				height: 720,
-				hasReferenceImage: true
+				hasReferenceImage: true,
+				supportedSpeeds: [.fast]
 			)
 		case .lucyLatest:
 			return ModelDefinition(
