@@ -119,11 +119,6 @@ final class VideoFetcher {
 		let queue = decartClient.queue
 
 		switch inputType {
-		case .videoToVideo:
-			let fileInput = try await loadFileInput(from: selectedItem)
-			let input = try VideoToVideoInput(prompt: prompt, data: fileInput)
-			return try await queue.submitAndPoll(model: model, input: input)
-
 		case .videoEdit:
 			let fileInput = try await loadFileInput(from: selectedItem)
 			let input = try VideoEditInput(prompt: prompt, data: fileInput)

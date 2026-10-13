@@ -309,7 +309,6 @@ var queue: QueueClient { get }
 
 ```swift
 // Submit a job (one overload per input type)
-func submit(model: VideoModel, input: VideoToVideoInput) async throws -> JobSubmitResponse
 func submit(model: VideoModel, input: VideoEditInput) async throws -> JobSubmitResponse
 func submit(model: VideoModel, input: VideoRestyleInput) async throws -> JobSubmitResponse
 
@@ -371,7 +370,6 @@ func process() async throws -> Data
 ```swift
 // File-based inputs
 ImageToImageInput(prompt: String, data: FileInput, seed: Int?)
-VideoToVideoInput(prompt: String, data: FileInput, seed: Int?)
 VideoEditInput(prompt: String, data: FileInput, referenceImage: FileInput?, seed: Int?)
 VideoRestyleInput(prompt: String?, data: FileInput, referenceImage: FileInput?, seed: Int?)
 

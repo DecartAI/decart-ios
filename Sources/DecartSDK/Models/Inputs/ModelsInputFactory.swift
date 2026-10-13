@@ -1,6 +1,5 @@
 public enum ModelInputType: Sendable {
 	case imageToImage
-	case videoToVideo
 	case videoEdit
 	case videoRestyle
 }
