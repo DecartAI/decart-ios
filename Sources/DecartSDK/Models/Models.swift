@@ -93,8 +93,8 @@ public enum Models {
 				name: "lucy-2.1",
 				urlPath: "/v1/stream",
 				fps: 30,
-				width: 1088,
-				height: 624,
+				width: 1280,
+				height: 720,
 				hasReferenceImage: true
 			)
 		case .lucy2_5:
@@ -132,8 +132,8 @@ public enum Models {
 				name: "lucy-latest",
 				urlPath: "/v1/stream",
 				fps: 30,
-				width: 1088,
-				height: 624,
+				width: 1280,
+				height: 720,
 				hasReferenceImage: true,
 				supportedSpeeds: [.fast]
 			)
@@ -197,8 +197,8 @@ public enum Models {
 				urlPath: "/v1/generate/lucy-2.1",
 				jobsUrlPath: "/v1/jobs/lucy-2.1",
 				fps: 20,
-				width: 1088,
-				height: 624
+				width: 1280,
+				height: 720
 			)
 		case .lucy2_5:
 			return ModelDefinition(
@@ -242,8 +242,8 @@ public enum Models {
 				urlPath: "/v1/generate/lucy-latest",
 				jobsUrlPath: "/v1/jobs/lucy-latest",
 				fps: 20,
-				width: 1088,
-				height: 624
+				width: 1280,
+				height: 720
 			)
 		case .lucyVtonLatest:
 			return ModelDefinition(

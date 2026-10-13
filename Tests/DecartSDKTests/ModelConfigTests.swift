@@ -16,8 +16,31 @@ final class ModelConfigTests: XCTestCase {
 		XCTAssertEqual(RealtimeModel.allCases, expectedCases)
 
 		assertModel(
+			Models.realtime(.lucy2_1),
+			name: "lucy-2.1",
+			urlPath: "/v1/stream",
+			jobsUrlPath: nil,
+			fps: 30,
+			width: 1280,
+			height: 720,
+			hasReferenceImage: true
+		)
+
+		assertModel(
 			Models.realtime(.lucy2_5),
 			name: "lucy-2.5",
+			urlPath: "/v1/stream",
+			jobsUrlPath: nil,
+			fps: 30,
+			width: 1280,
+			height: 720,
+			hasReferenceImage: true,
+			supportedSpeeds: [.fast]
+		)
+
+		assertModel(
+			Models.realtime(.lucyLatest),
+			name: "lucy-latest",
 			urlPath: "/v1/stream",
 			jobsUrlPath: nil,
 			fps: 30,
@@ -90,10 +113,30 @@ final class ModelConfigTests: XCTestCase {
 		XCTAssertEqual(VideoModel.allCases, expectedCases)
 
 		assertModel(
+			Models.video(.lucy2_1),
+			name: "lucy-2.1",
+			urlPath: "/v1/generate/lucy-2.1",
+			jobsUrlPath: "/v1/jobs/lucy-2.1",
+			fps: 20,
+			width: 1280,
+			height: 720
+		)
+
+		assertModel(
 			Models.video(.lucy2_5),
 			name: "lucy-2.5",
 			urlPath: "/v1/generate/lucy-2.5",
 			jobsUrlPath: "/v1/jobs/lucy-2.5",
+			fps: 20,
+			width: 1280,
+			height: 720
+		)
+
+		assertModel(
+			Models.video(.lucyLatest),
+			name: "lucy-latest",
+			urlPath: "/v1/generate/lucy-latest",
+			jobsUrlPath: "/v1/jobs/lucy-latest",
 			fps: 20,
 			width: 1280,
 			height: 720
@@ -118,6 +161,22 @@ final class ModelConfigTests: XCTestCase {
 			width: 1280,
 			height: 720
 		)
+	}
+
+	func testLucyLatestMatchesResolvedModelGeometry() {
+		// `lucy-latest` resolves server-side to lucy-2.5, so it must capture at the same shape.
+		assertSameGeometry(Models.realtime(.lucyLatest), Models.realtime(.lucy2_5))
+		assertSameGeometry(Models.video(.lucyLatest), Models.video(.lucy2_5))
+	}
+
+	private func assertSameGeometry(
+		_ model: ModelDefinition,
+		_ resolved: ModelDefinition,
+		file: StaticString = #filePath,
+		line: UInt = #line
+	) {
+		XCTAssertEqual(model.width, resolved.width, "\(model.name) width", file: file, line: line)
+		XCTAssertEqual(model.height, resolved.height, "\(model.name) height", file: file, line: line)
 	}
 
 	private func assertModel(
