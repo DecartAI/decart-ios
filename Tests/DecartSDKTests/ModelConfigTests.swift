@@ -78,7 +78,6 @@ final class ModelConfigTests: XCTestCase {
 
 	func testVideoModelsMatchJSSDKRegistry() {
 		let expectedCases: [VideoModel] = [
-			.lucyClip,
 			.lucy2_1,
 			.lucy2_5,
 			.lucyVton3_5,
@@ -87,7 +86,6 @@ final class ModelConfigTests: XCTestCase {
 			.lucyLatest,
 			.lucyVtonLatest,
 			.lucyRestyleLatest,
-			.lucyClipLatest,
 		]
 		XCTAssertEqual(VideoModel.allCases, expectedCases)
 

@@ -208,12 +208,12 @@ import DecartSDK
 let config = DecartConfiguration(apiKey: "your-api-key")
 let client = DecartClient(decartConfiguration: config)
 
-// Video to video
+// Video edit
 let videoData = try Data(contentsOf: referenceVideoURL)
 let fileInput = try FileInput.video(data: videoData)
-let input = try VideoToVideoInput(prompt: "Apply anime style", data: fileInput)
+let input = try VideoEditInput(prompt: "Apply anime style", data: fileInput)
 
-let result = try await client.queue.submitAndPoll(model: .lucy_pro_v2v, input: input) { status in
+let result = try await client.queue.submitAndPoll(model: .lucyLatest, input: input) { status in
     print("Job \(status.jobId): \(status.status)")
 }
 
@@ -229,7 +229,7 @@ case .failed(let jobId, let error):
 
 ```swift
 // Submit and manage the job manually
-let submitResponse = try await client.queue.submit(model: .lucy_pro_v2v, input: input)
+let submitResponse = try await client.queue.submit(model: .lucyLatest, input: input)
 print("Job ID: \(submitResponse.jobId)")
 
 // Poll status
@@ -360,7 +360,6 @@ func process() async throws -> Data
 - `ImageModel.lucyImage2` - Image to image
 
 **Video Models:**
-- `VideoModel.lucyClip` - Video to video
 - `VideoModel.lucy2_1` - Video edit with optional reference image
 - `VideoModel.lucy2_5` - Video edit with optional reference image
 - `VideoModel.lucyVton3_5` - Virtual try-on video edit

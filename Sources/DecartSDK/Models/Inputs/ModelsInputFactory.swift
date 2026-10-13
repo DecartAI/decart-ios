@@ -8,8 +8,6 @@ public enum ModelInputType: Sendable {
 public enum ModelsInputFactory: Sendable {
 	public static func videoInputType(for model: VideoModel) -> ModelInputType {
 		switch model {
-		case .lucyClip, .lucyClipLatest, .lucy_pro_v2v:
-			return .videoToVideo
 		case .lucy2_1, .lucy2_5, .lucyVton3_5, .lucyVton3_6, .lucyLatest, .lucyVtonLatest:
 			return .videoEdit
 		case .lucyRestyle2, .lucyRestyleLatest, .lucy_restyle_v2v:
