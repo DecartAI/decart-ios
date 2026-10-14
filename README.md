@@ -285,7 +285,7 @@ let result = try await client.queue.submitAndPoll(model: .lucy_restyle_v2v, inpu
 
 ```swift
 let config = DecartConfiguration(
-    baseURL: "https://api3.decart.ai",  // Optional
+    baseURL: "https://api.decart.ai",  // Optional, this is the default
     apiKey: "your-api-key"
 )
 ```
