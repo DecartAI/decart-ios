@@ -219,6 +219,6 @@ struct GenerateVideoView: View {
 
 #Preview {
 	NavigationView {
-		GenerateVideoView(model: .lucyClip)
+		GenerateVideoView(model: .lucyLatest)
 	}
 }

@@ -13,16 +13,6 @@ public struct QueueClient: Sendable {
 
 	// MARK: - Submit
 
-	public func submit(model: VideoModel, input: VideoToVideoInput) async throws -> JobSubmitResponse {
-		try await submitRequest(model: model, expectedType: .videoToVideo, params: [
-			"prompt": input.prompt,
-			"seed": input.seed,
-			"resolution": input.resolution?.rawValue,
-			"enhance_prompt": input.enhancePrompt,
-			"num_inference_steps": input.numInferenceSteps,
-		], files: [("data", input.data)])
-	}
-
 	public func submit(model: VideoModel, input: VideoEditInput) async throws -> JobSubmitResponse {
 		var files: [(String, FileInput)] = [("data", input.data)]
 		if let ref = input.referenceImage { files.append(("reference_image", ref)) }
@@ -62,15 +52,6 @@ public struct QueueClient: Sendable {
 	}
 
 	// MARK: - Convenience
-
-	public func submitAndPoll(
-		model: VideoModel,
-		input: VideoToVideoInput,
-		onStatusChange: ((JobStatusResponse) -> Void)? = nil
-	) async throws -> QueueJobResult {
-		let response = try await submit(model: model, input: input)
-		return try await poll(jobId: response.jobId, initialStatus: response.status, onStatusChange: onStatusChange)
-	}
 
 	public func submitAndPoll(
 		model: VideoModel,

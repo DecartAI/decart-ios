@@ -18,6 +18,11 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode_26.1.1.app
 
+      # The runner image only keeps the three newest iOS runtimes, so the iOS 26.1
+      # platform this Xcode needs for `generic/platform=iOS` has to be downloaded.
+      - name: Install iOS Platform
+        run: xcodebuild -downloadPlatform iOS
+
       - name: Build Hygiene (Reset Package State)
         run: |
           swift package reset
