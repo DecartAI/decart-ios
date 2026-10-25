@@ -6,6 +6,7 @@ final class ModelConfigTests: XCTestCase {
 		let expectedCases: [RealtimeModel] = [
 			.lucy2_1,
 			.lucy2_5,
+			.lucy2_6,
 			.lucyVton3_5,
 			.lucyVton3_6,
 			.lucyRestyle2,
@@ -29,6 +30,18 @@ final class ModelConfigTests: XCTestCase {
 		assertModel(
 			Models.realtime(.lucy2_5),
 			name: "lucy-2.5",
+			urlPath: "/v1/stream",
+			jobsUrlPath: nil,
+			fps: 30,
+			width: 1280,
+			height: 720,
+			hasReferenceImage: true,
+			supportedSpeeds: [.fast]
+		)
+
+		assertModel(
+			Models.realtime(.lucy2_6),
+			name: "lucy-2.6",
 			urlPath: "/v1/stream",
 			jobsUrlPath: nil,
 			fps: 30,
@@ -81,10 +94,10 @@ final class ModelConfigTests: XCTestCase {
 	}
 
 	func testRealtimeFastSpeedCapabilityMatchesJSSDKRegistry() {
-		// Fast mode (`speed: .fast`) is advertised only by lucy-2.5 / lucy-latest and
-		// lucy-vton-3.5 / lucy-vton-3.6 / lucy-vton-latest; every other realtime model
-		// has no tier.
-		let fastModels: Set<RealtimeModel> = [.lucy2_5, .lucyLatest, .lucyVton3_5, .lucyVton3_6, .lucyVtonLatest]
+		// Fast mode (`speed: .fast`) is advertised only by lucy-2.5 / lucy-2.6 / lucy-latest
+		// and lucy-vton-3.5 / lucy-vton-3.6 / lucy-vton-latest; every other realtime
+		// model has no tier.
+		let fastModels: Set<RealtimeModel> = [.lucy2_5, .lucy2_6, .lucyLatest, .lucyVton3_5, .lucyVton3_6, .lucyVtonLatest]
 		for model in RealtimeModel.allCases {
 			let expected: [Speed] = fastModels.contains(model) ? [.fast] : []
 			XCTAssertEqual(Models.realtime(model).supportedSpeeds, expected, "\(model.rawValue) supportedSpeeds should match JS SDK")
@@ -103,6 +116,7 @@ final class ModelConfigTests: XCTestCase {
 		let expectedCases: [VideoModel] = [
 			.lucy2_1,
 			.lucy2_5,
+			.lucy2_6,
 			.lucyVton3_5,
 			.lucyVton3_6,
 			.lucyRestyle2,
@@ -127,6 +141,16 @@ final class ModelConfigTests: XCTestCase {
 			name: "lucy-2.5",
 			urlPath: "/v1/generate/lucy-2.5",
 			jobsUrlPath: "/v1/jobs/lucy-2.5",
+			fps: 20,
+			width: 1280,
+			height: 720
+		)
+
+		assertModel(
+			Models.video(.lucy2_6),
+			name: "lucy-2.6",
+			urlPath: "/v1/generate/lucy-2.6",
+			jobsUrlPath: "/v1/jobs/lucy-2.6",
 			fps: 20,
 			width: 1280,
 			height: 720

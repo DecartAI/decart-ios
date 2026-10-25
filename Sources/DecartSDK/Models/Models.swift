@@ -27,6 +27,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucyRestyle2 = "lucy-restyle-2"
 	case lucy2_1 = "lucy-2.1"
 	case lucy2_5 = "lucy-2.5"
+	case lucy2_6 = "lucy-2.6"
 	case lucyVton3_5 = "lucy-vton-3.5"
 	case lucyVton3_6 = "lucy-vton-3.6"
 	// Latest aliases (server-side resolution)
@@ -36,7 +37,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucyRestyleLatest = "lucy-restyle-latest"
 
 	public static var allCases: [RealtimeModel] {
-		[.lucy2_1, .lucy2_5, .lucyVton3_5, .lucyVton3_6, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
+		[.lucy2_1, .lucy2_5, .lucy2_6, .lucyVton3_5, .lucyVton3_6, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
 	}
 }
 
@@ -59,6 +60,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	// Canonical names
 	case lucy2_1 = "lucy-2.1"
 	case lucy2_5 = "lucy-2.5"
+	case lucy2_6 = "lucy-2.6"
 	case lucyRestyle2 = "lucy-restyle-2"
 	case lucyVton3_5 = "lucy-vton-3.5"
 	case lucyVton3_6 = "lucy-vton-3.6"
@@ -73,7 +75,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucy_restyle_v2v = "lucy-restyle-v2v"
 
 	public static var allCases: [VideoModel] {
-		[.lucy2_1, .lucy2_5, .lucyVton3_5, .lucyVton3_6, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
+		[.lucy2_1, .lucy2_5, .lucy2_6, .lucyVton3_5, .lucyVton3_6, .lucyRestyle2, .lucyLatest, .lucyVtonLatest, .lucyRestyleLatest]
 	}
 }
 
@@ -100,6 +102,16 @@ public enum Models {
 		case .lucy2_5:
 			return ModelDefinition(
 				name: "lucy-2.5",
+				urlPath: "/v1/stream",
+				fps: 30,
+				width: 1280,
+				height: 720,
+				hasReferenceImage: true,
+				supportedSpeeds: [.fast]
+			)
+		case .lucy2_6:
+			return ModelDefinition(
+				name: "lucy-2.6",
 				urlPath: "/v1/stream",
 				fps: 30,
 				width: 1280,
@@ -205,6 +217,15 @@ public enum Models {
 				name: "lucy-2.5",
 				urlPath: "/v1/generate/lucy-2.5",
 				jobsUrlPath: "/v1/jobs/lucy-2.5",
+				fps: 20,
+				width: 1280,
+				height: 720
+			)
+		case .lucy2_6:
+			return ModelDefinition(
+				name: "lucy-2.6",
+				urlPath: "/v1/generate/lucy-2.6",
+				jobsUrlPath: "/v1/jobs/lucy-2.6",
 				fps: 20,
 				width: 1280,
 				height: 720
