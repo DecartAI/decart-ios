@@ -31,6 +31,7 @@ public enum RealtimeModel: String, CaseIterable {
 	case lucyVton3_5 = "lucy-vton-3.5"
 	case lucyVton3_6 = "lucy-vton-3.6"
 	// Latest aliases (server-side resolution)
+	/// Server-side alias; currently resolves to `lucy-2.6`.
 	case lucyLatest = "lucy-latest"
 	/// Server-side alias; currently resolves to `lucy-vton-3.6`.
 	case lucyVtonLatest = "lucy-vton-latest"
@@ -65,6 +66,7 @@ public enum VideoModel: String, CaseIterable, Sendable {
 	case lucyVton3_5 = "lucy-vton-3.5"
 	case lucyVton3_6 = "lucy-vton-3.6"
 	// Latest aliases (server-side resolution)
+	/// Server-side alias; currently resolves to `lucy-2.6`.
 	case lucyLatest = "lucy-latest"
 	/// Server-side alias; currently resolves to `lucy-vton-3.6`.
 	case lucyVtonLatest = "lucy-vton-latest"
